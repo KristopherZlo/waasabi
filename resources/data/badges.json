@@ -1,0 +1,81 @@
+[
+    {
+        "key": "beta",
+        "name": "Beta",
+        "description": "Joined during the beta period and helped test early features.",
+        "icon": "/images/badges/beta.svg"
+    },
+    {
+        "key": "reference_builder",
+        "name": "Reference Builder",
+        "description": "Created posts that became long-term references for the community.",
+        "icon": "/images/badges/reference_builder.svg"
+    },
+    {
+        "key": "hackweek_winner",
+        "name": "Hackweek Winner",
+        "description": "Winner of a Hackweek event.",
+        "icon": "/images/badges/hackweek_winner.svg"
+    },
+    {
+        "key": "hackweek_hardcore",
+        "name": "Hackweek",
+        "description": "Participant of a high-intensity Hackweek event.",
+        "icon": "/images/badges/hackweek_skull.svg"
+    },
+    {
+        "key": "valid_reporter",
+        "name": "Valid Reporter",
+        "description": "Submitted reports that resulted in confirmed moderation actions.",
+        "icon": "/images/badges/valid_reporter.svg"
+    },
+    {
+        "key": "community_hero",
+        "name": "Community Hero",
+        "description": "Recognized as a core pillar of the community through consistent support.",
+        "icon": "/images/badges/community_hero_pillar.svg"
+    },
+    {
+        "key": "staff_pick",
+        "name": "Staff Pick",
+        "description": "Selected by the team as a highlighted post or project.",
+        "icon": "/images/badges/staff_pick.svg"
+    },
+    {
+        "key": "contributor",
+        "name": "Contributor",
+        "description": "Made a significant contribution such as ideas, design, or guides.",
+        "icon": "/images/badges/contributor_gold.svg"
+    },
+    {
+        "key": "bug_hunter",
+        "name": "Bug Hunter",
+        "description": "Reported bugs with clear reproduction steps and confirmed fixes.",
+        "icon": "/images/badges/bug_hunter_paw.svg"
+    },
+
+    {
+        "key": "custom_hero_badge_1",
+        "name": "Custom Reward",
+        "description": "Special custom reward granted manually by the team.",
+        "icon": "/images/badges/custom_hero_badge_1.svg"
+    },
+    {
+        "key": "custom_hero_badge_2",
+        "name": "Custom Reward",
+        "description": "Special custom reward granted manually by the team.",
+        "icon": "/images/badges/custom_hero_badge_2.svg"
+    },
+    {
+        "key": "custom_thread_spool",
+        "name": "Custom Reward",
+        "description": "Special custom reward granted manually by the team.",
+        "icon": "/images/badges/custom_thread_spool.svg"
+    },
+    {
+        "key": "custom_tweezers",
+        "name": "Custom Reward",
+        "description": "Special custom reward granted manually by the team.",
+        "icon": "/images/badges/custom_tweezers.svg"
+    }
+]
