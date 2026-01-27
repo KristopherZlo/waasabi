@@ -3878,18 +3878,89 @@ body[data-page='profile-settings'] .switch input:focus-visible + .switch__track 
     width: 190px;
     height: 190px;
     border-radius: 50%;
+    opacity: 0;
+    z-index: 0;
+    transition: opacity 240ms ease;
+}
+
+.badge-view-card__glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
     background: radial-gradient(circle, rgba(var(--badge-glow-rgb), 0.38), rgba(var(--badge-glow-rgb), 0) 68%);
     filter: blur(2px);
+    transform-origin: center;
+    animation: badge-glow-pulse 3.6s ease-in-out infinite;
+}
+
+.badge-view-card.is-glow-ready .badge-view-card__glow {
     opacity: 0.9;
+}
+
+.badge-view-card__burst {
+    position: absolute;
+    inset: -36px;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.badge-view-card__star {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+    opacity: 0;
+    filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.35));
+    animation-name: badge-star-burst;
+    animation-duration: var(--burst-duration, 900ms);
+    animation-delay: var(--burst-delay, 0ms);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+    animation-fill-mode: forwards;
 }
 
 .badge-view-card__icon {
     width: 120px;
     height: 120px;
     position: relative;
-    z-index: 1;
+    z-index: 2;
     filter: drop-shadow(0 20px 35px rgba(0, 0, 0, 0.45));
 }
+
+@keyframes badge-star-burst {
+    0% {
+        transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+        opacity: 0;
+    }
+    18% {
+        opacity: 0.95;
+    }
+    100% {
+        transform: translate(
+                calc(-50% + var(--burst-x, 0px)),
+                calc(-50% + var(--burst-y, 0px))
+            )
+            scale(0.8)
+            rotate(var(--burst-rotate, 0deg));
+        opacity: 0;
+    }
+}
+
+@keyframes badge-glow-pulse {
+    0% {
+        transform: scale(0.92);
+        opacity: 0.75;
+    }
+    50% {
+        transform: scale(1.08);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(0.92);
+        opacity: 0.75;
+    }
+}
+
 
 .badge-view-card__body {
     display: grid;
@@ -3922,8 +3993,17 @@ body[data-page='profile-settings'] .switch input:focus-visible + .switch__track 
     padding: 8px 12px;
     border-radius: 999px;
     border: 1px solid rgba(var(--badge-glow-rgb), 0.42);
-    background: rgba(var(--badge-glow-rgb), 0.12);
+    background-color: rgba(var(--badge-glow-rgb), 0.12);
     font-size: 12px;
+    opacity: 0;
+    transition:
+        opacity 240ms ease,
+        border-color 240ms ease,
+        background-color 240ms ease;
+}
+
+.badge-view-card.is-glow-ready .badge-view-card__meta {
+    opacity: 1;
 }
 
 .badge-view-card__meta-label {

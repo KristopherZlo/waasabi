@@ -48,6 +48,7 @@ export const setupProfileBadges = () => {
     const viewLabel = viewModal?.querySelector<HTMLElement>('[data-badge-view-label]') ?? null;
     const viewDescription = viewModal?.querySelector<HTMLElement>('[data-badge-view-description]') ?? null;
     const viewIssued = viewModal?.querySelector<HTMLElement>('[data-badge-view-issued]') ?? null;
+    let viewBurst = viewModal?.querySelector<HTMLElement>('[data-badge-view-burst]') ?? null;
 
     const hasAdminTriggers = Boolean(grantTrigger || revokeTrigger);
     const hasViewModal = Boolean(
@@ -180,10 +181,18 @@ export const setupProfileBadges = () => {
         if (viewModal && !viewModal.hidden) {
             setModalOpen(viewModal, false);
         }
+        clearBurst();
     }
 
     const defaultGlowRgb = '78, 161, 255';
     let glowRequestId = 0;
+
+    const setGlowReady = (ready: boolean) => {
+        if (!viewPanel) {
+            return;
+        }
+        viewPanel.classList.toggle('is-glow-ready', ready);
+    };
 
     const setGlowRgb = (rgb: string) => {
         if (!viewModal) {
@@ -239,8 +248,10 @@ export const setupProfileBadges = () => {
         }
         glowRequestId += 1;
         const requestId = glowRequestId;
-        setGlowRgb(defaultGlowRgb);
+        setGlowReady(false);
         if (!src) {
+            setGlowRgb(defaultGlowRgb);
+            requestAnimationFrame(() => setGlowReady(true));
             return;
         }
         const probe = new Image();
@@ -252,14 +263,93 @@ export const setupProfileBadges = () => {
             }
             const rgb = averageRgbFromImage(probe);
             setGlowRgb(rgb ?? defaultGlowRgb);
+            requestAnimationFrame(() => setGlowReady(true));
         };
         probe.onerror = () => {
             if (requestId !== glowRequestId) {
                 return;
             }
             setGlowRgb(defaultGlowRgb);
+            requestAnimationFrame(() => setGlowReady(true));
         };
         probe.src = src;
+    };
+
+    let burstTimeout: number | null = null;
+
+    const clearBurst = () => {
+        if (burstTimeout) {
+            window.clearTimeout(burstTimeout);
+            burstTimeout = null;
+        }
+        if (viewBurst) {
+            viewBurst.innerHTML = '';
+        }
+    };
+
+    const ensureBurstContainer = () => {
+        if (viewBurst) {
+            return viewBurst;
+        }
+        const media = viewModal?.querySelector<HTMLElement>('.badge-view-card__media') ?? null;
+        if (!media) {
+            return null;
+        }
+        const burst = document.createElement('div');
+        burst.className = 'badge-view-card__burst';
+        burst.setAttribute('aria-hidden', 'true');
+        burst.dataset.badgeViewBurst = 'true';
+        if (viewIcon && media.contains(viewIcon)) {
+            media.insertBefore(burst, viewIcon);
+        } else {
+            media.appendChild(burst);
+        }
+        viewBurst = burst;
+        return viewBurst;
+    };
+
+    const spawnBurst = () => {
+        const burst = ensureBurstContainer();
+        if (!burst) {
+            return;
+        }
+        clearBurst();
+        const starSrc = normalizeIcon('/images/star.svg');
+        const starCount = 16;
+        const fragment = document.createDocumentFragment();
+        let maxDuration = 0;
+        for (let i = 0; i < starCount; i += 1) {
+            const star = document.createElement('img');
+            star.className = 'badge-view-card__star';
+            star.src = starSrc;
+            star.alt = '';
+            star.setAttribute('aria-hidden', 'true');
+
+            const size = 8 + Math.random() * 10;
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 40 + Math.random() * 80;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const rotation = (60 + Math.random() * 180) * (Math.random() < 0.5 ? -1 : 1);
+            const delay = Math.random() * 120;
+            const duration = 1400 + Math.random() * 600;
+
+            star.style.width = `${size.toFixed(1)}px`;
+            star.style.height = `${size.toFixed(1)}px`;
+            star.style.setProperty('--burst-x', `${x.toFixed(1)}px`);
+            star.style.setProperty('--burst-y', `${y.toFixed(1)}px`);
+            star.style.setProperty('--burst-rotate', `${rotation.toFixed(1)}deg`);
+            star.style.setProperty('--burst-delay', `${delay.toFixed(0)}ms`);
+            star.style.setProperty('--burst-duration', `${duration.toFixed(0)}ms`);
+
+            maxDuration = Math.max(maxDuration, delay + duration);
+            fragment.appendChild(star);
+        }
+
+        burst.appendChild(fragment);
+        burstTimeout = window.setTimeout(() => {
+            clearBurst();
+        }, maxDuration + 120);
     };
 
     function openViewModal(badgeButton: HTMLElement) {
@@ -279,6 +369,7 @@ export const setupProfileBadges = () => {
         updateGlowFromIcon(icon);
 
         setModalOpen(viewModal, true);
+        spawnBurst();
     }
 
     function bindBadgeButton(button: HTMLButtonElement) {

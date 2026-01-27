@@ -229,6 +229,7 @@
                 </button>
                 <div class="badge-view-card__media">
                     <div class="badge-view-card__glow" aria-hidden="true"></div>
+                    <div class="badge-view-card__burst" data-badge-view-burst aria-hidden="true"></div>
                     <img class="badge-view-card__icon" data-badge-view-icon alt="">
                 </div>
                 <div class="badge-view-card__body">
@@ -360,4 +361,3 @@
         </div>
     </section>
 @endsection
-
