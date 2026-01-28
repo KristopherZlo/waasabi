@@ -9,9 +9,14 @@ use App\Models\PostReview;
 use App\Models\SupportTicket;
 use App\Models\TopbarPromo;
 use App\Models\User;
+use App\Http\Controllers\NotificationsController;
+use App\Http\Controllers\PublishController;
+use App\Http\Controllers\ReportsController;
+use App\Http\Controllers\SupportController;
+use App\Http\Controllers\SupportTicketController;
+use App\Http\Requests\StoreCommentRequest;
 use App\Services\AutoModerationService;
 use App\Services\BadgeCatalogService;
-use App\Services\CoauthorService;
 use App\Services\ContentModerationService;
 use App\Services\FeedService;
 use App\Services\TextModerationService;
@@ -34,46 +39,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
-if (!function_exists('currentUserPayload')) {
-    function currentUserPayload(): array
-    {
-        $user = Auth::user();
-        if (!$user) {
-            return [
-                'id' => null,
-                'name' => 'Guest',
-                'role' => 'user',
-                'slug' => null,
-                'avatar' => '/images/avatar-default.svg',
-                'banner_url' => null,
-                'bio' => '',
-                'followers_count' => 0,
-                'following_count' => 0,
-            ];
-        }
-        $slug = $user->slug ?? Str::slug($user->name ?? '');
-        $slug = $slug !== '' ? $slug : null;
-        $followersCount = 0;
-        $followingCount = 0;
-        if (safeHasTable('user_follows')) {
-            $followersCount = DB::table('user_follows')->where('following_id', $user->id)->count();
-            $followingCount = DB::table('user_follows')->where('follower_id', $user->id)->count();
-        }
-        return [
-            'id' => $user->id,
-            'name' => $user->name ?? 'Guest',
-            'role' => $user->roleKey(),
-            'slug' => $slug,
-            'avatar' => $user->avatar ?? '/images/avatar-default.svg',
-            'banner_url' => safeHasColumn('users', 'banner_url') ? ($user->banner_url ?: null) : null,
-            'bio' => $user->bio ?? '',
-            'followers_count' => (int) $followersCount,
-            'following_count' => (int) $followingCount,
-            'is_banned' => safeHasColumn('users', 'is_banned') ? (bool) $user->is_banned : false,
-        ];
-    }
-}
-
 if (!function_exists('safeHasTable')) {
     function safeHasTable(string $table): bool
     {
@@ -93,60 +58,6 @@ if (!function_exists('safeHasColumn')) {
         } catch (\Throwable $e) {
             return false;
         }
-    }
-}
-
-if (!function_exists('buildNotificationPayload')) {
-    function buildNotificationPayload(array $seedNotifications, ?User $user = null): array
-    {
-        $authUser = $user ?? Auth::user();
-        $notifications = $seedNotifications;
-
-        if ($authUser && safeHasTable('user_notifications')) {
-            $cutoff = now()->subDays(30);
-            DB::table('user_notifications')
-                ->where('created_at', '<', $cutoff)
-                ->delete();
-
-            $userNotifications = $authUser->notifications()
-                ->where('created_at', '>=', $cutoff)
-                ->orderByDesc('created_at')
-                ->limit(200)
-                ->get();
-
-            if ($userNotifications->isNotEmpty()) {
-                $notifications = $userNotifications
-                    ->map(static function ($notification) {
-                        $createdAt = $notification->created_at ?? null;
-                        $time = $createdAt ? Carbon::parse($createdAt)->diffForHumans() : '';
-                        return [
-                            'id' => $notification->id,
-                            'type' => $notification->type ?? 'Update',
-                            'time' => $time,
-                            'text' => $notification->text ?? '',
-                            'link' => $notification->link ?? null,
-                            'read' => !empty($notification->read_at),
-                        ];
-                    })
-                    ->values()
-                    ->all();
-            }
-        }
-
-        $notifications = $authUser ? $notifications : [];
-
-        $unreadNotifications = array_values(array_filter($notifications, function (array $notification) {
-            return !($notification['read'] ?? false);
-        }));
-        $unreadCount = count($unreadNotifications);
-        $unreadPreview = array_slice($unreadNotifications, 0, 4);
-
-        return [
-            'notifications' => $notifications,
-            'unreadNotifications' => $unreadNotifications,
-            'unreadCount' => $unreadCount,
-            'unreadPreview' => $unreadPreview,
-        ];
     }
 }
 
@@ -258,116 +169,6 @@ if (!function_exists('notifySupportStaff')) {
             }
             $staff->sendNotification($type, $text, $link);
         }
-    }
-}
-
-if (!function_exists('buildSupportArticleEntries')) {
-    function buildSupportArticleEntries(array $supportArticles): array
-    {
-        $supportLocale = app()->getLocale();
-        $supportLocale = in_array($supportLocale, ['en', 'fi'], true) ? $supportLocale : 'en';
-        $stripSupportMarkdown = static function (string $markdown): string {
-            $markdown = preg_replace('/```.*?```/s', ' ', $markdown);
-            $markdown = preg_replace('/`[^`]*`/', ' ', $markdown);
-            $markdown = preg_replace('/!\[[^\]]*\]\([^)]+\)/', ' ', $markdown);
-            $markdown = preg_replace('/\[(.*?)\]\([^)]+\)/', '$1', $markdown);
-            $markdown = preg_replace('/^#+\s*/m', '', $markdown);
-            $markdown = preg_replace('/[*_>#+-]/', ' ', $markdown);
-            $markdown = preg_replace('/\s+/', ' ', $markdown);
-            return trim((string) $markdown);
-        };
-        $readSupportMarkdown = static function (?string $path) use ($stripSupportMarkdown): string {
-            if (!$path) {
-                return '';
-            }
-            $fullPath = base_path($path);
-            if (!is_file($fullPath)) {
-                return '';
-            }
-            $contents = file_get_contents($fullPath);
-            if ($contents === false) {
-                return '';
-            }
-            return $stripSupportMarkdown((string) $contents);
-        };
-        $resolveSupportKnowledgePath = static function (string $slug) use ($supportLocale): ?string {
-            $candidates = [
-                "docs/knowledge/{$supportLocale}/{$slug}.md",
-                "docs/knowledge/en/{$slug}.md",
-            ];
-            foreach ($candidates as $candidate) {
-                if (is_file(base_path($candidate))) {
-                    return $candidate;
-                }
-            }
-            return null;
-        };
-
-        return collect($supportArticles)
-            ->map(function (array $article) use ($readSupportMarkdown, $resolveSupportKnowledgePath) {
-                $titleKey = (string) ($article['title'] ?? '');
-                $title = trim((string) __($titleKey));
-                if ($title === '') {
-                    return null;
-                }
-                $summaryKey = (string) ($article['summary'] ?? '');
-                $summary = trim((string) __($summaryKey));
-                $tags = array_filter(array_map('strval', $article['tags'] ?? []));
-                $markdownPath = (string) ($article['markdown'] ?? '');
-                if ($markdownPath === '' && !empty($article['slug']) && ($article['group'] ?? '') === 'kb') {
-                    $markdownPath = (string) ($resolveSupportKnowledgePath((string) $article['slug']) ?? '');
-                }
-                $content = $markdownPath !== '' ? $readSupportMarkdown($markdownPath) : '';
-                $search = implode(' ', array_filter([$title, $summary, implode(' ', $tags), $content]));
-                $path = trim((string) ($article['path'] ?? ''));
-                $url = $path !== '' ? url($path) : null;
-                $id = (string) ($article['id'] ?? Str::slug($title));
-                $slug = (string) ($article['slug'] ?? Str::slug($title));
-                $group = (string) ($article['group'] ?? 'kb');
-
-                return [
-                    'id' => $id,
-                    'slug' => $slug,
-                    'group' => $group,
-                    'title' => $title,
-                    'summary' => $summary,
-                    'url' => $url,
-                    'search' => $search,
-                ];
-            })
-            ->filter()
-            ->values()
-            ->all();
-    }
-}
-
-if (!function_exists('buildSupportSectionEntries')) {
-    function buildSupportSectionEntries(array $sections, array $articleEntries): array
-    {
-        $articleMap = collect($articleEntries)->keyBy('slug')->all();
-        $resolved = [];
-        foreach ($sections as $section) {
-            $items = [];
-            foreach ($section['items'] ?? [] as $slug) {
-                $article = $articleMap[$slug] ?? null;
-                if ($article) {
-                    $items[] = $article;
-                }
-            }
-            if (empty($items)) {
-                continue;
-            }
-            $titleKey = (string) ($section['title'] ?? '');
-            $summaryKey = (string) ($section['summary'] ?? '');
-            $resolved[] = [
-                'id' => (string) ($section['id'] ?? Str::slug($titleKey)),
-                'title' => $titleKey !== '' ? trim((string) __($titleKey)) : '',
-                'summary' => $summaryKey !== '' ? trim((string) __($summaryKey)) : '',
-                'items' => $items,
-                'count' => count($items),
-            ];
-        }
-        return $resolved;
     }
 }
 
@@ -1215,17 +1016,6 @@ $generateUserSlug = static function (string $name): string {
         $counter += 1;
     }
     return $slug;
-};
-
-$renderMarkdown = static function (?string $markdown): string {
-    $markdown = (string) ($markdown ?? '');
-    if (!method_exists(Str::class, 'markdown')) {
-        return nl2br(e($markdown));
-    }
-    return Str::markdown($markdown, [
-        'html_input' => 'strip',
-        'allow_unsafe_links' => false,
-    ]);
 };
 
 $preparePostStats = static function (iterable $posts): array {
@@ -2156,216 +1946,6 @@ $reading_now = Cache::remember('feed.reading_now.v2', now()->addMinutes(2), func
     return $entries;
 });
 
-$notifications = [
-    [
-        'type' => 'Support',
-        'time' => '2 hours ago',
-        'text' => 'Your project "Power module for a field hub" got a "Nice finish" reaction.',
-        'read' => false,
-    ],
-    [
-        'type' => 'Review',
-        'time' => 'yesterday',
-        'text' => 'Maker Ilya M. left a review on your project.',
-        'read' => false,
-    ],
-    [
-        'type' => 'Showcase',
-        'time' => '3 days ago',
-        'text' => 'Your project made it into the "Shipped to the end" collection.',
-        'read' => true,
-    ],
-];
-
-$supportArticles = [
-    [
-        'id' => 'support-terms',
-        'group' => 'legal',
-        'slug' => 'terms-of-service',
-        'title' => 'ui.support.articles.terms.title',
-        'summary' => 'ui.support.articles.terms.summary',
-        'path' => '/support/docs/terms-of-service',
-        'markdown' => 'docs/legal/published/TERMS_OF_SERVICE.md',
-        'tags' => ['terms', 'tos', 'rules'],
-    ],
-    [
-        'id' => 'support-privacy',
-        'group' => 'legal',
-        'slug' => 'privacy-policy',
-        'title' => 'ui.support.articles.privacy.title',
-        'summary' => 'ui.support.articles.privacy.summary',
-        'path' => '/support/docs/privacy-policy',
-        'markdown' => 'docs/legal/published/PRIVACY_POLICY.md',
-        'tags' => ['privacy', 'data', 'policy'],
-    ],
-    [
-        'id' => 'support-cookies',
-        'group' => 'legal',
-        'slug' => 'cookie-policy',
-        'title' => 'ui.support.articles.cookies.title',
-        'summary' => 'ui.support.articles.cookies.summary',
-        'path' => '/support/docs/cookie-policy',
-        'markdown' => 'docs/legal/published/COOKIE_POLICY.md',
-        'tags' => ['cookies', 'tracking'],
-    ],
-    [
-        'id' => 'support-guidelines',
-        'group' => 'legal',
-        'slug' => 'community-guidelines',
-        'title' => 'ui.support.articles.guidelines.title',
-        'summary' => 'ui.support.articles.guidelines.summary',
-        'path' => '/support/docs/community-guidelines',
-        'markdown' => 'docs/legal/published/COMMUNITY_GUIDELINES.md',
-        'tags' => ['community', 'rules', 'moderation'],
-    ],
-    [
-        'id' => 'support-notice',
-        'group' => 'legal',
-        'slug' => 'notice-and-action',
-        'title' => 'ui.support.articles.notice.title',
-        'summary' => 'ui.support.articles.notice.summary',
-        'path' => '/support/docs/notice-and-action',
-        'markdown' => 'docs/legal/published/NOTICE_AND_ACTION.md',
-        'tags' => ['moderation', 'complaints', 'reports'],
-    ],
-    [
-        'id' => 'support-legal',
-        'group' => 'legal',
-        'slug' => 'legal-notice',
-        'title' => 'ui.support.articles.legal.title',
-        'summary' => 'ui.support.articles.legal.summary',
-        'path' => '/support/docs/legal-notice',
-        'markdown' => 'docs/legal/published/LEGAL_NOTICE.md',
-        'tags' => ['legal', 'company', 'notice'],
-    ],
-    [
-        'id' => 'support-ticket',
-        'group' => 'support',
-        'title' => 'ui.support.articles.ticket.title',
-        'summary' => 'ui.support.articles.ticket.summary',
-        'path' => '/support?tab=new',
-        'tags' => ['support', 'tickets', 'chat'],
-    ],
-    [
-        'id' => 'support-kb-roles',
-        'group' => 'kb',
-        'slug' => 'roles-badges-progression',
-        'title' => 'ui.support.articles.roles_badges_progression.title',
-        'summary' => 'ui.support.articles.roles_badges_progression.summary',
-        'path' => '/support/kb/roles-badges-progression',
-        'tags' => ['roles', 'badges', 'progression', 'maker', 'support', 'moderator', 'admin'],
-    ],
-    [
-        'id' => 'support-kb-posts',
-        'group' => 'kb',
-        'slug' => 'posts-and-questions',
-        'title' => 'ui.support.articles.posts_questions.title',
-        'summary' => 'ui.support.articles.posts_questions.summary',
-        'path' => '/support/kb/posts-and-questions',
-        'tags' => ['posts', 'questions', 'publish', 'writing', 'editor', 'tags'],
-    ],
-    [
-        'id' => 'support-kb-feedback',
-        'group' => 'kb',
-        'slug' => 'feedback-and-upvotes',
-        'title' => 'ui.support.articles.feedback.title',
-        'summary' => 'ui.support.articles.feedback.summary',
-        'path' => '/support/kb/feedback-and-upvotes',
-        'tags' => ['comments', 'reviews', 'upvotes', 'feedback'],
-    ],
-    [
-        'id' => 'support-kb-feed',
-        'group' => 'kb',
-        'slug' => 'feed-and-discovery',
-        'title' => 'ui.support.articles.feed_discovery.title',
-        'summary' => 'ui.support.articles.feed_discovery.summary',
-        'path' => '/support/kb/feed-and-discovery',
-        'tags' => ['feed', 'filters', 'top-projects', 'search', 'tags', 'showcase'],
-    ],
-    [
-        'id' => 'support-kb-notifications',
-        'group' => 'kb',
-        'slug' => 'notifications-and-read-later',
-        'title' => 'ui.support.articles.notifications_read_later.title',
-        'summary' => 'ui.support.articles.notifications_read_later.summary',
-        'path' => '/support/kb/notifications-and-read-later',
-        'tags' => ['notifications', 'read-later', 'alerts', 'saves'],
-    ],
-    [
-        'id' => 'support-kb-settings',
-        'group' => 'kb',
-        'slug' => 'profile-settings-and-theme',
-        'title' => 'ui.support.articles.profile_settings.title',
-        'summary' => 'ui.support.articles.profile_settings.summary',
-        'path' => '/support/kb/profile-settings-and-theme',
-        'tags' => ['profile', 'settings', 'theme', 'privacy', 'notifications'],
-    ],
-    [
-        'id' => 'support-kb-moderation',
-        'group' => 'kb',
-        'slug' => 'moderation-reports-bans',
-        'title' => 'ui.support.articles.moderation_reports_bans.title',
-        'summary' => 'ui.support.articles.moderation_reports_bans.summary',
-        'path' => '/support/kb/moderation-reports-bans',
-        'tags' => ['moderation', 'reports', 'bans', 'rules', 'nsfw'],
-    ],
-    [
-        'id' => 'support-kb-service',
-        'group' => 'kb',
-        'slug' => 'support-service',
-        'title' => 'ui.support.articles.support_service.title',
-        'summary' => 'ui.support.articles.support_service.summary',
-        'path' => '/support/kb/support-service',
-        'tags' => ['support', 'tickets', 'help', 'contact'],
-    ],
-];
-
-$supportKbSections = [
-    [
-        'id' => 'account',
-        'title' => 'ui.support.sections.account.title',
-        'summary' => 'ui.support.sections.account.summary',
-        'items' => [
-            'roles-badges-progression',
-            'profile-settings-and-theme',
-        ],
-    ],
-    [
-        'id' => 'publishing',
-        'title' => 'ui.support.sections.publishing.title',
-        'summary' => 'ui.support.sections.publishing.summary',
-        'items' => [
-            'posts-and-questions',
-            'feedback-and-upvotes',
-            'feed-and-discovery',
-        ],
-    ],
-    [
-        'id' => 'safety',
-        'title' => 'ui.support.sections.safety.title',
-        'summary' => 'ui.support.sections.safety.summary',
-        'items' => [
-            'moderation-reports-bans',
-        ],
-    ],
-    [
-        'id' => 'notifications',
-        'title' => 'ui.support.sections.notifications.title',
-        'summary' => 'ui.support.sections.notifications.summary',
-        'items' => [
-            'notifications-and-read-later',
-        ],
-    ],
-    [
-        'id' => 'support',
-        'title' => 'ui.support.sections.support.title',
-        'summary' => 'ui.support.sections.support.summary',
-        'items' => [
-            'support-service',
-        ],
-    ],
-];
-
 $searchIndex = Cache::remember('search.index.v1', now()->addMinutes(5), function () use ($useDbFeed, $projects, $qa_questions, $demoTagEntries) {
     $items = [];
 
@@ -2491,8 +2071,9 @@ $searchIndex = Cache::remember('search.index.v1', now()->addMinutes(5), function
 
 $topbarPromo = pickTopbarPromo();
 
-view()->composer(['layouts.app', 'layouts.support'], function ($view) use ($notifications) {
-    $payload = buildNotificationPayload($notifications);
+view()->composer(['layouts.app', 'layouts.support'], function ($view) {
+    $payload = app(\App\Services\NotificationService::class)
+        ->buildPayload((array) config('notifications.seed', []));
     $view->with([
         'unreadNotifications' => $payload['unreadPreview'],
         'unreadCount' => $payload['unreadCount'],
@@ -2558,7 +2139,7 @@ Route::get('/feed/chunk', function (Request $request) use ($feed_projects, $feed
 })->name('feed.chunk');
 
 Route::get('/', function (Request $request) use ($feed_items_page, $feed_tags, $qa_threads, $top_projects, $reading_now, $feed_projects_total, $feed_questions_total, $feed_projects_offset, $feed_questions_offset, $feed_page_size, $useDbFeed, $feed_projects, $feed_questions, $normalizeFeedFilter, $applyFeedFilter, $sortFeedItems, $sortFeedByScore) {
-    $current_user = currentUserPayload();
+    $current_user = app(\App\Services\UserPayloadService::class)->currentUserPayload();
     $feedItems = $feed_items_page;
     $projectsTotal = $feed_projects_total;
     $questionsTotal = $feed_questions_total;
@@ -2627,7 +2208,7 @@ Route::get('/', function (Request $request) use ($feed_items_page, $feed_tags, $
     ]);
 })->name('feed');
 
-Route::get('/projects/{slug}', function (string $slug) use ($projects, $mapPostToProject, $preparePostStats, $renderMarkdown) {
+Route::get('/projects/{slug}', function (string $slug) use ($projects, $mapPostToProject, $preparePostStats) {
     $viewer = Auth::user();
     $project = collect($projects)->firstWhere('slug', $slug);
     if (safeHasTable('posts')) {
@@ -2651,7 +2232,7 @@ Route::get('/projects/{slug}', function (string $slug) use ($projects, $mapPostT
     abort_unless($project, 404);
     $projectMarkdown = (string) ($project['body_markdown'] ?? '');
     if (trim($projectMarkdown) !== '') {
-        $project['body_html'] = $renderMarkdown($projectMarkdown);
+        $project['body_html'] = app(\App\Services\MarkdownService::class)->render($projectMarkdown);
     }
     $commentPageSize = 15;
     $commentRows = [];
@@ -2770,23 +2351,18 @@ Route::get('/projects/{slug}', function (string $slug) use ($projects, $mapPostT
     $project['comments_total'] = $commentTotal;
     $project['comments_offset'] = count($commentRows);
     $project['reviews'] = array_values(array_merge($project['reviews'] ?? [], $reviewRows));
-    $current_user = currentUserPayload();
+    $current_user = app(\App\Services\UserPayloadService::class)->currentUserPayload();
     return view('project', ['project' => $project, 'current_user' => $current_user]);
 })->name('project');
 
-Route::post('/projects/{slug}/comments', function (Request $request, string $slug) use ($postSlugExists) {
+Route::post('/projects/{slug}/comments', function (StoreCommentRequest $request, string $slug) use ($postSlugExists) {
     if (!safeHasTable('post_comments')) {
         return response()->json(['message' => 'Comments table missing'], 503);
     }
     if (!$postSlugExists($slug)) {
         return response()->json(['message' => 'Post not found'], 404);
     }
-
-    $request->validate([
-        'body' => ['required', 'string', 'max:2000'],
-        'section' => ['nullable', 'string', 'max:80'],
-        'parent_id' => ['nullable', 'integer', 'exists:post_comments,id'],
-    ]);
+    $data = $request->validated();
 
     $user = $request->user();
     if (!$user) {
@@ -2804,7 +2380,7 @@ Route::post('/projects/{slug}/comments', function (Request $request, string $slu
         }
     }
 
-    $parentId = $request->input('parent_id');
+    $parentId = $data['parent_id'] ?? null;
     if ($parentId) {
         $parent = PostComment::where('id', $parentId)->where('post_slug', $slug)->first();
         if (!$parent) {
@@ -2812,8 +2388,8 @@ Route::post('/projects/{slug}/comments', function (Request $request, string $slu
         }
     }
 
-    $body = (string) $request->input('body');
-    $section = $request->input('section');
+    $body = (string) ($data['body'] ?? '');
+    $section = $data['section'] ?? null;
     $textModerationResult = [
         'flagged' => false,
         'summary' => '',
@@ -3112,7 +2688,7 @@ Route::post('/projects/{slug}/reviews', function (Request $request, string $slug
     ]);
 })->middleware(['auth', 'verified', 'account.age', 'throttle:reviews'])->name('project.reviews.store');
 
-Route::get('/questions/{slug}', function (string $slug) use ($qa_questions, $mapPostToQuestion, $preparePostStats, $renderMarkdown) {
+Route::get('/questions/{slug}', function (string $slug) use ($qa_questions, $mapPostToQuestion, $preparePostStats) {
     $viewer = Auth::user();
     $question = collect($qa_questions)->firstWhere('slug', $slug);
     if (safeHasTable('posts')) {
@@ -3135,7 +2711,7 @@ Route::get('/questions/{slug}', function (string $slug) use ($qa_questions, $map
     abort_unless($question, 404);
     $questionMarkdown = (string) ($question['body_markdown'] ?? $question['body'] ?? '');
     if (trim($questionMarkdown) !== '') {
-        $question['body_html'] = $renderMarkdown($questionMarkdown);
+        $question['body_html'] = app(\App\Services\MarkdownService::class)->render($questionMarkdown);
     }
 
     $commentPageSize = 15;
@@ -3229,7 +2805,7 @@ Route::get('/questions/{slug}', function (string $slug) use ($qa_questions, $map
     $question['answers_total'] = $answerTotal;
     $question['answers_offset'] = count($answers);
 
-    $current_user = currentUserPayload();
+    $current_user = app(\App\Services\UserPayloadService::class)->currentUserPayload();
     return view('questions.show', ['question' => $question, 'current_user' => $current_user]);
 })->name('questions.show');
 
@@ -3536,502 +3112,21 @@ Route::post('/posts/{slug}/upvote', function (Request $request, string $slug) {
     return response()->json(['upvoted' => !$exists, 'count' => $count]);
 })->middleware(['auth', 'verified', 'throttle:post-actions'])->name('posts.upvote');
 
-Route::post('/reports', function (Request $request) {
-    $data = $request->validate([
-        'content_type' => ['required', 'string', 'max:40', 'in:post,comment,question,review,content'],
-        'content_id' => ['nullable', 'string', 'max:190'],
-        'content_url' => ['nullable', 'url', 'max:255'],
-        'reason' => ['required', 'string', 'max:80', 'in:spam,abuse,offtopic,other,admin_flag'],
-        'details' => ['nullable', 'string', 'max:1000'],
-    ]);
+Route::post('/reports', [ReportsController::class, 'store'])
+    ->middleware(['auth', 'verified', 'throttle:reports'])
+    ->name('reports.store');
 
-    $viewer = $request->user();
-    $contentId = $data['content_id'] ?? null;
-    if ($viewer && $contentId !== null) {
-        $viewerId = $viewer->id;
-        $contentType = $data['content_type'];
-        $isSelfReport = false;
+Route::get('/publish', [PublishController::class, 'create'])
+    ->middleware(['auth', 'can:publish', 'verified', 'account.age'])
+    ->name('publish');
 
-        if ($contentType === 'content') {
-            $isSelfReport = (string) $viewerId === (string) $contentId;
-        } elseif (in_array($contentType, ['post', 'question'], true) && safeHasTable('posts')) {
-            $query = Post::query();
-            $query->where('type', $contentType === 'question' ? 'question' : 'post');
-            if (ctype_digit((string) $contentId)) {
-                $query->where('id', (int) $contentId);
-            } else {
-                $query->where('slug', $contentId);
-            }
-            $post = $query->first();
-            $isSelfReport = $post && $post->user_id === $viewerId;
-        } elseif ($contentType === 'comment' && safeHasTable('post_comments') && ctype_digit((string) $contentId)) {
-            $comment = PostComment::where('id', (int) $contentId)->first();
-            $isSelfReport = $comment && $comment->user_id === $viewerId;
-        } elseif ($contentType === 'review' && safeHasTable('post_reviews') && ctype_digit((string) $contentId)) {
-            $review = PostReview::where('id', (int) $contentId)->first();
-            $isSelfReport = $review && $review->user_id === $viewerId;
-        }
+Route::get('/posts/{slug}/edit', [PublishController::class, 'edit'])
+    ->middleware(['auth', 'verified', 'account.age'])
+    ->name('posts.edit');
 
-        if ($isSelfReport) {
-            return response()->json(['message' => 'Cannot report your own content.'], 403);
-        }
-    }
-
-    $result = app(AutoModerationService::class)->handleReport($request, $data);
-    return response()->json(array_merge(['ok' => true], array_filter([
-        'report_weight' => $result['report_weight'] ?? null,
-        'weight_total' => $result['weight_total'] ?? null,
-        'weight_threshold' => $result['weight_threshold'] ?? null,
-        'auto_hidden' => $result['auto_hidden'] ?? null,
-        'duplicate' => $result['duplicate'] ?? null,
-    ], static fn ($value) => $value !== null)));
-})->middleware(['auth', 'verified', 'throttle:reports'])->name('reports.store');
-
-Route::get('/publish', function () {
-    $user = Auth::user();
-    $coauthorSuggestions = $user ? app(CoauthorService::class)->listSuggestions(200, $user) : [];
-    return view('publish', [
-        'current_user' => currentUserPayload(),
-        'coauthor_suggestions' => $coauthorSuggestions,
-    ]);
-})->middleware(['auth', 'can:publish', 'verified', 'account.age'])->name('publish');
-
-Route::get('/posts/{slug}/edit', function (string $slug) {
-    if (!safeHasTable('posts')) {
-        abort(503);
-    }
-    $post = Post::with(['user', 'editedBy'])->where('slug', $slug)->firstOrFail();
-    $user = Auth::user();
-    if (!$user) {
-        return redirect()->route('login');
-    }
-    if ($post->user_id !== $user->id && !$user->hasRole('moderator')) {
-        abort(403);
-    }
-
-    $coauthorsValue = '';
-    if (safeHasColumn('posts', 'coauthor_user_ids') && safeHasColumn('users', 'slug')) {
-        $coauthorIds = collect($post->coauthor_user_ids ?? [])
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn (int $id) => $id > 0)
-            ->unique()
-            ->values();
-        if ($coauthorIds->isNotEmpty()) {
-            $coauthorUsers = User::query()
-                ->select(['id', 'slug', 'name'])
-                ->whereIn('id', $coauthorIds->all());
-            if (safeHasColumn('users', 'is_banned')) {
-                $coauthorUsers->where('is_banned', false);
-            }
-            if (safeHasColumn('users', 'privacy_allow_mentions')) {
-                $coauthorUsers->where('privacy_allow_mentions', true);
-            }
-            $coauthorsValue = $coauthorUsers
-                ->get()
-                ->map(static fn (User $user) => $user->slug ? '@' . $user->slug : '')
-                ->filter()
-                ->implode(', ');
-        }
-    }
-
-    $coauthorSuggestions = app(CoauthorService::class)->listSuggestions(200, $user);
-
-    return view('publish', [
-        'edit_post' => [
-            'id' => $post->id,
-            'type' => $post->type,
-            'title' => $post->title,
-            'subtitle' => $post->subtitle ?? '',
-            'status' => $post->status ?? 'in_progress',
-            'nsfw' => (bool) ($post->nsfw ?? false),
-            'tags' => collect($post->tags ?? [])->implode(', '),
-            'coauthors' => $coauthorsValue,
-            'body' => $post->body_markdown ?? '',
-            'question_body' => $post->body_markdown ?? '',
-        ],
-        'current_user' => currentUserPayload(),
-        'coauthor_suggestions' => $coauthorSuggestions,
-    ]);
-})->middleware(['auth', 'verified', 'account.age'])->name('posts.edit');
-
-Route::post('/publish', function (Request $request) use ($renderMarkdown) {
-    if (!safeHasTable('posts')) {
-        abort(503);
-    }
-
-    $data = $request->validate([
-        'publish_type' => ['required', 'in:post,question'],
-        'post_id' => ['nullable', 'integer', 'exists:posts,id'],
-        'title' => ['required', 'string', 'max:255'],
-        'subtitle' => ['nullable', 'string', 'max:255'],
-        'coauthors' => ['nullable', 'string', 'max:600'],
-        'cover_images' => ['nullable', 'array', 'max:' . $maxCoverImages],
-        'cover_images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:' . $maxImageKb],
-        'status' => ['nullable', 'string', 'max:40'],
-        'nsfw' => ['nullable', 'boolean'],
-        'tags' => ['nullable', 'string', 'max:255'],
-        'body' => ['nullable', 'string'],
-        'question_body' => ['nullable', 'string'],
-    ]);
-
-    $postId = $data['post_id'] ?? null;
-    $editingPost = $postId ? Post::find($postId) : null;
-    if ($postId && !$editingPost) {
-        abort(404);
-    }
-    if ($editingPost && $editingPost->user_id !== $request->user()->id && !$request->user()->hasRole('moderator')) {
-        abort(403);
-    }
-
-    $type = $editingPost ? $editingPost->type : $data['publish_type'];
-    if ($type === 'post') {
-        $request->validate([
-            'body' => ['required', 'string'],
-        ]);
-    } else {
-        $request->validate([
-            'question_body' => ['required', 'string', 'max:2000'],
-        ]);
-    }
-
-    $title = $data['title'];
-    $slug = $editingPost?->slug;
-    $baseSlug = Str::slug($title);
-    $slugRoot = $baseSlug !== '' ? $baseSlug : Str::random(6);
-    $slugCounter = 2;
-    $ensureUniqueSlug = static function (string $root, int &$counter): string {
-        $candidate = $root;
-        while (Post::where('slug', $candidate)->exists()) {
-            $candidate = $root . '-' . $counter;
-            $counter += 1;
-        }
-        return $candidate;
-    };
-    if (!$slug) {
-        $slug = $ensureUniqueSlug($slugRoot, $slugCounter);
-    }
-
-    $tags = collect(explode(',', $data['tags'] ?? ''))
-        ->map(fn ($tag) => trim($tag))
-        ->filter()
-        ->unique()
-        ->take(5)
-        ->values()
-        ->all();
-
-    $existingCoauthorIds = [];
-    if ($editingPost && safeHasColumn('posts', 'coauthor_user_ids')) {
-        $existingCoauthorIds = collect($editingPost->coauthor_user_ids ?? [])
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn (int $id) => $id > 0)
-            ->unique()
-            ->values()
-            ->all();
-    }
-
-    $coauthorResult = app(CoauthorService::class)->resolveUsers((string) ($data['coauthors'] ?? ''), $request->user(), 8);
-    $coauthorUsers = $coauthorResult['users'];
-    $coauthorIds = array_values(array_unique(array_map('intval', $coauthorResult['ids'] ?? [])));
-
-    $bodyMarkdown = $type === 'post' ? ($data['body'] ?? '') : ($data['question_body'] ?? '');
-    $bodyHtml = $renderMarkdown($bodyMarkdown);
-    $wordCount = str_word_count(strip_tags($bodyMarkdown));
-    $readMinutes = max(1, (int) ceil($wordCount / 200));
-
-    $status = $data['status'] ?? 'in_progress';
-    $status = in_array($status, ['in_progress', 'done', 'paused'], true) ? $status : 'in_progress';
-    $nsfw = (bool) ($data['nsfw'] ?? false);
-    $subtitle = $type === 'post'
-        ? ($data['subtitle'] ?? null)
-        : Str::limit($bodyMarkdown, 160);
-
-    $moderationFlagged = false;
-    $moderationFallback = false;
-    $moderationDetails = [];
-    $textModerationResult = [
-        'flagged' => false,
-        'signals' => [],
-        'details' => [],
-        'score' => 0.0,
-        'threshold' => 0.0,
-        'metrics' => [],
-        'summary' => '',
-    ];
-    if (!$request->user()->hasRole('moderator')) {
-        $textModerationResult = app(TextModerationService::class)->analyze($bodyMarkdown, [
-            'type' => $type,
-            'title' => $title,
-            'subtitle' => $subtitle,
-        ]);
-    }
-    $textModerationFlagged = (bool) ($textModerationResult['flagged'] ?? false);
-    if ($textModerationFlagged) {
-        $summary = trim((string) ($textModerationResult['summary'] ?? ''));
-        if ($summary !== '') {
-            $moderationDetails[] = $summary;
-        }
-    }
-    $moderationFallbackAction = (string) config('services.rekognition.fallback_action', 'mod');
-    $moderationFallbackAction = in_array($moderationFallbackAction, ['post', 'nsfw', 'mod'], true)
-        ? $moderationFallbackAction
-        : 'mod';
-    $captureModeration = static function (?array $scanResult, string $context) use (
-        &$moderationFlagged,
-        &$moderationFallback,
-        &$moderationDetails,
-        $moderationFallbackAction,
-    ): void {
-        if (!$scanResult) {
-            return;
-        }
-        $labels = $scanResult['labels'] ?? [];
-        if (!empty($labels)) {
-            $moderationFlagged = true;
-            $moderationDetails[] = formatModerationDetails($labels, $context);
-            return;
-        }
-        $status = (string) ($scanResult['status'] ?? '');
-        if ($status !== 'ok') {
-            if ($moderationFallbackAction === 'mod') {
-                $moderationFallback = true;
-                $moderationDetails[] = formatModerationFallbackDetails($scanResult['reason'] ?? null, $context);
-            } elseif ($moderationFallbackAction === 'nsfw') {
-                $moderationFlagged = true;
-            }
-        }
-    };
-
-    if ($type === 'post') {
-        $bodyImagePaths = extractUserUploadedImagePathsFromHtml($bodyHtml);
-        foreach ($bodyImagePaths as $bodyImagePath) {
-            $scanResult = maybeFlagImageForModeration($bodyImagePath, $request->user(), 'editor');
-            $captureModeration($scanResult, 'editor');
-        }
-    }
-
-    $coverImages = [];
-    if ($type === 'post' && $request->hasFile('cover_images')) {
-        $coverFiles = $request->file('cover_images') ?? [];
-        if (!is_array($coverFiles)) {
-            $coverFiles = [$coverFiles];
-        }
-        $coverFiles = array_values(array_filter($coverFiles, static fn ($file) => $file instanceof UploadedFile));
-        $coverFiles = array_slice($coverFiles, 0, 8);
-        foreach ($coverFiles as $coverFile) {
-            try {
-                $result = processImageUpload($coverFile, [
-                    'dir' => 'uploads/covers',
-                    'max_side' => 2560,
-                    'max_pixels' => 16000000,
-                ]);
-            } catch (RuntimeException $exception) {
-                return redirect()
-                    ->back()
-                    ->withErrors(['cover_images' => $exception->getMessage()])
-                    ->withInput();
-            }
-            $coverImages[] = $result['path'];
-            $scanResult = maybeFlagImageForModeration($result['path'], $request->user(), 'cover');
-            $captureModeration($scanResult, 'cover');
-        }
-    }
-
-    if ($moderationFlagged) {
-        $nsfw = true;
-    }
-
-    $coverUrl = $editingPost?->cover_url;
-    $albumUrls = $editingPost?->album_urls;
-    if (is_string($albumUrls)) {
-        $decoded = json_decode($albumUrls, true);
-        $albumUrls = is_array($decoded) ? $decoded : preg_split('/\r\n|\n|\r/', $albumUrls);
-    }
-    $albumUrls = is_array($albumUrls) ? $albumUrls : [];
-    if (!empty($coverImages)) {
-        $coverUrl = $coverImages[0] ?? $coverUrl;
-        $albumUrls = array_slice($coverImages, 1);
-    }
-    if ($type !== 'post') {
-        $coverUrl = null;
-        $albumUrls = [];
-    }
-
-    if ($editingPost) {
-        $updatePayload = [
-            'title' => $title,
-            'subtitle' => $subtitle,
-            'body_markdown' => $bodyMarkdown,
-            'body_html' => $bodyHtml,
-            'cover_url' => $coverUrl,
-            'album_urls' => $type === 'post' && !empty($albumUrls) ? $albumUrls : null,
-            'status' => $type === 'post' ? $status : null,
-            'nsfw' => $nsfw,
-            'tags' => $tags,
-            'read_time_minutes' => $readMinutes,
-        ];
-        if (safeHasColumn('posts', 'coauthor_user_ids')) {
-            $updatePayload['coauthor_user_ids'] = $coauthorIds !== [] ? $coauthorIds : null;
-        }
-        if (safeHasColumn('posts', 'edited_by')) {
-            $updatePayload['edited_by'] = $request->user()->id;
-        }
-        $editingPost->update($updatePayload);
-        $post = $editingPost;
-    } else {
-        $post = null;
-        $attempts = 0;
-        $lastException = null;
-        while (!$post && $attempts < 5) {
-            try {
-                $createPayload = [
-                    'user_id' => $request->user()->id,
-                    'type' => $type,
-                    'slug' => $slug,
-                    'title' => $title,
-                    'subtitle' => $subtitle,
-                    'body_markdown' => $bodyMarkdown,
-                    'body_html' => $bodyHtml,
-                    'cover_url' => $coverUrl,
-                    'album_urls' => $type === 'post' && !empty($albumUrls) ? $albumUrls : null,
-                    'status' => $type === 'post' ? $status : null,
-                    'nsfw' => $nsfw,
-                    'tags' => $tags,
-                    'read_time_minutes' => $readMinutes,
-                ];
-                if (safeHasColumn('posts', 'coauthor_user_ids')) {
-                    $createPayload['coauthor_user_ids'] = $coauthorIds !== [] ? $coauthorIds : null;
-                }
-                $post = Post::create($createPayload);
-            } catch (UniqueConstraintViolationException $exception) {
-                if (!str_contains($exception->getMessage(), 'posts_slug_unique')) {
-                    throw $exception;
-                }
-                $lastException = $exception;
-                $slug = $ensureUniqueSlug($slugRoot, $slugCounter);
-                $attempts += 1;
-            }
-        }
-        if (!$post && $lastException) {
-            throw $lastException;
-        }
-    }
-
-    $postUrl = $post
-        ? ($type === 'question' ? route('questions.show', $post->slug) : route('project', $post->slug))
-        : null;
-
-    $newCoauthorIds = $editingPost
-        ? array_values(array_diff($coauthorIds, $existingCoauthorIds))
-        : $coauthorIds;
-    if ($post && $postUrl && $newCoauthorIds !== [] && $coauthorUsers->isNotEmpty()) {
-        $authorName = (string) ($request->user()?->name ?? 'Someone');
-        $notificationType = __('ui.notifications.coauthor_type');
-        $notificationText = __('ui.notifications.coauthor_tagged', [
-            'author' => $authorName,
-            'title' => $title,
-        ]);
-        $coauthorUsers
-            ->filter(static fn (User $user) => in_array((int) $user->id, $newCoauthorIds, true))
-            ->each(static function (User $user) use ($notificationType, $notificationText, $postUrl): void {
-                $user->sendNotification($notificationType, $notificationText, $postUrl);
-            });
-    }
-
-    $shouldQueueModeration = ($moderationFallback || $textModerationFlagged) && (bool) $post;
-    $toastMessage = null;
-    if ($shouldQueueModeration && $post) {
-        $contentType = $type === 'question' ? 'question' : 'post';
-        $contentUrl = $postUrl ?? ($type === 'question'
-            ? route('questions.show', $post->slug)
-            : route('project', $post->slug));
-
-        $pendingPayload = [];
-        if (safeHasColumn('posts', 'moderation_status')) {
-            $pendingPayload['moderation_status'] = 'pending';
-        }
-        if (safeHasColumn('posts', 'is_hidden')) {
-            $pendingPayload['is_hidden'] = true;
-        }
-        if (safeHasColumn('posts', 'hidden_at')) {
-            $pendingPayload['hidden_at'] = now();
-        }
-        if (safeHasColumn('posts', 'hidden_by')) {
-            $pendingPayload['hidden_by'] = null;
-        }
-        if (!empty($pendingPayload)) {
-            $post->update($pendingPayload);
-        }
-
-        if (safeHasTable('content_reports')) {
-            $contentId = (string) $post->id;
-            $alreadyReported = ContentReport::query()
-                ->where('content_type', $contentType)
-                ->where('content_id', $contentId)
-                ->where('reason', 'admin_flag')
-                ->exists();
-            if (!$alreadyReported) {
-                $detailText = implode(' | ', array_values(array_unique(array_filter($moderationDetails))));
-                $defaultDetails = $textModerationFlagged
-                    ? 'Text moderation flagged content.'
-                    : 'Rekognition flagged content.';
-                ContentReport::create([
-                    'user_id' => $request->user()?->id,
-                    'content_type' => $contentType,
-                    'content_id' => $contentId,
-                    'content_url' => $contentUrl,
-                    'reason' => 'admin_flag',
-                    'details' => $detailText !== '' ? $detailText : $defaultDetails,
-                ]);
-            }
-        }
-
-        if ($textModerationFlagged && safeHasTable('moderation_logs')) {
-            $signals = [];
-            foreach (($textModerationResult['signals'] ?? []) as $signal) {
-                $key = (string) ($signal['key'] ?? '');
-                if ($key !== '') {
-                    $signals[] = $key;
-                }
-            }
-            ModerationLog::create([
-                'moderator_id' => null,
-                'moderator_name' => 'system:text-moderation',
-                'moderator_role' => 'system',
-                'action' => 'auto_queue_text',
-                'content_type' => $contentType,
-                'content_id' => (string) $post->id,
-                'content_url' => $contentUrl,
-                'notes' => 'Queued automatically due to low-quality text signals.',
-                'ip_address' => $request->ip(),
-                'location' => resolveModerationLocation($request),
-                'user_agent' => $request->userAgent(),
-                'meta' => [
-                    'reason' => 'text_moderation',
-                    'score' => $textModerationResult['score'] ?? null,
-                    'threshold' => $textModerationResult['threshold'] ?? null,
-                    'signals' => array_values(array_unique($signals)),
-                    'details' => $textModerationResult['details'] ?? [],
-                    'metrics' => $textModerationResult['metrics'] ?? [],
-                ],
-            ]);
-
-            $request->user()?->sendNotification(
-                'Moderation',
-                __('ui.moderation.text_queued_notification'),
-                $contentUrl,
-            );
-            $toastMessage = __('ui.moderation.text_queued_toast');
-        }
-    }
-
-    $redirect = $type === 'question'
-        ? redirect()->route('questions.show', $post->slug)
-        : redirect()->route('project', $post->slug);
-
-    return $toastMessage !== null
-        ? $redirect->with('toast', $toastMessage)
-        : $redirect;
-})->middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:publish'])->name('publish.store');
+Route::post('/publish', [PublishController::class, 'store'])
+    ->middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:publish'])
+    ->name('publish.store');
 
 Route::get('/profile', function () use ($projects, $profile, $badgeCatalog) {
     $user = Auth::user();
@@ -4054,12 +3149,12 @@ Route::get('/profile', function () use ($projects, $profile, $badgeCatalog) {
         'is_following' => false,
         'badges' => [],
         'badge_catalog' => $badgeCatalog,
-        'current_user' => currentUserPayload(),
+        'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(),
     ]);
 })->name('profile');
 
 Route::get('/profile/settings', function () {
-    return view('profile-settings', ['current_user' => currentUserPayload(), 'user' => Auth::user()]);
+    return view('profile-settings', ['current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(), 'user' => Auth::user()]);
 })->middleware('auth')->name('profile.settings');
 
 Route::post('/profile/settings', function (Request $request) use ($generateUserSlug) {
@@ -4346,7 +3441,7 @@ Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, 
             'is_following' => false,
             'badges' => [],
             'badge_catalog' => $badgeCatalog,
-            'current_user' => currentUserPayload(),
+            'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(),
         ]);
     }
 
@@ -4460,7 +3555,7 @@ Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, 
         'is_following' => $isFollowing,
         'badges' => $badges,
         'badge_catalog' => $badgeCatalog,
-        'current_user' => currentUserPayload(),
+        'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(),
     ]);
 })->name('profile.show');
 
@@ -4598,476 +3693,31 @@ Route::post('/profile/{slug}/follow', function (Request $request, string $slug) 
 })->middleware(['auth', 'verified', 'throttle:profile-follow'])->name('profile.follow');
 
 Route::get('/showcase', function () use ($showcase) {
-    return view('showcase', ['showcase' => $showcase, 'current_user' => currentUserPayload()]);
+    return view('showcase', ['showcase' => $showcase, 'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload()]);
 })->name('showcase');
 
-Route::get('/notifications', function (Request $request) use ($notifications) {
-    $user = $request->user();
-    if (!$user) {
-        return redirect()->route('login');
-    }
+Route::get('/notifications', [NotificationsController::class, 'index'])
+    ->middleware('auth')
+    ->name('notifications');
+Route::post('/notifications/{notification}/read', [NotificationsController::class, 'markRead'])
+    ->middleware('auth')
+    ->name('notifications.read');
+Route::post('/notifications/read-all', [NotificationsController::class, 'markAllRead'])
+    ->middleware('auth')
+    ->name('notifications.read_all');
 
-    $unreadNotifications = collect();
-    $readNotifications = collect();
-    $unreadTotal = 0;
-    $readTotal = 0;
-    $unreadPaginator = null;
-    $readPaginator = null;
-
-    if (safeHasTable('user_notifications')) {
-        $perPage = 20;
-        $cutoff = now()->subDays(30);
-        $baseQuery = $user->notifications()
-            ->where('created_at', '>=', $cutoff)
-            ->orderByDesc('created_at');
-
-        $unreadQuery = (clone $baseQuery)->whereNull('read_at');
-        $readQuery = (clone $baseQuery)->whereNotNull('read_at');
-
-        $unreadTotal = (clone $unreadQuery)->count();
-        $readTotal = (clone $readQuery)->count();
-
-        $unreadPaginator = $unreadQuery->paginate($perPage, ['*'], 'new_page');
-        $readPaginator = $readQuery->paginate($perPage, ['*'], 'read_page');
-
-        $mapNotifications = static function ($collection) {
-            return $collection
-                ->map(static function ($notification) {
-                    $createdAt = $notification->created_at ?? null;
-                    $time = $createdAt ? Carbon::parse($createdAt)->diffForHumans() : '';
-                    return [
-                        'id' => $notification->id,
-                        'type' => $notification->type ?? 'Update',
-                        'time' => $time,
-                        'text' => $notification->text ?? '',
-                        'link' => $notification->link ?? null,
-                        'read' => !empty($notification->read_at),
-                    ];
-                })
-                ->values();
-        };
-
-        $unreadNotifications = $mapNotifications($unreadPaginator->getCollection());
-        $readNotifications = $mapNotifications($readPaginator->getCollection());
-    } else {
-        $payload = buildNotificationPayload($notifications);
-        $unreadNotifications = collect($payload['unreadNotifications']);
-        $readNotifications = collect($payload['notifications'])
-            ->filter(static fn (array $item) => ($item['read'] ?? false))
-            ->values();
-        $unreadTotal = $unreadNotifications->count();
-        $readTotal = $readNotifications->count();
-    }
-
-    return view('notifications', [
-        'unread_notifications' => $unreadNotifications,
-        'read_notifications' => $readNotifications,
-        'unread_total' => $unreadTotal,
-        'read_total' => $readTotal,
-        'unread_paginator' => $unreadPaginator,
-        'read_paginator' => $readPaginator,
-        'current_user' => currentUserPayload(),
-    ]);
-})->middleware('auth')->name('notifications');
-
-Route::post('/notifications/{notification}/read', function (Request $request, int $notification) {
-    $user = $request->user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
-    if (!safeHasTable('user_notifications')) {
-        abort(503);
-    }
-
-    $updated = $user->notifications()
-        ->where('id', $notification)
-        ->whereNull('read_at')
-        ->update(['read_at' => now()]);
-
-    return response()->json(['ok' => $updated > 0]);
-})->middleware('auth')->name('notifications.read');
-
-Route::post('/notifications/read-all', function (Request $request) {
-    $user = $request->user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
-    if (!safeHasTable('user_notifications')) {
-        abort(503);
-    }
-
-    $updated = $user->notifications()
-        ->whereNull('read_at')
-        ->update(['read_at' => now()]);
-
-    return response()->json(['ok' => true, 'updated' => $updated]);
-})->middleware('auth')->name('notifications.read_all');
-
-Route::get('/support/kb/{slug}', function (string $slug) use ($supportArticles, $supportKbSections) {
-    $slug = Str::slug($slug);
-    $article = collect($supportArticles)->first(function (array $item) use ($slug) {
-        return ($item['slug'] ?? '') === $slug && ($item['group'] ?? '') === 'kb';
-    });
-    if (!$article) {
-        abort(404);
-    }
-
-    $titleKey = (string) ($article['title'] ?? '');
-    $summaryKey = (string) ($article['summary'] ?? '');
-    $title = $titleKey !== '' ? trim((string) __($titleKey)) : '';
-    $summary = $summaryKey !== '' ? trim((string) __($summaryKey)) : '';
-
-    $locale = app()->getLocale();
-    $locale = in_array($locale, ['en', 'fi'], true) ? $locale : 'en';
-    $candidates = [
-        "docs/knowledge/{$locale}/{$slug}.md",
-        "docs/knowledge/en/{$slug}.md",
-    ];
-    $markdownPath = null;
-    foreach ($candidates as $candidate) {
-        if (file_exists(base_path($candidate))) {
-            $markdownPath = $candidate;
-            break;
-        }
-    }
-    if (!$markdownPath) {
-        abort(404);
-    }
-
-    $supportArticleEntries = buildSupportArticleEntries($supportArticles);
-    $supportKbSectionsResolved = buildSupportSectionEntries($supportKbSections, $supportArticleEntries);
-    $documentSection = '';
-    foreach ($supportKbSectionsResolved as $section) {
-        foreach ($section['items'] ?? [] as $sectionItem) {
-            if (($sectionItem['slug'] ?? '') === $slug) {
-                $documentSection = (string) ($section['title'] ?? '');
-                break 2;
-            }
-        }
-    }
-
-    return view('support.document', [
-        'document_title' => $title,
-        'document_summary' => $summary,
-        'document_section' => $documentSection,
-        'document_slug' => $slug,
-        'document_back_url' => route('support', ['tab' => 'home']),
-        'markdown_path' => $markdownPath,
-        'document_nav_sections' => $supportKbSectionsResolved,
-        'current_user' => currentUserPayload(),
-    ]);
-})->name('support.kb');
-
-Route::get('/support/docs/{slug}', function (string $slug) use ($supportArticles) {
-    $slug = Str::slug($slug);
-    $article = collect($supportArticles)->first(function (array $item) use ($slug) {
-        return ($item['slug'] ?? '') === $slug && ($item['group'] ?? '') === 'legal';
-    });
-    if (!$article) {
-        abort(404);
-    }
-
-    $titleKey = (string) ($article['title'] ?? '');
-    $summaryKey = (string) ($article['summary'] ?? '');
-    $title = $titleKey !== '' ? trim((string) __($titleKey)) : '';
-    $summary = $summaryKey !== '' ? trim((string) __($summaryKey)) : '';
-
-    $markdownPath = $article['markdown'] ?? null;
-    if (!$markdownPath || !file_exists(base_path($markdownPath))) {
-        abort(404);
-    }
-
-    $supportArticleEntries = buildSupportArticleEntries($supportArticles);
-    $supportLegalArticles = array_values(array_filter($supportArticleEntries, static function (array $entry): bool {
-        return ($entry['group'] ?? '') === 'legal';
-    }));
-    $legalSectionTitle = trim((string) __('ui.support.sections.legal.title'));
-    $legalSectionSummary = trim((string) __('ui.support.sections.legal.summary'));
-    $documentNavSections = [
-        [
-            'id' => 'legal',
-            'title' => $legalSectionTitle,
-            'summary' => $legalSectionSummary,
-            'items' => $supportLegalArticles,
-            'count' => count($supportLegalArticles),
-        ],
-    ];
-
-    return view('support.document', [
-        'document_title' => $title,
-        'document_summary' => $summary,
-        'document_section' => $legalSectionTitle,
-        'document_slug' => $slug,
-        'document_back_url' => route('support', ['tab' => 'home']),
-        'markdown_path' => $markdownPath,
-        'document_nav_sections' => $documentNavSections,
-        'current_user' => currentUserPayload(),
-    ]);
-})->name('support.docs');
-
-Route::get('/support', function (Request $request) use ($supportArticles, $supportKbSections) {
-    $ticketsReady = safeHasTable('support_tickets');
-    $user = Auth::user();
-    $isBanned = false;
-    if ($user && safeHasColumn('users', 'is_banned')) {
-        $isBanned = (bool) $user->is_banned;
-    }
-    $isStaff = $user && $user->can('support');
-
-    $supportTickets = collect();
-    $threads = [];
-    $activeTicket = null;
-    if ($ticketsReady && ($user || $isStaff)) {
-        $ticketQuery = SupportTicket::query()->with(['respondedBy', 'resolvedBy', 'user']);
-        if (!$isStaff) {
-            $ticketQuery->where('user_id', $user?->id ?? 0);
-        }
-
-        $supportTickets = $ticketQuery
-            ->orderByDesc('created_at')
-            ->get();
-
-        $formatDate = static function ($value): string {
-            if (!$value) {
-                return '';
-            }
-            try {
-                return Carbon::parse($value)->format('d.m.Y H:i');
-            } catch (\Throwable $e) {
-                return (string) $value;
-            }
-        };
-
-        $toTimestamp = static function ($value): ?int {
-            if (!$value) {
-                return null;
-            }
-            try {
-                return Carbon::parse($value)->getTimestamp();
-            } catch (\Throwable $e) {
-                return null;
-            }
-        };
-
-        $threads = $supportTickets->mapWithKeys(function (SupportTicket $ticket) use ($formatDate, $toTimestamp) {
-            $messages = [];
-            $sequence = 0;
-            $push = static function (array $payload) use (&$messages, &$sequence, $toTimestamp): void {
-                $sequence += 1;
-                $createdAtRaw = $payload['created_at_raw'] ?? null;
-                $sortValue = $toTimestamp($createdAtRaw);
-                $messages[] = array_merge($payload, [
-                    '_sort' => $sortValue ?? PHP_INT_MAX,
-                    '_seq' => $sequence,
-                ]);
-            };
-
-            $ownerName = $ticket->user?->name ?? __('ui.support.portal_guest');
-            $push([
-                'author_type' => 'user',
-                'author_id' => $ticket->user_id,
-                'author_name' => $ownerName,
-                'body' => (string) ($ticket->body ?? ''),
-                'created_at' => $formatDate($ticket->created_at),
-                'created_at_raw' => $ticket->created_at,
-            ]);
-
-            $meta = is_array($ticket->meta) ? $ticket->meta : [];
-            $metaMessages = is_array($meta['messages'] ?? null) ? $meta['messages'] : [];
-            foreach ($metaMessages as $message) {
-                $body = trim((string) ($message['body'] ?? ''));
-                if ($body === '') {
-                    continue;
-                }
-                $push([
-                    'author_type' => (string) ($message['author_type'] ?? 'support'),
-                    'author_id' => $message['author_id'] ?? null,
-                    'author_name' => (string) ($message['author_name'] ?? ''),
-                    'body' => $body,
-                    'created_at' => $formatDate($message['created_at'] ?? null),
-                    'created_at_raw' => $message['created_at'] ?? null,
-                ]);
-            }
-
-            $response = trim((string) ($ticket->response ?? ''));
-            if ($response !== '') {
-                $responseAlreadyPresent = false;
-                foreach ($messages as $message) {
-                    if (($message['author_type'] ?? '') === 'support' && trim((string) ($message['body'] ?? '')) === $response) {
-                        $responseAlreadyPresent = true;
-                        break;
-                    }
-                }
-                if (!$responseAlreadyPresent) {
-                    $push([
-                        'author_type' => 'support',
-                        'author_id' => $ticket->responded_by,
-                        'author_name' => $ticket->respondedBy?->name ?? __('ui.support.portal_support_team'),
-                        'body' => $response,
-                        'created_at' => $formatDate($ticket->responded_at),
-                        'created_at_raw' => $ticket->responded_at,
-                    ]);
-                }
-            }
-
-            usort($messages, static fn ($a, $b) => ($a['_sort'] <=> $b['_sort']) ?: ($a['_seq'] <=> $b['_seq']));
-            $messages = array_map(static function (array $message): array {
-                unset($message['_sort'], $message['_seq'], $message['created_at_raw']);
-                return $message;
-            }, $messages);
-
-            return [$ticket->id => $messages];
-        })->all();
-
-        $activeTicketId = (int) $request->query('ticket', 0);
-        if ($activeTicketId > 0) {
-            $activeTicket = $supportTickets->firstWhere('id', $activeTicketId);
-        }
-        if (!$activeTicket && $request->query('tab') === 'tickets' && $isStaff) {
-            $activeTicket = $supportTickets->first();
-        }
-    }
-
-    $supportArticleEntries = buildSupportArticleEntries($supportArticles);
-    $supportKbSectionsResolved = buildSupportSectionEntries($supportKbSections, $supportArticleEntries);
-    $supportLegalArticles = array_values(array_filter($supportArticleEntries, static function (array $article): bool {
-        return ($article['group'] ?? '') === 'legal';
-    }));
-
-    return view('support.index', [
-        'support_tickets' => $supportTickets,
-        'support_tickets_ready' => $ticketsReady,
-        'support_can_open_ticket' => (bool) ($user && !$isBanned && $ticketsReady),
-        'support_is_banned' => $isBanned,
-        'support_is_staff' => (bool) $isStaff,
-        'support_threads' => $threads,
-        'support_active_ticket' => $activeTicket,
-        'support_articles' => $supportArticleEntries,
-        'support_kb_sections' => $supportKbSectionsResolved,
-        'support_legal_articles' => $supportLegalArticles,
-        'current_user' => currentUserPayload(),
-    ]);
-})->name('support');
-
-Route::get('/support/tickets/new', function () {
-    return redirect()->route('support', ['tab' => 'new']);
-})->middleware('auth')->name('support.ticket');
-
-Route::post('/support/tickets', function (Request $request) {
-    $user = $request->user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
-    if (!safeHasTable('support_tickets')) {
-        abort(503);
-    }
-
-    $data = $request->validate([
-        'kind' => ['required', Rule::in(['question', 'bug', 'complaint'])],
-        'subject' => ['required', 'string', 'max:190'],
-        'body' => ['required', 'string', 'min:20', 'max:8000'],
-    ]);
-
-    $ticket = SupportTicket::create([
-        'user_id' => $user->id,
-        'kind' => $data['kind'],
-        'subject' => trim((string) $data['subject']),
-        'body' => trim((string) $data['body']),
-        'status' => 'open',
-        'meta' => [
-            'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'locale' => app()->getLocale(),
-        ],
-    ]);
-
-    $ticketId = (int) ($ticket->id ?? 0);
-    $toast = $ticketId > 0
-        ? __('ui.support.ticket_toast_created', ['id' => $ticketId])
-        : __('ui.support.ticket_toast_created_generic');
-
-    if ($ticketId > 0) {
-        notifySupportStaff(
-            __('ui.support.title'),
-            __('ui.support.notification_new_ticket', ['id' => $ticketId, 'subject' => $ticket->subject]),
-            route('support', ['tab' => 'tickets', 'ticket' => $ticketId]),
-            $user->id,
-        );
-    }
-
-    return redirect()->route('support', ['tab' => 'tickets'])->with('toast', $toast);
-})->middleware(['auth', 'verified', 'account.age', 'throttle:support-ticket'])->name('support.ticket.store');
-
-Route::post('/support/tickets/{ticket}/messages', function (Request $request, SupportTicket $ticket) {
-    $user = $request->user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
-    if (!safeHasTable('support_tickets')) {
-        abort(503);
-    }
-    $isStaff = $user->can('support');
-    if (!$isStaff && safeHasColumn('users', 'is_banned') && $user->is_banned) {
-        abort(403);
-    }
-    if (!$isStaff && $ticket->user_id !== $user->id) {
-        abort(403);
-    }
-
-    $data = $request->validate([
-        'message' => ['required', 'string', 'min:2', 'max:4000'],
-    ]);
-
-    $messageBody = trim((string) $data['message']);
-    if ($messageBody === '') {
-        return redirect()->back();
-    }
-
-    $meta = is_array($ticket->meta) ? $ticket->meta : [];
-    $messages = is_array($meta['messages'] ?? null) ? $meta['messages'] : [];
-    $messages[] = [
-        'author_type' => $isStaff ? 'support' : 'user',
-        'author_id' => $user->id,
-        'author_name' => $user->name ?? ($isStaff ? __('ui.support.portal_support_team') : __('ui.support.portal_you')),
-        'body' => $messageBody,
-        'created_at' => now()->toDateTimeString(),
-    ];
-    $meta['messages'] = $messages;
-
-    $ticket->meta = $meta;
-    if ($isStaff) {
-        $ticket->status = 'waiting';
-        $ticket->responded_at = now();
-        $ticket->responded_by = $user->id;
-        $ticket->response = $messageBody;
-        $ticket->resolved_at = null;
-        $ticket->resolved_by = null;
-    } elseif ($ticket->status !== 'open') {
-        $ticket->status = 'open';
-        $ticket->resolved_at = null;
-        $ticket->resolved_by = null;
-    }
-    $ticket->save();
-
-    if ($isStaff) {
-        if ($ticket->user && $ticket->user->id !== $user->id) {
-            $ticket->user->sendNotification(
-                __('ui.support.title'),
-                __('ui.support.notification_support_reply', ['id' => $ticket->id, 'subject' => $ticket->subject]),
-                route('support', ['tab' => 'tickets', 'ticket' => $ticket->id]),
-            );
-        }
-    } else {
-        notifySupportStaff(
-            __('ui.support.title'),
-            __('ui.support.notification_user_message', ['id' => $ticket->id, 'subject' => $ticket->subject]),
-            route('support', ['tab' => 'tickets', 'ticket' => $ticket->id]),
-            $user->id,
-        );
-    }
-
-    return redirect()->route('support', ['tab' => 'tickets', 'ticket' => $ticket->id]);
-})->middleware(['auth', 'verified', 'account.age', 'throttle:support-message'])->name('support.ticket.message');
+Route::get('/support/kb/{slug}', [SupportController::class, 'kb'])->name('support.kb');
+Route::get('/support/docs/{slug}', [SupportController::class, 'docs'])->name('support.docs');
+Route::get('/support', [SupportController::class, 'index'])->name('support');
+Route::get('/support/tickets/new', [SupportController::class, 'ticketNew'])
+    ->middleware('auth')
+    ->name('support.ticket');
+Route::post('/support/tickets', [SupportTicketController::class, 'store'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:support-ticket'])
+    ->name('support.ticket.store');
+Route::post('/support/tickets/{ticket}/messages', [SupportTicketController::class, 'storeMessage'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:support-message'])
+    ->name('support.ticket.message');
 
 Route::get('/locale/{locale}', function (string $locale, Request $request) {
     if (!in_array($locale, ['en', 'fi'], true)) {
@@ -5080,15 +3730,15 @@ Route::get('/locale/{locale}', function (string $locale, Request $request) {
 })->name('locale');
 
 Route::get('/login', function () {
-    return view('auth.login', ['current_user' => currentUserPayload()]);
+    return view('auth.login', ['current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload()]);
 })->name('login');
 
 Route::get('/register', function () {
-    return view('auth.register', ['current_user' => currentUserPayload()]);
+    return view('auth.register', ['current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload()]);
 })->name('register');
 
 Route::get('/verify-email', function () {
-    return view('auth.verify-email', ['current_user' => currentUserPayload()]);
+    return view('auth.verify-email', ['current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload()]);
 })->middleware('auth')->name('verification.notice');
 
 Route::post('/login', function (Request $request) {
@@ -5273,7 +3923,7 @@ Route::get('/read-later', function () use ($projects, $mapPostToProject, $mapPos
             ->values()
             ->all();
     }
-    return view('read-later', ['items' => $savedItems, 'current_user' => currentUserPayload()]);
+    return view('read-later', ['items' => $savedItems, 'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload()]);
 })->middleware('auth')->name('read-later');
 
 Route::get('/read-later/list', function (Request $request) {
@@ -5964,7 +4614,7 @@ Route::middleware(['auth', 'can:moderate'])->group(function () {
             'support_tickets' => $supportTickets,
             'topbar_promos' => $topbarPromos,
             'admin_search' => $search,
-            'current_user' => currentUserPayload(),
+            'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(),
         ]);
     })->name('admin');
 
@@ -6613,5 +5263,5 @@ Route::prefix('legal')->group(function () {
 
 Route::fallback(function () {
     return response()
-        ->view('errors.404', ['current_user' => currentUserPayload()], 404);
+        ->view('errors.404', ['current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload()], 404);
 })->name('not-found');
