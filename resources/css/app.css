@@ -1134,6 +1134,59 @@ body[data-page='not-found'] .nav {
     color: var(--accent);
 }
 
+.notifications-page {
+    margin-top: 24px;
+}
+
+.notifications-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.notifications-toolbar .tabs {
+    flex: 1 1 auto;
+}
+
+.notifications-toolbar .tab .chip {
+    margin-left: 8px;
+}
+
+.notifications-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.notifications-page .tab-panels {
+    margin-top: 16px;
+}
+
+.notification-item {
+    display: grid;
+    gap: 8px;
+}
+
+.notification-item .context {
+    margin: 10px 0 14px;
+}
+
+.notification-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.notification-empty {
+    color: var(--muted);
+}
+
+.notifications-pagination {
+    padding: 12px 0 0;
+}
+
 .read-later {
     position: relative;
 }

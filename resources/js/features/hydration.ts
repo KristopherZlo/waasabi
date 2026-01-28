@@ -8,7 +8,7 @@ import { setupSpotlightSearch } from './spotlight-search';
 import { setupFeedTabs, setupFeedFilters, setupInfiniteFeed, insertFeedQaBlocks, setupQaBlocks } from './feed';
 import { setupReadingExperience, updateCardsProgress } from './reading';
 import { setupAuthButtons } from '../ui/auth';
-import { setupNotificationsMenu, setupNotificationReads } from '../ui/notifications';
+import { setupNotificationsMenu, setupNotificationReads, setupNotificationsPage } from '../ui/notifications';
 import { setupReadLaterMenu, renderReadLaterList } from '../ui/read-later';
 import { setupActionMenus } from '../ui/action-menus';
 import { setupSettingsModal } from '../ui/settings-modal';
@@ -55,6 +55,7 @@ export const hydratePage = () => {
     setupReviewVotes();
     setupNotificationsMenu();
     setupNotificationReads();
+    setupNotificationsPage();
     setupReadLaterMenu();
     setupActionMenus();
     setupSettingsModal();

@@ -1,10 +1,12 @@
 <?php
 
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\ContentModerationService;
 use App\Services\ScribbleAvatar;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schema;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -85,3 +87,80 @@ Artisan::command('moderation:scan {path}', function (string $path) {
         $this->line('- ' . $text);
     }
 })->purpose('Scan a local image with Rekognition moderation labels');
+
+Artisan::command('notifications:test {account} {type} {text} {--link=}', function (string $account, string $type, string $text) {
+    $account = trim($account);
+    $type = trim($type);
+    $text = trim($text);
+    $link = trim((string) $this->option('link'));
+
+    if ($account === '') {
+        $this->error('Account identifier is required.');
+        return;
+    }
+    if ($type === '') {
+        $this->error('Notification type is required.');
+        return;
+    }
+    if (strlen($type) > 60) {
+        $this->error('Notification type must be 60 characters or less.');
+        return;
+    }
+    if ($text === '') {
+        $this->error('Notification text is required.');
+        return;
+    }
+    if ($link !== '' && strlen($link) > 255) {
+        $this->error('Link must be 255 characters or less.');
+        return;
+    }
+
+    if (!Schema::hasTable('users')) {
+        $this->error('Users table is unavailable.');
+        return;
+    }
+    if (!Schema::hasTable('user_notifications')) {
+        $this->error('Notifications table is unavailable.');
+        return;
+    }
+
+    $user = null;
+    if (ctype_digit($account)) {
+        $user = User::query()->where('id', (int) $account)->first();
+    } elseif (filter_var($account, FILTER_VALIDATE_EMAIL)) {
+        $user = User::query()->where('email', $account)->first();
+    } else {
+        $slug = ltrim($account, '@');
+        $user = User::query()->where('slug', $slug)->first();
+    }
+
+    if (!$user) {
+        $this->error('User not found for account: ' . $account);
+        return;
+    }
+
+    $notification = $user->sendNotification($type, $text, $link !== '' ? $link : null);
+    if (!$notification) {
+        $this->error('Notification was not created.');
+        return;
+    }
+
+    if (Schema::hasTable('audit_logs')) {
+        AuditLog::create([
+            'user_id' => null,
+            'event' => 'cli.notification.test',
+            'target_type' => 'user',
+            'target_id' => (string) $user->id,
+            'ip_address' => null,
+            'user_agent' => null,
+            'meta' => [
+                'account' => $account,
+                'type' => $type,
+                'text' => $text,
+                'link' => $link !== '' ? $link : null,
+            ],
+        ]);
+    }
+
+    $this->info('Notification #' . $notification->id . ' sent to user #' . $user->id . '.');
+})->purpose('Send a test notification to a specific user');

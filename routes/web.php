@@ -34,8 +34,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
-$authUser = Auth::user();
-
 if (!function_exists('currentUserPayload')) {
     function currentUserPayload(): array
     {
@@ -1961,45 +1959,6 @@ $supportArticles = [
     ],
 ];
 
-$userNotifications = null;
-if ($authUser && safeHasTable('user_notifications')) {
-    $cutoff = now()->subDays(30);
-    DB::table('user_notifications')
-        ->where('created_at', '<', $cutoff)
-        ->delete();
-
-    $userNotifications = $authUser->notifications()
-        ->where('created_at', '>=', $cutoff)
-        ->orderByDesc('created_at')
-        ->limit(20)
-        ->get();
-    if ($userNotifications->isNotEmpty()) {
-        $notifications = $userNotifications
-            ->map(static function ($notification) {
-                $createdAt = $notification->created_at ?? null;
-                $time = $createdAt ? Carbon::parse($createdAt)->diffForHumans() : '';
-                return [
-                    'id' => $notification->id,
-                    'type' => $notification->type ?? 'Update',
-                    'time' => $time,
-                    'text' => $notification->text ?? '',
-                    'link' => $notification->link ?? null,
-                    'read' => !empty($notification->read_at),
-                ];
-            })
-            ->values()
-            ->all();
-    }
-}
-
-$notifications = $authUser ? $notifications : [];
-
-$unreadNotifications = array_values(array_filter($notifications, function (array $notification) {
-    return !($notification['read'] ?? false);
-}));
-$unreadCount = count($unreadNotifications);
-$unreadPreview = array_slice($unreadNotifications, 0, 4);
-
 $searchIndex = Cache::remember('search.index.v1', now()->addMinutes(5), function () use ($useDbFeed, $projects, $qa_questions, $demoTagEntries) {
     $items = [];
 
@@ -2125,9 +2084,15 @@ $searchIndex = Cache::remember('search.index.v1', now()->addMinutes(5), function
 
 $topbarPromo = pickTopbarPromo();
 
+view()->composer(['layouts.app', 'layouts.support'], function ($view) use ($notifications) {
+    $payload = buildNotificationPayload($notifications);
+    $view->with([
+        'unreadNotifications' => $payload['unreadPreview'],
+        'unreadCount' => $payload['unreadCount'],
+    ]);
+});
+
 view()->share([
-    'unreadNotifications' => $unreadPreview,
-    'unreadCount' => $unreadCount,
     'searchIndex' => $searchIndex,
     'topbar_promo' => $topbarPromo,
 ]);
@@ -4225,9 +4190,71 @@ Route::get('/showcase', function () use ($showcase) {
     return view('showcase', ['showcase' => $showcase, 'current_user' => currentUserPayload()]);
 })->name('showcase');
 
-Route::get('/notifications', function () use ($notifications) {
+Route::get('/notifications', function (Request $request) use ($notifications) {
+    $user = $request->user();
+    if (!$user) {
+        return redirect()->route('login');
+    }
+
+    $unreadNotifications = collect();
+    $readNotifications = collect();
+    $unreadTotal = 0;
+    $readTotal = 0;
+    $unreadPaginator = null;
+    $readPaginator = null;
+
+    if (safeHasTable('user_notifications')) {
+        $perPage = 20;
+        $cutoff = now()->subDays(30);
+        $baseQuery = $user->notifications()
+            ->where('created_at', '>=', $cutoff)
+            ->orderByDesc('created_at');
+
+        $unreadQuery = (clone $baseQuery)->whereNull('read_at');
+        $readQuery = (clone $baseQuery)->whereNotNull('read_at');
+
+        $unreadTotal = (clone $unreadQuery)->count();
+        $readTotal = (clone $readQuery)->count();
+
+        $unreadPaginator = $unreadQuery->paginate($perPage, ['*'], 'new_page');
+        $readPaginator = $readQuery->paginate($perPage, ['*'], 'read_page');
+
+        $mapNotifications = static function ($collection) {
+            return $collection
+                ->map(static function ($notification) {
+                    $createdAt = $notification->created_at ?? null;
+                    $time = $createdAt ? Carbon::parse($createdAt)->diffForHumans() : '';
+                    return [
+                        'id' => $notification->id,
+                        'type' => $notification->type ?? 'Update',
+                        'time' => $time,
+                        'text' => $notification->text ?? '',
+                        'link' => $notification->link ?? null,
+                        'read' => !empty($notification->read_at),
+                    ];
+                })
+                ->values();
+        };
+
+        $unreadNotifications = $mapNotifications($unreadPaginator->getCollection());
+        $readNotifications = $mapNotifications($readPaginator->getCollection());
+    } else {
+        $payload = buildNotificationPayload($notifications);
+        $unreadNotifications = collect($payload['unreadNotifications']);
+        $readNotifications = collect($payload['notifications'])
+            ->filter(static fn (array $item) => ($item['read'] ?? false))
+            ->values();
+        $unreadTotal = $unreadNotifications->count();
+        $readTotal = $readNotifications->count();
+    }
+
     return view('notifications', [
-        'notifications' => $notifications,
+        'unread_notifications' => $unreadNotifications,
+        'read_notifications' => $readNotifications,
+        'unread_total' => $unreadTotal,
+        'read_total' => $readTotal,
+        'unread_paginator' => $unreadPaginator,
+        'read_paginator' => $readPaginator,
         'current_user' => currentUserPayload(),
     ]);
 })->middleware('auth')->name('notifications');
@@ -4248,6 +4275,22 @@ Route::post('/notifications/{notification}/read', function (Request $request, in
 
     return response()->json(['ok' => $updated > 0]);
 })->middleware('auth')->name('notifications.read');
+
+Route::post('/notifications/read-all', function (Request $request) {
+    $user = $request->user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+    if (!safeHasTable('user_notifications')) {
+        abort(503);
+    }
+
+    $updated = $user->notifications()
+        ->whereNull('read_at')
+        ->update(['read_at' => now()]);
+
+    return response()->json(['ok' => true, 'updated' => $updated]);
+})->middleware('auth')->name('notifications.read_all');
 
 Route::get('/support', function (Request $request) use ($supportArticles) {
     $ticketsReady = safeHasTable('support_tickets');
