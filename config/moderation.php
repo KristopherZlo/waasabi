@@ -71,6 +71,16 @@ return [
                 'min_words' => 8,
                 'score_threshold' => 3.0,
             ],
+            'comment' => [
+                'min_chars' => 20,
+                'min_words' => 4,
+                'score_threshold' => 2.8,
+            ],
+            'review' => [
+                'min_chars' => 80,
+                'min_words' => 15,
+                'score_threshold' => 2.8,
+            ],
         ],
 
         // Each signal contributes weight * severity to the final score.

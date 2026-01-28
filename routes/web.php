@@ -2440,14 +2440,58 @@ Route::post('/projects/{slug}/comments', function (Request $request, string $slu
         }
     }
 
-    $comment = PostComment::create([
+    $body = (string) $request->input('body');
+    $section = $request->input('section');
+    $textModerationResult = [
+        'flagged' => false,
+        'summary' => '',
+        'details' => [],
+    ];
+    if (!$user->hasRole('moderator')) {
+        $textModerationResult = app(TextModerationService::class)->analyze($body, [
+            'type' => 'comment',
+        ]);
+    }
+    $textModerationFlagged = (bool) ($textModerationResult['flagged'] ?? false);
+
+    $commentPayload = [
         'post_slug' => $slug,
         'user_id' => $user->id,
-        'body' => $request->input('body'),
-        'section' => $request->input('section'),
+        'body' => $body,
+        'section' => $section,
         'useful' => 0,
         'parent_id' => $parentId ?: null,
-    ]);
+    ];
+
+    if ($textModerationFlagged) {
+        if (safeHasColumn('post_comments', 'moderation_status')) {
+            $commentPayload['moderation_status'] = 'pending';
+        }
+        if (safeHasColumn('post_comments', 'is_hidden')) {
+            $commentPayload['is_hidden'] = true;
+        }
+        if (safeHasColumn('post_comments', 'hidden_at')) {
+            $commentPayload['hidden_at'] = now();
+        }
+        if (safeHasColumn('post_comments', 'hidden_by')) {
+            $commentPayload['hidden_by'] = null;
+        }
+    }
+
+    $comment = PostComment::create($commentPayload);
+
+    if ($textModerationFlagged && safeHasTable('content_reports')) {
+        $summary = trim((string) ($textModerationResult['summary'] ?? ''));
+        $detailText = $summary !== '' ? $summary : 'Text moderation flagged comment.';
+        ContentReport::create([
+            'user_id' => $user->id,
+            'content_type' => 'comment',
+            'content_id' => (string) $comment->id,
+            'content_url' => resolvePostUrl($slug) . '#comment-' . $comment->id,
+            'reason' => 'admin_flag',
+            'details' => $detailText,
+        ]);
+    }
 
     return response()->json([
         'id' => $comment->id,
@@ -2627,13 +2671,59 @@ Route::post('/projects/{slug}/reviews', function (Request $request, string $slug
         }
     }
 
-    $review = PostReview::create([
+    $improve = (string) $request->input('improve');
+    $why = (string) $request->input('why');
+    $how = (string) $request->input('how');
+    $reviewText = trim(implode("\n\n", array_filter([$improve, $why, $how], static fn ($value) => trim((string) $value) !== '')));
+    $textModerationResult = [
+        'flagged' => false,
+        'summary' => '',
+        'details' => [],
+    ];
+    if (!$user->hasRole('moderator')) {
+        $textModerationResult = app(TextModerationService::class)->analyze($reviewText, [
+            'type' => 'review',
+        ]);
+    }
+    $textModerationFlagged = (bool) ($textModerationResult['flagged'] ?? false);
+
+    $reviewPayload = [
         'post_slug' => $slug,
         'user_id' => $user->id,
-        'improve' => $request->input('improve'),
-        'why' => $request->input('why'),
-        'how' => $request->input('how'),
-    ]);
+        'improve' => $improve,
+        'why' => $why,
+        'how' => $how,
+    ];
+
+    if ($textModerationFlagged) {
+        if (safeHasColumn('post_reviews', 'moderation_status')) {
+            $reviewPayload['moderation_status'] = 'pending';
+        }
+        if (safeHasColumn('post_reviews', 'is_hidden')) {
+            $reviewPayload['is_hidden'] = true;
+        }
+        if (safeHasColumn('post_reviews', 'hidden_at')) {
+            $reviewPayload['hidden_at'] = now();
+        }
+        if (safeHasColumn('post_reviews', 'hidden_by')) {
+            $reviewPayload['hidden_by'] = null;
+        }
+    }
+
+    $review = PostReview::create($reviewPayload);
+
+    if ($textModerationFlagged && safeHasTable('content_reports')) {
+        $summary = trim((string) ($textModerationResult['summary'] ?? ''));
+        $detailText = $summary !== '' ? $summary : 'Text moderation flagged review.';
+        ContentReport::create([
+            'user_id' => $user->id,
+            'content_type' => 'review',
+            'content_id' => (string) $review->id,
+            'content_url' => resolvePostUrl($slug) . '#review-' . $review->id,
+            'reason' => 'admin_flag',
+            'details' => $detailText,
+        ]);
+    }
 
     return response()->json([
         'id' => $review->id,
