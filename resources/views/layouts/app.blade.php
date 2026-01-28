@@ -346,9 +346,6 @@
     <div class="media-viewer" data-media-viewer hidden>
         <button class="media-viewer__backdrop" type="button" aria-label="{{ __('ui.report.close') }}" data-media-viewer-close></button>
         <div class="media-viewer__panel" role="dialog" aria-modal="true" aria-label="{{ __('ui.js.media_viewer_label') }}">
-            <button class="icon-btn media-viewer__close" type="button" aria-label="{{ __('ui.report.close') }}" data-media-viewer-close>
-                <i data-lucide="x" class="icon"></i>
-            </button>
             <div class="media-viewer__stage">
                 <button class="icon-btn media-viewer__nav media-viewer__nav--prev" type="button" aria-label="{{ __('ui.js.carousel_prev') }}" data-media-viewer-prev>
                     <i data-lucide="chevron-left" class="icon"></i>
@@ -356,6 +353,9 @@
                 <img class="media-viewer__image" src="" alt="" data-media-viewer-image>
                 <button class="icon-btn media-viewer__nav media-viewer__nav--next" type="button" aria-label="{{ __('ui.js.carousel_next') }}" data-media-viewer-next>
                     <i data-lucide="chevron-right" class="icon"></i>
+                </button>
+                <button class="icon-btn media-viewer__close" type="button" aria-label="{{ __('ui.report.close') }}" data-media-viewer-close>
+                    <i data-lucide="x" class="icon"></i>
                 </button>
             </div>
             <div class="media-viewer__thumbs" data-media-viewer-thumbs></div>
