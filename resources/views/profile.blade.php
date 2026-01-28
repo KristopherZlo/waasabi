@@ -245,8 +245,8 @@
     @endif
 
     @if ($canManageBadges)
-        <script type="application/json" data-badge-catalog>@json($badge_catalog ?? [])</script>
-        <script type="application/json" data-user-badges>@json($badges)</script>
+        <script type="application/json" data-badge-catalog nonce="{{ $csp_nonce ?? '' }}">@json($badge_catalog ?? [])</script>
+        <script type="application/json" data-user-badges nonce="{{ $csp_nonce ?? '' }}">@json($badges)</script>
 
         <div class="badge-modal" data-badge-modal hidden>
             <div class="badge-card" data-badge-panel role="dialog" aria-modal="true" aria-label="{{ __('ui.badges.grant_title') }}">

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AuditLog;
 use App\Models\ContentReport;
 use App\Models\ModerationLog;
 use App\Models\Post;
@@ -14,6 +15,8 @@ use App\Services\CoauthorService;
 use App\Services\ContentModerationService;
 use App\Services\FeedService;
 use App\Services\TextModerationService;
+use Illuminate\Auth\Events\Registered;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -21,6 +24,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -91,6 +95,139 @@ if (!function_exists('safeHasColumn')) {
         } catch (\Throwable $e) {
             return false;
         }
+    }
+}
+
+if (!function_exists('buildNotificationPayload')) {
+    function buildNotificationPayload(array $seedNotifications, ?User $user = null): array
+    {
+        $authUser = $user ?? Auth::user();
+        $notifications = $seedNotifications;
+
+        if ($authUser && safeHasTable('user_notifications')) {
+            $cutoff = now()->subDays(30);
+            DB::table('user_notifications')
+                ->where('created_at', '<', $cutoff)
+                ->delete();
+
+            $userNotifications = $authUser->notifications()
+                ->where('created_at', '>=', $cutoff)
+                ->orderByDesc('created_at')
+                ->limit(200)
+                ->get();
+
+            if ($userNotifications->isNotEmpty()) {
+                $notifications = $userNotifications
+                    ->map(static function ($notification) {
+                        $createdAt = $notification->created_at ?? null;
+                        $time = $createdAt ? Carbon::parse($createdAt)->diffForHumans() : '';
+                        return [
+                            'id' => $notification->id,
+                            'type' => $notification->type ?? 'Update',
+                            'time' => $time,
+                            'text' => $notification->text ?? '',
+                            'link' => $notification->link ?? null,
+                            'read' => !empty($notification->read_at),
+                        ];
+                    })
+                    ->values()
+                    ->all();
+            }
+        }
+
+        $notifications = $authUser ? $notifications : [];
+
+        $unreadNotifications = array_values(array_filter($notifications, function (array $notification) {
+            return !($notification['read'] ?? false);
+        }));
+        $unreadCount = count($unreadNotifications);
+        $unreadPreview = array_slice($unreadNotifications, 0, 4);
+
+        return [
+            'notifications' => $notifications,
+            'unreadNotifications' => $unreadNotifications,
+            'unreadCount' => $unreadCount,
+            'unreadPreview' => $unreadPreview,
+        ];
+    }
+}
+
+if (!function_exists('logAuditEvent')) {
+    function logAuditEvent(Request $request, string $event, ?User $actor = null, array $meta = [], ?string $targetType = null, ?string $targetId = null): void
+    {
+        if (!safeHasTable('audit_logs')) {
+            return;
+        }
+
+        $userId = $actor?->id ?? $request->user()?->id;
+        $userAgent = substr((string) $request->userAgent(), 0, 255);
+
+        AuditLog::create([
+            'user_id' => $userId,
+            'event' => $event,
+            'target_type' => $targetType,
+            'target_id' => $targetId,
+            'ip_address' => $request->ip(),
+            'user_agent' => $userAgent !== '' ? $userAgent : null,
+            'meta' => $meta !== [] ? $meta : null,
+        ]);
+    }
+}
+
+if (!function_exists('honeypotTripped')) {
+    function honeypotTripped(Request $request): bool
+    {
+        $value = (string) $request->input('website', '');
+        return trim($value) !== '';
+    }
+}
+
+if (!function_exists('captchaEnabled')) {
+    function captchaEnabled(string $action): bool
+    {
+        $config = (array) config('waasabi.captcha', []);
+        if (!(bool) ($config['enabled'] ?? false)) {
+            return false;
+        }
+        $siteKey = trim((string) ($config['site_key'] ?? ''));
+        $secret = trim((string) ($config['secret'] ?? ''));
+        if ($siteKey === '' || $secret === '') {
+            return false;
+        }
+        $actions = (array) ($config['actions'] ?? []);
+        return (bool) ($actions[$action] ?? false);
+    }
+}
+
+if (!function_exists('verifyCaptcha')) {
+    function verifyCaptcha(Request $request): bool
+    {
+        $config = (array) config('waasabi.captcha', []);
+        $provider = strtolower((string) ($config['provider'] ?? 'turnstile'));
+        $secret = (string) ($config['secret'] ?? '');
+        $token = (string) $request->input('cf-turnstile-response', '');
+
+        if ($provider !== 'turnstile') {
+            return true;
+        }
+        if ($secret === '' || $token === '') {
+            return false;
+        }
+
+        try {
+            $response = Http::asForm()
+                ->timeout(4)
+                ->post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
+                    'secret' => $secret,
+                    'response' => $token,
+                    'remoteip' => $request->ip(),
+                ]);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        $payload = $response->json();
+        return (bool) ($payload['success'] ?? false);
     }
 }
 
@@ -2326,7 +2463,7 @@ Route::post('/projects/{slug}/comments', function (Request $request, string $slu
         'is_hidden' => (bool) ($comment->is_hidden ?? false),
         'moderation_status' => (string) ($comment->moderation_status ?? 'approved'),
     ]);
-})->middleware(['auth', 'throttle:12,1'])->name('project.comments.store');
+})->middleware(['auth', 'verified', 'account.age', 'throttle:comments'])->name('project.comments.store');
 
 Route::get('/projects/{slug}/comments/chunk', function (Request $request, string $slug) use ($projects) {
     $viewer = $request->user();
@@ -2511,7 +2648,7 @@ Route::post('/projects/{slug}/reviews', function (Request $request, string $slug
         'is_hidden' => (bool) ($review->is_hidden ?? false),
         'moderation_status' => (string) ($review->moderation_status ?? 'approved'),
     ]);
-})->middleware(['auth', 'throttle:6,1'])->name('project.reviews.store');
+})->middleware(['auth', 'verified', 'account.age', 'throttle:reviews'])->name('project.reviews.store');
 
 Route::get('/questions/{slug}', function (string $slug) use ($qa_questions, $mapPostToQuestion, $preparePostStats, $renderMarkdown) {
     $viewer = Auth::user();
@@ -2820,11 +2957,12 @@ Route::post('/reading-progress', function (Request $request) use ($postSlugExist
     );
 
     return response()->json(['ok' => true]);
-})->middleware('throttle:60,1')->name('reading-progress');
+})->middleware('throttle:reading-progress')->name('reading-progress');
 
 Route::post('/uploads/images', function (Request $request) {
+    $maxImageKb = max(1, (int) config('waasabi.upload.max_image_mb', 5) * 1024);
     $request->validate([
-        'image' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:' . $maxImageKb],
     ]);
 
     $file = $request->file('image');
@@ -2850,7 +2988,7 @@ Route::post('/uploads/images', function (Request $request) {
         'url' => asset($result['path']),
         'preview_url' => $result['preview'] ? asset($result['preview']) : null,
     ]);
-})->middleware(['auth', 'throttle:30,1'])->name('uploads.images');
+})->middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:uploads'])->name('uploads.images');
 
 Route::post('/posts/{slug}/save', function (Request $request, string $slug) {
     if (!safeHasTable('post_saves')) {
@@ -2890,7 +3028,7 @@ Route::post('/posts/{slug}/save', function (Request $request, string $slug) {
 
     $count = DB::table('post_saves')->where('post_id', $post->id)->count();
     return response()->json(['saved' => !$exists, 'count' => $count]);
-})->middleware(['auth', 'throttle:30,1'])->name('posts.save');
+})->middleware(['auth', 'verified', 'throttle:post-actions'])->name('posts.save');
 
 Route::post('/posts/{slug}/upvote', function (Request $request, string $slug) {
     if (!safeHasTable('post_upvotes')) {
@@ -2930,7 +3068,7 @@ Route::post('/posts/{slug}/upvote', function (Request $request, string $slug) {
 
     $count = DB::table('post_upvotes')->where('post_id', $post->id)->count();
     return response()->json(['upvoted' => !$exists, 'count' => $count]);
-})->middleware(['auth', 'throttle:30,1'])->name('posts.upvote');
+})->middleware(['auth', 'verified', 'throttle:post-actions'])->name('posts.upvote');
 
 Route::post('/reports', function (Request $request) {
     $data = $request->validate([
@@ -2981,7 +3119,7 @@ Route::post('/reports', function (Request $request) {
         'auto_hidden' => $result['auto_hidden'] ?? null,
         'duplicate' => $result['duplicate'] ?? null,
     ], static fn ($value) => $value !== null)));
-})->middleware('throttle:6,1')->name('reports.store');
+})->middleware(['auth', 'verified', 'throttle:reports'])->name('reports.store');
 
 Route::get('/publish', function () {
     $user = Auth::user();
@@ -2990,7 +3128,7 @@ Route::get('/publish', function () {
         'current_user' => currentUserPayload(),
         'coauthor_suggestions' => $coauthorSuggestions,
     ]);
-})->middleware('auth')->name('publish');
+})->middleware(['auth', 'can:publish', 'verified', 'account.age'])->name('publish');
 
 Route::get('/posts/{slug}/edit', function (string $slug) {
     if (!safeHasTable('posts')) {
@@ -3048,7 +3186,7 @@ Route::get('/posts/{slug}/edit', function (string $slug) {
         'current_user' => currentUserPayload(),
         'coauthor_suggestions' => $coauthorSuggestions,
     ]);
-})->middleware('auth')->name('posts.edit');
+})->middleware(['auth', 'verified', 'account.age'])->name('posts.edit');
 
 Route::post('/publish', function (Request $request) use ($renderMarkdown) {
     if (!safeHasTable('posts')) {
@@ -3061,8 +3199,8 @@ Route::post('/publish', function (Request $request) use ($renderMarkdown) {
         'title' => ['required', 'string', 'max:255'],
         'subtitle' => ['nullable', 'string', 'max:255'],
         'coauthors' => ['nullable', 'string', 'max:600'],
-        'cover_images' => ['nullable', 'array', 'max:8'],
-        'cover_images.*' => ['file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        'cover_images' => ['nullable', 'array', 'max:' . $maxCoverImages],
+        'cover_images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:' . $maxImageKb],
         'status' => ['nullable', 'string', 'max:40'],
         'nsfw' => ['nullable', 'boolean'],
         'tags' => ['nullable', 'string', 'max:255'],
@@ -3427,7 +3565,7 @@ Route::post('/publish', function (Request $request) use ($renderMarkdown) {
     return $toastMessage !== null
         ? $redirect->with('toast', $toastMessage)
         : $redirect;
-})->middleware(['auth', 'throttle:6,1'])->name('publish.store');
+})->middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:publish'])->name('publish.store');
 
 Route::get('/profile', function () use ($projects, $profile, $badgeCatalog) {
     $user = Auth::user();
@@ -3469,6 +3607,9 @@ Route::post('/profile/settings', function (Request $request) use ($generateUserS
     if (!in_array($section, $allowedSections, true)) {
         $section = 'profile';
     }
+
+    $maxImageKb = max(1, (int) config('waasabi.upload.max_image_mb', 5) * 1024);
+    $maxCoverImages = max(1, (int) config('waasabi.upload.max_images_per_post', 8));
 
     $data = $request->validate([
         'name' => ['required', 'string', 'max:255'],
@@ -3604,7 +3745,7 @@ Route::post('/profile/{slug}/banner', function (Request $request, string $slug) 
     return redirect()
         ->route('profile.show', $slug)
         ->with('toast', __('ui.js.profile_banner_updated'));
-})->middleware(['auth', 'throttle:6,1'])->name('profile.banner.update');
+})->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])->name('profile.banner.update');
 
 Route::delete('/profile/{slug}/banner', function (Request $request, string $slug) {
     $user = $request->user();
@@ -3632,7 +3773,7 @@ Route::delete('/profile/{slug}/banner', function (Request $request, string $slug
     }
 
     return response()->json(['ok' => true]);
-})->middleware(['auth', 'throttle:6,1'])->name('profile.banner.delete');
+})->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])->name('profile.banner.delete');
 
 Route::post('/profile/{slug}/avatar', function (Request $request, string $slug) {
     $user = $request->user();
@@ -3681,7 +3822,7 @@ Route::post('/profile/{slug}/avatar', function (Request $request, string $slug) 
     return redirect()
         ->route('profile.show', $slug)
         ->with('toast', __('ui.js.profile_avatar_updated'));
-})->middleware(['auth', 'throttle:6,1'])->name('profile.avatar.update');
+})->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])->name('profile.avatar.update');
 
 Route::delete('/profile/{slug}/avatar', function (Request $request, string $slug) {
     $user = $request->user();
@@ -3709,7 +3850,7 @@ Route::delete('/profile/{slug}/avatar', function (Request $request, string $slug
         'ok' => true,
         'default_url' => asset('images/avatar-default.svg'),
     ]);
-})->middleware(['auth', 'throttle:6,1'])->name('profile.avatar.delete');
+})->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])->name('profile.avatar.delete');
 
 Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, $mapPostToProject, $mapPostToQuestion, $preparePostStats, $badgeCatalog) {
     $viewer = Auth::user();
@@ -3988,7 +4129,7 @@ Route::post('/profile/{slug}/follow', function (Request $request, string $slug) 
     }
 
     return redirect()->back();
-})->middleware(['auth', 'throttle:20,1'])->name('profile.follow');
+})->middleware(['auth', 'verified', 'throttle:profile-follow'])->name('profile.follow');
 
 Route::get('/showcase', function () use ($showcase) {
     return view('showcase', ['showcase' => $showcase, 'current_user' => currentUserPayload()]);
@@ -4226,7 +4367,7 @@ Route::post('/support/tickets', function (Request $request) {
     }
 
     return redirect()->route('support', ['tab' => 'tickets'])->with('toast', $toast);
-})->middleware(['auth', 'throttle:6,1'])->name('support.ticket.store');
+})->middleware(['auth', 'verified', 'account.age', 'throttle:support-ticket'])->name('support.ticket.store');
 
 Route::post('/support/tickets/{ticket}/messages', function (Request $request, SupportTicket $ticket) {
     $user = $request->user();
@@ -4297,7 +4438,7 @@ Route::post('/support/tickets/{ticket}/messages', function (Request $request, Su
     }
 
     return redirect()->route('support', ['tab' => 'tickets', 'ticket' => $ticket->id]);
-})->middleware(['auth', 'throttle:12,1'])->name('support.ticket.message');
+})->middleware(['auth', 'verified', 'account.age', 'throttle:support-message'])->name('support.ticket.message');
 
 Route::get('/locale/{locale}', function (string $locale, Request $request) {
     if (!in_array($locale, ['en', 'fi'], true)) {
@@ -4317,16 +4458,35 @@ Route::get('/register', function () {
     return view('auth.register', ['current_user' => currentUserPayload()]);
 })->name('register');
 
+Route::get('/verify-email', function () {
+    return view('auth.verify-email', ['current_user' => currentUserPayload()]);
+})->middleware('auth')->name('verification.notice');
+
 Route::post('/login', function (Request $request) {
+    if (honeypotTripped($request)) {
+        logAuditEvent($request, 'auth.honeypot', null, ['context' => 'login']);
+        return back()->withErrors([
+            'email' => __('ui.auth.captcha_failed'),
+        ])->onlyInput('email');
+    }
+    if (captchaEnabled('login') && !verifyCaptcha($request)) {
+        logAuditEvent($request, 'auth.captcha_failed', null, ['context' => 'login']);
+        return back()->withErrors([
+            'email' => __('ui.auth.captcha_failed'),
+        ])->onlyInput('email');
+    }
+
     $credentials = $request->validate([
-        'email' => ['required', 'email'],
+        'email' => ['required', 'string', 'email', 'max:255'],
         'password' => ['required'],
     ]);
+    $credentials['email'] = strtolower((string) ($credentials['email'] ?? ''));
 
     if (Auth::attempt($credentials)) {
         $request->session()->regenerate();
         $user = Auth::user();
         if ($user && safeHasColumn('users', 'is_banned') && $user->is_banned) {
+            logAuditEvent($request, 'auth.login_banned', $user);
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -4334,19 +4494,42 @@ Route::post('/login', function (Request $request) {
                 'email' => __('ui.auth.banned'),
             ])->onlyInput('email');
         }
+        if ($user) {
+            logAuditEvent($request, 'auth.login', $user, [
+                'email_hash' => hash('sha256', strtolower((string) $user->email)),
+            ]);
+        }
         return redirect()->route('feed');
     }
 
+    if (!empty($credentials['email'])) {
+        logAuditEvent($request, 'auth.login_failed', null, [
+            'email_hash' => hash('sha256', strtolower((string) $credentials['email'])),
+        ]);
+    }
     return back()->withErrors([
         'email' => 'Invalid email or password.',
     ])->onlyInput('email');
-})->middleware('throttle:10,1')->name('login.store');
+})->middleware('throttle:login')->name('login.store');
 
 Route::post('/register', function (Request $request) use ($generateUserSlug) {
+    if (honeypotTripped($request)) {
+        logAuditEvent($request, 'auth.honeypot', null, ['context' => 'register']);
+        return back()->withErrors([
+            'email' => __('ui.auth.captcha_failed'),
+        ])->onlyInput('email');
+    }
+    if (captchaEnabled('register') && !verifyCaptcha($request)) {
+        logAuditEvent($request, 'auth.captcha_failed', null, ['context' => 'register']);
+        return back()->withErrors([
+            'email' => __('ui.auth.captcha_failed'),
+        ])->onlyInput('email');
+    }
+
     $data = $request->validate([
         'name' => ['required', 'string', 'max:255'],
-        'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-        'password' => ['required', 'confirmed', Password::min(8)],
+        'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
+        'password' => ['required', 'confirmed', Password::min(10)->mixedCase()->numbers()->symbols()->uncompromised()],
         'accept_legal' => ['accepted'],
     ]);
 
@@ -4361,11 +4544,45 @@ Route::post('/register', function (Request $request) use ($generateUserSlug) {
         'role' => $role,
     ]);
 
+    event(new Registered($user));
     Auth::login($user);
     $request->session()->regenerate();
 
-    return redirect()->route('feed');
-})->middleware('throttle:30,1')->name('register.store');
+    logAuditEvent($request, 'auth.register', $user, [
+        'email_hash' => hash('sha256', strtolower((string) $user->email)),
+    ]);
+
+    return redirect()->route('verification.notice');
+})->middleware('throttle:register')->name('register.store');
+
+Route::get('/verify-email/{id}/{hash}', function (EmailVerificationRequest $request) {
+    $request->fulfill();
+    $user = $request->user();
+    if ($user) {
+        logAuditEvent($request, 'auth.verify', $user);
+    }
+    return redirect()->route('feed')->with('toast', __('ui.auth.verify_success'));
+})->middleware(['auth', 'signed', 'throttle:verification'])->name('verification.verify');
+
+Route::post('/email/verification-notification', function (Request $request) {
+    if (honeypotTripped($request)) {
+        logAuditEvent($request, 'auth.honeypot', $request->user(), ['context' => 'verification']);
+        return back()->with('toast', __('ui.auth.captcha_failed'));
+    }
+    if (captchaEnabled('verification') && !verifyCaptcha($request)) {
+        logAuditEvent($request, 'auth.captcha_failed', $request->user(), ['context' => 'verification']);
+        return back()->with('toast', __('ui.auth.captcha_failed'));
+    }
+    $user = $request->user();
+    if ($user && $user->hasVerifiedEmail()) {
+        return back()->with('toast', __('ui.auth.verify_already'));
+    }
+    $user?->sendEmailVerificationNotification();
+    if ($user) {
+        logAuditEvent($request, 'auth.verify_resend', $user);
+    }
+    return back()->with('toast', __('ui.auth.verify_sent'));
+})->middleware(['auth', 'throttle:verification'])->name('verification.send');
 
 Route::post('/logout', function (Request $request) {
     Auth::logout();
@@ -4518,7 +4735,7 @@ Route::post('/read-later/sync', function (Request $request) {
         ->all();
 
     return response()->json(['items' => $items]);
-})->middleware(['auth', 'throttle:30,1'])->name('read-later.sync');
+})->middleware(['auth', 'throttle:read-later'])->name('read-later.sync');
 
 Route::get('/read-later/render', function () use ($mapPostToProject, $mapPostToQuestion, $preparePostStats) {
     $user = Auth::user();
@@ -4563,7 +4780,7 @@ Route::get('/read-later/render', function () use ($mapPostToProject, $mapPostToQ
         'items' => $items,
         'slugs' => $slugs,
     ]);
-})->middleware(['auth', 'throttle:30,1'])->name('read-later.render');
+})->middleware(['auth', 'throttle:read-later'])->name('read-later.render');
 
 Route::middleware(['auth', 'can:moderate'])->group(function () {
     Route::get('/admin', function (Request $request) {
@@ -5587,7 +5804,12 @@ Route::middleware(['auth', 'can:admin'])->group(function () {
         $data = $request->validate([
             'role' => ['required', Rule::in(config('roles.order', ['user', 'maker', 'moderator', 'admin']))],
         ]);
+        $oldRole = $user->role;
         $user->update(['role' => $data['role']]);
+        logAuditEvent($request, 'admin.user.role_change', $request->user(), [
+            'from' => $oldRole,
+            'to' => $data['role'],
+        ], 'user', (string) $user->id);
         return redirect()->route('admin');
     })->name('admin.users.role');
 

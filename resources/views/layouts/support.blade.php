@@ -8,7 +8,7 @@
     @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
         @vite(['resources/js/site-loader.ts', 'resources/css/app.css', 'resources/js/app.ts'])
     @endif
-    <script>
+    <script nonce="{{ $csp_nonce ?? '' }}">
         window.APP_I18N = @json(trans('ui.js'));
         window.APP_SEARCH_INDEX = @json($searchIndex ?? []);
     </script>

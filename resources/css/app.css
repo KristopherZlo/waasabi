@@ -381,6 +381,15 @@ textarea::placeholder {
     flex-direction: column;
 }
 
+.honeypot-field {
+    position: absolute;
+    left: -10000px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
 .bg-orb,
 .bg-orb--two,
 .bg-noise {

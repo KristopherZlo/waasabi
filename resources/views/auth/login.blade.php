@@ -31,6 +31,12 @@
             @endif
             <form class="auth-form" method="POST" action="{{ route('login.store') }}">
                 @csrf
+                <div class="honeypot-field" aria-hidden="true">
+                    <label>
+                        <span>Website</span>
+                        <input type="text" name="website" tabindex="-1" autocomplete="off">
+                    </label>
+                </div>
                 <label>
                     <span>{{ __('ui.auth.email') }}</span>
                     <input class="input" type="email" name="email" value="{{ old('email') }}" required autocomplete="email">
@@ -39,6 +45,12 @@
                     <span>{{ __('ui.auth.password') }}</span>
                     <input class="input" type="password" name="password" required autocomplete="current-password">
                 </label>
+                @if (config('waasabi.captcha.enabled') && config('waasabi.captcha.actions.login') && config('waasabi.captcha.site_key'))
+                    <div class="captcha-field">
+                        <div class="cf-turnstile" data-sitekey="{{ config('waasabi.captcha.site_key') }}"></div>
+                    </div>
+                    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+                @endif
                 <button class="submit-btn" type="submit">{{ __('ui.auth.sign_in') }}</button>
             </form>
             <div class="helper">{{ __('ui.auth.login_no_account') }} <a href="{{ route('register') }}">{{ __('ui.auth.login_create') }}</a></div>

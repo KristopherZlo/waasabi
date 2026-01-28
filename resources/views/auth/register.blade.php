@@ -31,6 +31,12 @@
             @endif
             <form class="auth-form" method="POST" action="{{ route('register.store') }}">
                 @csrf
+                <div class="honeypot-field" aria-hidden="true">
+                    <label>
+                        <span>Website</span>
+                        <input type="text" name="website" tabindex="-1" autocomplete="off">
+                    </label>
+                </div>
                 <label>
                     <span>{{ __('ui.auth.name') }}</span>
                     <input class="input" type="text" name="name" value="{{ old('name') }}" required autocomplete="name">
@@ -54,6 +60,12 @@
                         and acknowledge the <a href="{{ route('legal.privacy') }}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
                     </span>
                 </label>
+                @if (config('waasabi.captcha.enabled') && config('waasabi.captcha.actions.register') && config('waasabi.captcha.site_key'))
+                    <div class="captcha-field">
+                        <div class="cf-turnstile" data-sitekey="{{ config('waasabi.captcha.site_key') }}"></div>
+                    </div>
+                    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+                @endif
                 <button class="submit-btn" type="submit">{{ __('ui.auth.create_account') }}</button>
             </form>
             <div class="helper">{{ __('ui.auth.register_have_account') }} <a href="{{ route('login') }}">{{ __('ui.auth.register_sign_in') }}</a></div>
