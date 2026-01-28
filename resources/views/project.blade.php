@@ -477,7 +477,7 @@
                     @endforelse
                 </div>
                 @if (Auth::check() && !(Auth::user()?->is_banned ?? false))
-                    @if (in_array($userRole, ['maker', 'admin'], true))
+                    @if (Auth::user()?->hasRole('maker'))
                         <div class="card card--tight review-form">
                         @php
                             $reviewer = $project['reviewer'] ?? [
@@ -535,4 +535,3 @@
         </div>
     </div>
 @endsection
-

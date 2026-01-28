@@ -266,5 +266,12 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('support', function (User $user): bool {
             return $user->canPerform('support');
         });
+
+        Gate::define('publish', function (User $user): bool {
+            if (($user->is_banned ?? false)) {
+                return false;
+            }
+            return $user->canPerform('publish');
+        });
     }
 }

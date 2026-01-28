@@ -342,6 +342,166 @@ if (!function_exists('canViewHiddenContent')) {
     }
 }
 
+if (!function_exists('makerPromotionConfig')) {
+    function makerPromotionConfig(): array
+    {
+        $defaults = [
+            'required_posts' => 5,
+            'min_upvotes' => 15,
+            'percentile' => 75,
+            'window_hours' => 24,
+            'min_sample' => 10,
+            'exclude_nsfw' => true,
+            'require_visible' => true,
+            'require_approved' => true,
+            'type' => 'post',
+            'cache_minutes' => 10,
+        ];
+
+        $config = (array) config('roles.maker_promotion', []);
+        return array_merge($defaults, $config);
+    }
+}
+
+if (!function_exists('makerPromotionThreshold')) {
+    function makerPromotionThreshold(): int
+    {
+        $config = makerPromotionConfig();
+        $minUpvotes = max(0, (int) ($config['min_upvotes'] ?? 0));
+        $percentile = (float) ($config['percentile'] ?? 75);
+        $windowHours = max(0, (int) ($config['window_hours'] ?? 24));
+        $minSample = max(0, (int) ($config['min_sample'] ?? 0));
+        $cacheMinutes = max(1, (int) ($config['cache_minutes'] ?? 10));
+
+        $cacheKey = implode('.', [
+            'roles',
+            'maker',
+            'threshold',
+            'v1',
+            $windowHours,
+            (int) $percentile,
+            $minUpvotes,
+            $minSample,
+            !empty($config['exclude_nsfw']) ? 'nsfw0' : 'nsfw1',
+        ]);
+
+        return (int) Cache::remember($cacheKey, now()->addMinutes($cacheMinutes), function () use (
+            $config,
+            $minUpvotes,
+            $percentile,
+            $windowHours,
+            $minSample
+        ): int {
+            if (!safeHasTable('posts') || !safeHasTable('post_upvotes')) {
+                return $minUpvotes;
+            }
+
+            $query = DB::table('posts')
+                ->leftJoin('post_upvotes', 'posts.id', '=', 'post_upvotes.post_id')
+                ->where('posts.type', (string) ($config['type'] ?? 'post'));
+
+            if ($windowHours > 0) {
+                $query->where('posts.created_at', '>=', now()->subHours($windowHours));
+            }
+            if (!empty($config['exclude_nsfw']) && safeHasColumn('posts', 'nsfw')) {
+                $query->where('posts.nsfw', false);
+            }
+            if (!empty($config['require_visible']) && safeHasColumn('posts', 'is_hidden')) {
+                $query->where('posts.is_hidden', false);
+            }
+            if (!empty($config['require_approved']) && safeHasColumn('posts', 'moderation_status')) {
+                $query->where('posts.moderation_status', 'approved');
+            }
+            if (safeHasTable('users') && safeHasColumn('users', 'is_banned')) {
+                $query->whereNotIn('posts.user_id', function ($sub) {
+                    $sub->select('id')
+                        ->from('users')
+                        ->where('is_banned', true);
+                });
+            }
+
+            $rows = $query
+                ->groupBy('posts.id')
+                ->select('posts.id', DB::raw('count(post_upvotes.id) as score'))
+                ->get();
+
+            $scores = $rows
+                ->pluck('score')
+                ->map(static fn ($value) => (int) $value)
+                ->all();
+
+            if (count($scores) < $minSample || empty($scores)) {
+                return $minUpvotes;
+            }
+
+            sort($scores, SORT_NUMERIC);
+            $percentile = max(0.0, min(100.0, $percentile));
+            $rank = (int) ceil(($percentile / 100) * count($scores));
+            $rank = max(1, min($rank, count($scores)));
+            $value = (int) ($scores[$rank - 1] ?? 0);
+
+            return max($minUpvotes, $value);
+        });
+    }
+}
+
+if (!function_exists('countUserTopPostsForMaker')) {
+    function countUserTopPostsForMaker(User $user, int $threshold): int
+    {
+        if (!safeHasTable('posts') || !safeHasTable('post_upvotes')) {
+            return 0;
+        }
+
+        $config = makerPromotionConfig();
+        $query = DB::table('posts')
+            ->leftJoin('post_upvotes', 'posts.id', '=', 'post_upvotes.post_id')
+            ->where('posts.user_id', $user->id)
+            ->where('posts.type', (string) ($config['type'] ?? 'post'));
+
+        if (!empty($config['exclude_nsfw']) && safeHasColumn('posts', 'nsfw')) {
+            $query->where('posts.nsfw', false);
+        }
+        if (!empty($config['require_visible']) && safeHasColumn('posts', 'is_hidden')) {
+            $query->where('posts.is_hidden', false);
+        }
+        if (!empty($config['require_approved']) && safeHasColumn('posts', 'moderation_status')) {
+            $query->where('posts.moderation_status', 'approved');
+        }
+
+        $rows = $query
+            ->groupBy('posts.id')
+            ->havingRaw('count(post_upvotes.id) >= ?', [$threshold])
+            ->select('posts.id')
+            ->get();
+
+        return $rows->count();
+    }
+}
+
+if (!function_exists('maybePromoteToMaker')) {
+    function maybePromoteToMaker(User $user): bool
+    {
+        if ($user->roleKey() !== 'user') {
+            return false;
+        }
+        if (safeHasColumn('users', 'is_banned') && ($user->is_banned ?? false)) {
+            return false;
+        }
+
+        $config = makerPromotionConfig();
+        $required = max(1, (int) ($config['required_posts'] ?? 5));
+        $threshold = makerPromotionThreshold();
+        $qualified = countUserTopPostsForMaker($user, $threshold);
+
+        if ($qualified < $required) {
+            return false;
+        }
+
+        $user->update(['role' => 'maker']);
+        return true;
+    }
+}
+
 if (!function_exists('getTopbarPromos')) {
     function getTopbarPromos(bool $onlyActive = true): array
     {
@@ -2618,7 +2778,7 @@ Route::post('/projects/{slug}/reviews', function (Request $request, string $slug
     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
-    if (!in_array($user->role, ['maker', 'admin'], true)) {
+    if (!$user->hasRole('maker')) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
     if (!safeHasTable('post_reviews')) {
@@ -3119,6 +3279,10 @@ Route::post('/posts/{slug}/upvote', function (Request $request, string $slug) {
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        $author = User::find($post->user_id);
+        if ($author) {
+            maybePromoteToMaker($author);
+        }
     }
 
     $count = DB::table('post_upvotes')->where('post_id', $post->id)->count();
