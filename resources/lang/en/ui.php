@@ -189,11 +189,37 @@ return [
         'portal_ticket_status_waiting' => 'Waiting for your reply',
         'portal_ticket_status_closed' => 'Closed',
         'portal_kb_title' => 'Knowledge base',
-        'portal_kb_text' => 'Community rules and Terms of Service.',
+        'portal_kb_text' => 'Guides for features, rules, and support.',
         'portal_kb_empty' => 'No articles in the knowledge base yet.',
         'portal_suggestions_title' => 'Suggested articles',
         'portal_suggestions_hint' => 'Suggestions update based on your ticket text.',
         'portal_suggestions_empty' => 'No matching articles yet.',
+        'sections' => [
+            'account' => [
+                'title' => 'Account & profile',
+                'summary' => 'Roles, badges, and your profile settings.',
+            ],
+            'publishing' => [
+                'title' => 'Publishing & feedback',
+                'summary' => 'Posts, questions, reviews, and discovery.',
+            ],
+            'safety' => [
+                'title' => 'Rules & moderation',
+                'summary' => 'Reports, bans, and community safety.',
+            ],
+            'notifications' => [
+                'title' => 'Notifications & saves',
+                'summary' => 'Alerts, read later, and reminders.',
+            ],
+            'support' => [
+                'title' => 'Support service',
+                'summary' => 'How support tickets and follow-ups work.',
+            ],
+            'legal' => [
+                'title' => 'Legal documents',
+                'summary' => 'Terms, privacy, and policy updates.',
+            ],
+        ],
         'articles' => [
             'terms' => [
                 'title' => 'Terms of Service',
@@ -222,6 +248,38 @@ return [
             'ticket' => [
                 'title' => 'How support works',
                 'summary' => 'Creating tickets, response times, and follow-ups.',
+            ],
+            'roles_badges_progression' => [
+                'title' => 'Roles, badges, and progression',
+                'summary' => 'User roles, Maker promotion, and the badge system.',
+            ],
+            'posts_questions' => [
+                'title' => 'Posts and questions',
+                'summary' => 'What you can publish and how each type works.',
+            ],
+            'feedback' => [
+                'title' => 'Comments, reviews, and upvotes',
+                'summary' => 'How feedback works and who can review.',
+            ],
+            'feed_discovery' => [
+                'title' => 'Feed, filters, and discovery',
+                'summary' => 'How the feed is built, ranked, and filtered.',
+            ],
+            'notifications_read_later' => [
+                'title' => 'Notifications and read later',
+                'summary' => 'Stay updated and save posts for later.',
+            ],
+            'profile_settings' => [
+                'title' => 'Profile settings and theme',
+                'summary' => 'Manage your profile, privacy, and theme.',
+            ],
+            'moderation_reports_bans' => [
+                'title' => 'Moderation, reports, and bans',
+                'summary' => 'Rules, reporting, and enforcement basics.',
+            ],
+            'support_service' => [
+                'title' => 'Support service',
+                'summary' => 'How to contact support and track tickets.',
             ],
         ],
         'notification_new_ticket' => 'New ticket #:id - :subject',

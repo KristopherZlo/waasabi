@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ app()->getLocale() }}">
+<html lang="{{ app()->getLocale() }}" data-theme="light">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,6 +20,7 @@
         if (!in_array($supportTab, $supportTabs, true)) {
             $supportTab = request()->has('ticket') ? 'tickets' : 'home';
         }
+        $supportIsArticle = request()->routeIs('support.kb') || request()->routeIs('support.docs');
     @endphp
     <header class="support-topbar">
         <div class="support-topbar__inner">
@@ -34,15 +35,27 @@
             </a>
             <div class="support-topbar__actions">
                 <nav class="support-nav" aria-label="{{ __('ui.support.title') }}">
-                    <button class="support-nav__link {{ $supportTab === 'home' ? 'is-active' : '' }}" type="button" data-tab="home">
-                        {{ __('ui.support.portal_nav_home') }}
-                    </button>
-                    <button class="support-nav__link {{ $supportTab === 'tickets' ? 'is-active' : '' }}" type="button" data-tab="tickets">
-                        {{ __('ui.support.portal_nav_tickets') }}
-                    </button>
-                    <button class="support-nav__link {{ $supportTab === 'new' ? 'is-active' : '' }}" type="button" data-tab="new">
-                        {{ __('ui.support.portal_nav_new') }}
-                    </button>
+                    @if ($supportIsArticle)
+                        <a class="support-nav__link {{ $supportTab === 'home' ? 'is-active' : '' }}" href="{{ route('support', ['tab' => 'home']) }}">
+                            {{ __('ui.support.portal_nav_home') }}
+                        </a>
+                        <a class="support-nav__link {{ $supportTab === 'tickets' ? 'is-active' : '' }}" href="{{ route('support', ['tab' => 'tickets']) }}">
+                            {{ __('ui.support.portal_nav_tickets') }}
+                        </a>
+                        <a class="support-nav__link {{ $supportTab === 'new' ? 'is-active' : '' }}" href="{{ route('support', ['tab' => 'new']) }}">
+                            {{ __('ui.support.portal_nav_new') }}
+                        </a>
+                    @else
+                        <button class="support-nav__link {{ $supportTab === 'home' ? 'is-active' : '' }}" type="button" data-tab="home">
+                            {{ __('ui.support.portal_nav_home') }}
+                        </button>
+                        <button class="support-nav__link {{ $supportTab === 'tickets' ? 'is-active' : '' }}" type="button" data-tab="tickets">
+                            {{ __('ui.support.portal_nav_tickets') }}
+                        </button>
+                        <button class="support-nav__link {{ $supportTab === 'new' ? 'is-active' : '' }}" type="button" data-tab="new">
+                            {{ __('ui.support.portal_nav_new') }}
+                        </button>
+                    @endif
                 </nav>
                 @php
                     $isAuthed = Auth::check() && !(Auth::user()?->is_banned ?? false);
@@ -173,6 +186,63 @@
             </div>
         </div>
     </main>
+
+    <footer class="site-footer site-footer--light site-footer--compact">
+        <div class="site-footer__inner">
+            <div class="footer-grid">
+                <div class="footer-col footer-col--account">
+                    <div class="footer-title">{{ __('ui.footer.account') }}</div>
+                    <a href="{{ route('login') }}" class="footer-link">{{ __('ui.footer.sign_in') }}</a>
+                    <a href="{{ route('register') }}" class="footer-link">{{ __('ui.footer.register') }}</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-title">{{ __('ui.footer.sections') }}</div>
+                    <a href="{{ route('feed') }}" class="footer-link">{{ __('ui.nav.feed') }}</a>
+                    <a href="{{ route('feed', ['stream' => 'questions']) }}" class="footer-link">{{ __('ui.feed.tab_questions') }}</a>
+                    <a href="{{ route('showcase') }}" class="footer-link">{{ __('ui.nav.showcase') }}</a>
+                    <a href="{{ route('read-later') }}" class="footer-link">{{ __('ui.nav.read_later') }}</a>
+                    <a href="{{ route('profile') }}" class="footer-link">{{ __('ui.nav.profile') }}</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-title">Legal</div>
+                    <a href="{{ route('legal.terms') }}" class="footer-link">Terms of Service</a>
+                    <a href="{{ route('legal.privacy') }}" class="footer-link">Privacy Policy</a>
+                    <a href="{{ route('legal.cookies') }}" class="footer-link">Cookie Policy</a>
+                    <a href="{{ route('legal.guidelines') }}" class="footer-link">Community Guidelines</a>
+                    <a href="{{ route('legal.notice') }}" class="footer-link">Notice &amp; Action</a>
+                    <a href="{{ route('legal.legal-notice') }}" class="footer-link">Legal Notice</a>
+                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">Contact</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-title">{{ __('ui.footer.services') }}</div>
+                    <a href="{{ route('publish') }}" class="footer-link">{{ __('ui.publish.title') }}</a>
+                    <a href="{{ route('read-later') }}" class="footer-link">{{ __('ui.read_later.title') }}</a>
+                    <a href="{{ route('showcase') }}" class="footer-link">{{ __('ui.showcase.title') }}</a>
+                    <a href="{{ route('notifications') }}" class="footer-link">{{ __('ui.notifications.title') }}</a>
+                    <a href="{{ route('support') }}" class="footer-link">{{ __('ui.support.title') }}</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                @php
+                    $footerStartYear = 2026;
+                    $footerCurrentYear = now()->year;
+                    $footerYearRange = $footerCurrentYear > $footerStartYear
+                        ? $footerStartYear . '-' . $footerCurrentYear
+                        : (string) $footerStartYear;
+                @endphp
+                <div class="footer-copy">{{ __('ui.footer.copyright', ['year' => $footerYearRange]) }}</div>
+                <div class="footer-links">
+                    <a href="{{ route('legal.terms') }}" class="footer-link">Terms</a>
+                    <a href="{{ route('legal.privacy') }}" class="footer-link">Privacy</a>
+                    <a href="{{ route('legal.cookies') }}" class="footer-link">Cookies</a>
+                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">Contact</a>
+                </div>
+                <div class="footer-social">
+                    <a class="social-chip" href="https://github.com" target="_blank" rel="noreferrer noopener">{{ __('ui.footer.github') }}</a>
+                </div>
+            </div>
+        </div>
+    </footer>
 
     <div class="toast" data-toast></div>
 </body>

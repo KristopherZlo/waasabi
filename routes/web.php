@@ -261,6 +261,116 @@ if (!function_exists('notifySupportStaff')) {
     }
 }
 
+if (!function_exists('buildSupportArticleEntries')) {
+    function buildSupportArticleEntries(array $supportArticles): array
+    {
+        $supportLocale = app()->getLocale();
+        $supportLocale = in_array($supportLocale, ['en', 'fi'], true) ? $supportLocale : 'en';
+        $stripSupportMarkdown = static function (string $markdown): string {
+            $markdown = preg_replace('/```.*?```/s', ' ', $markdown);
+            $markdown = preg_replace('/`[^`]*`/', ' ', $markdown);
+            $markdown = preg_replace('/!\[[^\]]*\]\([^)]+\)/', ' ', $markdown);
+            $markdown = preg_replace('/\[(.*?)\]\([^)]+\)/', '$1', $markdown);
+            $markdown = preg_replace('/^#+\s*/m', '', $markdown);
+            $markdown = preg_replace('/[*_>#+-]/', ' ', $markdown);
+            $markdown = preg_replace('/\s+/', ' ', $markdown);
+            return trim((string) $markdown);
+        };
+        $readSupportMarkdown = static function (?string $path) use ($stripSupportMarkdown): string {
+            if (!$path) {
+                return '';
+            }
+            $fullPath = base_path($path);
+            if (!is_file($fullPath)) {
+                return '';
+            }
+            $contents = file_get_contents($fullPath);
+            if ($contents === false) {
+                return '';
+            }
+            return $stripSupportMarkdown((string) $contents);
+        };
+        $resolveSupportKnowledgePath = static function (string $slug) use ($supportLocale): ?string {
+            $candidates = [
+                "docs/knowledge/{$supportLocale}/{$slug}.md",
+                "docs/knowledge/en/{$slug}.md",
+            ];
+            foreach ($candidates as $candidate) {
+                if (is_file(base_path($candidate))) {
+                    return $candidate;
+                }
+            }
+            return null;
+        };
+
+        return collect($supportArticles)
+            ->map(function (array $article) use ($readSupportMarkdown, $resolveSupportKnowledgePath) {
+                $titleKey = (string) ($article['title'] ?? '');
+                $title = trim((string) __($titleKey));
+                if ($title === '') {
+                    return null;
+                }
+                $summaryKey = (string) ($article['summary'] ?? '');
+                $summary = trim((string) __($summaryKey));
+                $tags = array_filter(array_map('strval', $article['tags'] ?? []));
+                $markdownPath = (string) ($article['markdown'] ?? '');
+                if ($markdownPath === '' && !empty($article['slug']) && ($article['group'] ?? '') === 'kb') {
+                    $markdownPath = (string) ($resolveSupportKnowledgePath((string) $article['slug']) ?? '');
+                }
+                $content = $markdownPath !== '' ? $readSupportMarkdown($markdownPath) : '';
+                $search = implode(' ', array_filter([$title, $summary, implode(' ', $tags), $content]));
+                $path = trim((string) ($article['path'] ?? ''));
+                $url = $path !== '' ? url($path) : null;
+                $id = (string) ($article['id'] ?? Str::slug($title));
+                $slug = (string) ($article['slug'] ?? Str::slug($title));
+                $group = (string) ($article['group'] ?? 'kb');
+
+                return [
+                    'id' => $id,
+                    'slug' => $slug,
+                    'group' => $group,
+                    'title' => $title,
+                    'summary' => $summary,
+                    'url' => $url,
+                    'search' => $search,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+}
+
+if (!function_exists('buildSupportSectionEntries')) {
+    function buildSupportSectionEntries(array $sections, array $articleEntries): array
+    {
+        $articleMap = collect($articleEntries)->keyBy('slug')->all();
+        $resolved = [];
+        foreach ($sections as $section) {
+            $items = [];
+            foreach ($section['items'] ?? [] as $slug) {
+                $article = $articleMap[$slug] ?? null;
+                if ($article) {
+                    $items[] = $article;
+                }
+            }
+            if (empty($items)) {
+                continue;
+            }
+            $titleKey = (string) ($section['title'] ?? '');
+            $summaryKey = (string) ($section['summary'] ?? '');
+            $resolved[] = [
+                'id' => (string) ($section['id'] ?? Str::slug($titleKey)),
+                'title' => $titleKey !== '' ? trim((string) __($titleKey)) : '',
+                'summary' => $summaryKey !== '' ? trim((string) __($summaryKey)) : '',
+                'items' => $items,
+                'count' => count($items),
+            ];
+        }
+        return $resolved;
+    }
+}
+
 $badgeCatalog = app(BadgeCatalogService::class)->all();
 
 if (!function_exists('badgePayload')) {
@@ -2070,52 +2180,189 @@ $notifications = [
 $supportArticles = [
     [
         'id' => 'support-terms',
+        'group' => 'legal',
+        'slug' => 'terms-of-service',
         'title' => 'ui.support.articles.terms.title',
         'summary' => 'ui.support.articles.terms.summary',
-        'path' => '/legal/terms',
+        'path' => '/support/docs/terms-of-service',
+        'markdown' => 'docs/legal/published/TERMS_OF_SERVICE.md',
         'tags' => ['terms', 'tos', 'rules'],
     ],
     [
         'id' => 'support-privacy',
+        'group' => 'legal',
+        'slug' => 'privacy-policy',
         'title' => 'ui.support.articles.privacy.title',
         'summary' => 'ui.support.articles.privacy.summary',
-        'path' => '/legal/privacy',
+        'path' => '/support/docs/privacy-policy',
+        'markdown' => 'docs/legal/published/PRIVACY_POLICY.md',
         'tags' => ['privacy', 'data', 'policy'],
     ],
     [
         'id' => 'support-cookies',
+        'group' => 'legal',
+        'slug' => 'cookie-policy',
         'title' => 'ui.support.articles.cookies.title',
         'summary' => 'ui.support.articles.cookies.summary',
-        'path' => '/legal/cookies',
+        'path' => '/support/docs/cookie-policy',
+        'markdown' => 'docs/legal/published/COOKIE_POLICY.md',
         'tags' => ['cookies', 'tracking'],
     ],
     [
         'id' => 'support-guidelines',
+        'group' => 'legal',
+        'slug' => 'community-guidelines',
         'title' => 'ui.support.articles.guidelines.title',
         'summary' => 'ui.support.articles.guidelines.summary',
-        'path' => '/legal/guidelines',
+        'path' => '/support/docs/community-guidelines',
+        'markdown' => 'docs/legal/published/COMMUNITY_GUIDELINES.md',
         'tags' => ['community', 'rules', 'moderation'],
     ],
     [
         'id' => 'support-notice',
+        'group' => 'legal',
+        'slug' => 'notice-and-action',
         'title' => 'ui.support.articles.notice.title',
         'summary' => 'ui.support.articles.notice.summary',
-        'path' => '/legal/notice-and-action',
+        'path' => '/support/docs/notice-and-action',
+        'markdown' => 'docs/legal/published/NOTICE_AND_ACTION.md',
         'tags' => ['moderation', 'complaints', 'reports'],
     ],
     [
         'id' => 'support-legal',
+        'group' => 'legal',
+        'slug' => 'legal-notice',
         'title' => 'ui.support.articles.legal.title',
         'summary' => 'ui.support.articles.legal.summary',
-        'path' => '/legal/legal-notice',
+        'path' => '/support/docs/legal-notice',
+        'markdown' => 'docs/legal/published/LEGAL_NOTICE.md',
         'tags' => ['legal', 'company', 'notice'],
     ],
     [
         'id' => 'support-ticket',
+        'group' => 'support',
         'title' => 'ui.support.articles.ticket.title',
         'summary' => 'ui.support.articles.ticket.summary',
         'path' => '/support?tab=new',
         'tags' => ['support', 'tickets', 'chat'],
+    ],
+    [
+        'id' => 'support-kb-roles',
+        'group' => 'kb',
+        'slug' => 'roles-badges-progression',
+        'title' => 'ui.support.articles.roles_badges_progression.title',
+        'summary' => 'ui.support.articles.roles_badges_progression.summary',
+        'path' => '/support/kb/roles-badges-progression',
+        'tags' => ['roles', 'badges', 'progression', 'maker', 'support', 'moderator', 'admin'],
+    ],
+    [
+        'id' => 'support-kb-posts',
+        'group' => 'kb',
+        'slug' => 'posts-and-questions',
+        'title' => 'ui.support.articles.posts_questions.title',
+        'summary' => 'ui.support.articles.posts_questions.summary',
+        'path' => '/support/kb/posts-and-questions',
+        'tags' => ['posts', 'questions', 'publish', 'writing', 'editor', 'tags'],
+    ],
+    [
+        'id' => 'support-kb-feedback',
+        'group' => 'kb',
+        'slug' => 'feedback-and-upvotes',
+        'title' => 'ui.support.articles.feedback.title',
+        'summary' => 'ui.support.articles.feedback.summary',
+        'path' => '/support/kb/feedback-and-upvotes',
+        'tags' => ['comments', 'reviews', 'upvotes', 'feedback'],
+    ],
+    [
+        'id' => 'support-kb-feed',
+        'group' => 'kb',
+        'slug' => 'feed-and-discovery',
+        'title' => 'ui.support.articles.feed_discovery.title',
+        'summary' => 'ui.support.articles.feed_discovery.summary',
+        'path' => '/support/kb/feed-and-discovery',
+        'tags' => ['feed', 'filters', 'top-projects', 'search', 'tags', 'showcase'],
+    ],
+    [
+        'id' => 'support-kb-notifications',
+        'group' => 'kb',
+        'slug' => 'notifications-and-read-later',
+        'title' => 'ui.support.articles.notifications_read_later.title',
+        'summary' => 'ui.support.articles.notifications_read_later.summary',
+        'path' => '/support/kb/notifications-and-read-later',
+        'tags' => ['notifications', 'read-later', 'alerts', 'saves'],
+    ],
+    [
+        'id' => 'support-kb-settings',
+        'group' => 'kb',
+        'slug' => 'profile-settings-and-theme',
+        'title' => 'ui.support.articles.profile_settings.title',
+        'summary' => 'ui.support.articles.profile_settings.summary',
+        'path' => '/support/kb/profile-settings-and-theme',
+        'tags' => ['profile', 'settings', 'theme', 'privacy', 'notifications'],
+    ],
+    [
+        'id' => 'support-kb-moderation',
+        'group' => 'kb',
+        'slug' => 'moderation-reports-bans',
+        'title' => 'ui.support.articles.moderation_reports_bans.title',
+        'summary' => 'ui.support.articles.moderation_reports_bans.summary',
+        'path' => '/support/kb/moderation-reports-bans',
+        'tags' => ['moderation', 'reports', 'bans', 'rules', 'nsfw'],
+    ],
+    [
+        'id' => 'support-kb-service',
+        'group' => 'kb',
+        'slug' => 'support-service',
+        'title' => 'ui.support.articles.support_service.title',
+        'summary' => 'ui.support.articles.support_service.summary',
+        'path' => '/support/kb/support-service',
+        'tags' => ['support', 'tickets', 'help', 'contact'],
+    ],
+];
+
+$supportKbSections = [
+    [
+        'id' => 'account',
+        'title' => 'ui.support.sections.account.title',
+        'summary' => 'ui.support.sections.account.summary',
+        'items' => [
+            'roles-badges-progression',
+            'profile-settings-and-theme',
+        ],
+    ],
+    [
+        'id' => 'publishing',
+        'title' => 'ui.support.sections.publishing.title',
+        'summary' => 'ui.support.sections.publishing.summary',
+        'items' => [
+            'posts-and-questions',
+            'feedback-and-upvotes',
+            'feed-and-discovery',
+        ],
+    ],
+    [
+        'id' => 'safety',
+        'title' => 'ui.support.sections.safety.title',
+        'summary' => 'ui.support.sections.safety.summary',
+        'items' => [
+            'moderation-reports-bans',
+        ],
+    ],
+    [
+        'id' => 'notifications',
+        'title' => 'ui.support.sections.notifications.title',
+        'summary' => 'ui.support.sections.notifications.summary',
+        'items' => [
+            'notifications-and-read-later',
+        ],
+    ],
+    [
+        'id' => 'support',
+        'title' => 'ui.support.sections.support.title',
+        'summary' => 'ui.support.sections.support.summary',
+        'items' => [
+            'support-service',
+        ],
     ],
 ];
 
@@ -4456,7 +4703,109 @@ Route::post('/notifications/read-all', function (Request $request) {
     return response()->json(['ok' => true, 'updated' => $updated]);
 })->middleware('auth')->name('notifications.read_all');
 
-Route::get('/support', function (Request $request) use ($supportArticles) {
+Route::get('/support/kb/{slug}', function (string $slug) use ($supportArticles, $supportKbSections) {
+    $slug = Str::slug($slug);
+    $article = collect($supportArticles)->first(function (array $item) use ($slug) {
+        return ($item['slug'] ?? '') === $slug && ($item['group'] ?? '') === 'kb';
+    });
+    if (!$article) {
+        abort(404);
+    }
+
+    $titleKey = (string) ($article['title'] ?? '');
+    $summaryKey = (string) ($article['summary'] ?? '');
+    $title = $titleKey !== '' ? trim((string) __($titleKey)) : '';
+    $summary = $summaryKey !== '' ? trim((string) __($summaryKey)) : '';
+
+    $locale = app()->getLocale();
+    $locale = in_array($locale, ['en', 'fi'], true) ? $locale : 'en';
+    $candidates = [
+        "docs/knowledge/{$locale}/{$slug}.md",
+        "docs/knowledge/en/{$slug}.md",
+    ];
+    $markdownPath = null;
+    foreach ($candidates as $candidate) {
+        if (file_exists(base_path($candidate))) {
+            $markdownPath = $candidate;
+            break;
+        }
+    }
+    if (!$markdownPath) {
+        abort(404);
+    }
+
+    $supportArticleEntries = buildSupportArticleEntries($supportArticles);
+    $supportKbSectionsResolved = buildSupportSectionEntries($supportKbSections, $supportArticleEntries);
+    $documentSection = '';
+    foreach ($supportKbSectionsResolved as $section) {
+        foreach ($section['items'] ?? [] as $sectionItem) {
+            if (($sectionItem['slug'] ?? '') === $slug) {
+                $documentSection = (string) ($section['title'] ?? '');
+                break 2;
+            }
+        }
+    }
+
+    return view('support.document', [
+        'document_title' => $title,
+        'document_summary' => $summary,
+        'document_section' => $documentSection,
+        'document_slug' => $slug,
+        'document_back_url' => route('support', ['tab' => 'home']),
+        'markdown_path' => $markdownPath,
+        'document_nav_sections' => $supportKbSectionsResolved,
+        'current_user' => currentUserPayload(),
+    ]);
+})->name('support.kb');
+
+Route::get('/support/docs/{slug}', function (string $slug) use ($supportArticles) {
+    $slug = Str::slug($slug);
+    $article = collect($supportArticles)->first(function (array $item) use ($slug) {
+        return ($item['slug'] ?? '') === $slug && ($item['group'] ?? '') === 'legal';
+    });
+    if (!$article) {
+        abort(404);
+    }
+
+    $titleKey = (string) ($article['title'] ?? '');
+    $summaryKey = (string) ($article['summary'] ?? '');
+    $title = $titleKey !== '' ? trim((string) __($titleKey)) : '';
+    $summary = $summaryKey !== '' ? trim((string) __($summaryKey)) : '';
+
+    $markdownPath = $article['markdown'] ?? null;
+    if (!$markdownPath || !file_exists(base_path($markdownPath))) {
+        abort(404);
+    }
+
+    $supportArticleEntries = buildSupportArticleEntries($supportArticles);
+    $supportLegalArticles = array_values(array_filter($supportArticleEntries, static function (array $entry): bool {
+        return ($entry['group'] ?? '') === 'legal';
+    }));
+    $legalSectionTitle = trim((string) __('ui.support.sections.legal.title'));
+    $legalSectionSummary = trim((string) __('ui.support.sections.legal.summary'));
+    $documentNavSections = [
+        [
+            'id' => 'legal',
+            'title' => $legalSectionTitle,
+            'summary' => $legalSectionSummary,
+            'items' => $supportLegalArticles,
+            'count' => count($supportLegalArticles),
+        ],
+    ];
+
+    return view('support.document', [
+        'document_title' => $title,
+        'document_summary' => $summary,
+        'document_section' => $legalSectionTitle,
+        'document_slug' => $slug,
+        'document_back_url' => route('support', ['tab' => 'home']),
+        'markdown_path' => $markdownPath,
+        'document_nav_sections' => $documentNavSections,
+        'current_user' => currentUserPayload(),
+    ]);
+})->name('support.docs');
+
+Route::get('/support', function (Request $request) use ($supportArticles, $supportKbSections) {
     $ticketsReady = safeHasTable('support_tickets');
     $user = Auth::user();
     $isBanned = false;
@@ -4579,32 +4928,11 @@ Route::get('/support', function (Request $request) use ($supportArticles) {
         }
     }
 
-    $supportArticleEntries = collect($supportArticles)
-        ->map(static function (array $article) {
-            $titleKey = (string) ($article['title'] ?? '');
-            $title = trim((string) __($titleKey));
-            if ($title === '') {
-                return null;
-            }
-            $summaryKey = (string) ($article['summary'] ?? '');
-            $summary = trim((string) __($summaryKey));
-            $tags = array_filter(array_map('strval', $article['tags'] ?? []));
-            $search = implode(' ', array_filter([$title, $summary, implode(' ', $tags)]));
-            $path = trim((string) ($article['path'] ?? ''));
-            $url = $path !== '' ? url($path) : null;
-            $id = (string) ($article['id'] ?? Str::slug($title));
-
-            return [
-                'id' => $id,
-                'title' => $title,
-                'summary' => $summary,
-                'url' => $url,
-                'search' => $search,
-            ];
-        })
-        ->filter()
-        ->values()
-        ->all();
+    $supportArticleEntries = buildSupportArticleEntries($supportArticles);
+    $supportKbSectionsResolved = buildSupportSectionEntries($supportKbSections, $supportArticleEntries);
+    $supportLegalArticles = array_values(array_filter($supportArticleEntries, static function (array $article): bool {
+        return ($article['group'] ?? '') === 'legal';
+    }));
 
     return view('support.index', [
         'support_tickets' => $supportTickets,
@@ -4615,6 +4943,8 @@ Route::get('/support', function (Request $request) use ($supportArticles) {
         'support_threads' => $threads,
         'support_active_ticket' => $activeTicket,
         'support_articles' => $supportArticleEntries,
+        'support_kb_sections' => $supportKbSectionsResolved,
+        'support_legal_articles' => $supportLegalArticles,
         'current_user' => currentUserPayload(),
     ]);
 })->name('support');
@@ -6273,12 +6603,12 @@ Route::middleware(['auth', 'can:admin'])->group(function () {
 });
 
 Route::prefix('legal')->group(function () {
-    Route::view('/terms', 'legal.terms')->name('legal.terms');
-    Route::view('/privacy', 'legal.privacy')->name('legal.privacy');
-    Route::view('/cookies', 'legal.cookies')->name('legal.cookies');
-    Route::view('/guidelines', 'legal.guidelines')->name('legal.guidelines');
-    Route::view('/notice-and-action', 'legal.notice')->name('legal.notice');
-    Route::view('/legal-notice', 'legal.legal-notice')->name('legal.legal-notice');
+    Route::get('/terms', fn () => redirect()->route('support.docs', ['slug' => 'terms-of-service']))->name('legal.terms');
+    Route::get('/privacy', fn () => redirect()->route('support.docs', ['slug' => 'privacy-policy']))->name('legal.privacy');
+    Route::get('/cookies', fn () => redirect()->route('support.docs', ['slug' => 'cookie-policy']))->name('legal.cookies');
+    Route::get('/guidelines', fn () => redirect()->route('support.docs', ['slug' => 'community-guidelines']))->name('legal.guidelines');
+    Route::get('/notice-and-action', fn () => redirect()->route('support.docs', ['slug' => 'notice-and-action']))->name('legal.notice');
+    Route::get('/legal-notice', fn () => redirect()->route('support.docs', ['slug' => 'legal-notice']))->name('legal.legal-notice');
 });
 
 Route::fallback(function () {

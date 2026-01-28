@@ -192,11 +192,37 @@ return [
         'portal_ticket_status_waiting' => 'Odottaa vastaustasi',
         'portal_ticket_status_closed' => 'Suljettu',
         'portal_kb_title' => 'Tietopankki',
-        'portal_kb_text' => 'Yleiset säännöt ja käyttöehdot kaikille.',
+        'portal_kb_text' => 'Ohjeet ominaisuuksista, säännöistä ja tuesta.',
         'portal_kb_empty' => 'Tietopankissa ei ole vielä artikkeleita.',
         'portal_suggestions_title' => 'Aiheeseen liittyvät artikkelit',
         'portal_suggestions_hint' => 'Ehdotukset päivittyvät tukipyynnön tekstin perusteella.',
         'portal_suggestions_empty' => 'Sopivia artikkeleita ei löytynyt.',
+        'sections' => [
+            'account' => [
+                'title' => 'Tili ja profiili',
+                'summary' => 'Roolit, merkit ja profiiliasetukset.',
+            ],
+            'publishing' => [
+                'title' => 'Julkaisut ja palaute',
+                'summary' => 'Postaukset, kysymykset, arviot ja löydettävyys.',
+            ],
+            'safety' => [
+                'title' => 'Säännöt ja moderointi',
+                'summary' => 'Raportit, bannit ja yhteisön turvallisuus.',
+            ],
+            'notifications' => [
+                'title' => 'Ilmoitukset ja tallennukset',
+                'summary' => 'Hälytykset, lue myöhemmin ja muistutukset.',
+            ],
+            'support' => [
+                'title' => 'Tukipalvelu',
+                'summary' => 'Miten tukipyynnöt ja seuranta toimivat.',
+            ],
+            'legal' => [
+                'title' => 'Oikeudelliset asiakirjat',
+                'summary' => 'Käyttöehdot, tietosuoja ja käytännöt.',
+            ],
+        ],
         'articles' => [
             'terms' => [
                 'title' => 'Käyttöehdot',
@@ -225,6 +251,38 @@ return [
             'ticket' => [
                 'title' => 'Miten tuki toimii',
                 'summary' => 'Tukipyynnön luominen, vastausajat ja jatkokeskustelu.',
+            ],
+            'roles_badges_progression' => [
+                'title' => 'Roolit, merkit ja eteneminen',
+                'summary' => 'Käyttäjäroolit, Maker-eteneminen ja merkkijärjestelmä.',
+            ],
+            'posts_questions' => [
+                'title' => 'Julkaisut ja kysymykset',
+                'summary' => 'Mitä voit julkaista ja miten tyypit eroavat.',
+            ],
+            'feedback' => [
+                'title' => 'Kommentit, arviot ja upvotet',
+                'summary' => 'Miten palaute toimii ja kuka voi arvioida.',
+            ],
+            'feed_discovery' => [
+                'title' => 'Feedi, suodattimet ja löydettävyys',
+                'summary' => 'Miten feedi rakentuu, järjestyy ja suodattuu.',
+            ],
+            'notifications_read_later' => [
+                'title' => 'Ilmoitukset ja lue myöhemmin',
+                'summary' => 'Pysy ajan tasalla ja tallenna luettavaa myöhemmäksi.',
+            ],
+            'profile_settings' => [
+                'title' => 'Profiiliasetukset ja teema',
+                'summary' => 'Hallitse profiilia, yksityisyyttä ja teemaa.',
+            ],
+            'moderation_reports_bans' => [
+                'title' => 'Moderointi, raportit ja bannit',
+                'summary' => 'Säännöt, raportointi ja toimenpiteet.',
+            ],
+            'support_service' => [
+                'title' => 'Tukipalvelu',
+                'summary' => 'Miten otat yhteyttä tukeen ja seuraat pyyntöjä.',
             ],
         ],
         'notification_new_ticket' => 'Uusi tukipyyntö #:id - :subject',

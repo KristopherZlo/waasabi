@@ -16,6 +16,9 @@
         $activeTicket = $support_active_ticket ?? null;
         $supportArticles = collect($support_articles ?? []);
         $supportArticlePayload = $supportArticles->values()->all();
+        $supportKbSections = collect($support_kb_sections ?? []);
+        $supportLegalArticles = collect($support_legal_articles ?? []);
+        $supportHasKnowledge = $supportKbSections->isNotEmpty() || $supportLegalArticles->isNotEmpty();
         $activeTab = (string) request('tab', 'home');
         $tabOptions = ['home', 'tickets', 'new'];
         if (!in_array($activeTab, $tabOptions, true)) {
@@ -25,61 +28,86 @@
 
     <div class="support-portal" data-support-root data-support-articles='@json($supportArticlePayload)'>
         <section class="support-tab-panel support-tab-panel--home {{ $activeTab === 'home' ? 'is-active' : '' }}" data-tab-panel="home">
-            <div class="support-home">
-                <div class="support-home__inner">
-                    <div class="support-search" role="search">
-                        <i data-lucide="search" class="icon"></i>
-                        <input
-                            class="support-search__input"
-                            type="search"
-                            placeholder="{{ __('ui.support.portal_search_placeholder') }}"
-                            aria-label="{{ __('ui.support.portal_search_label') }}"
-                            data-support-search
-                            autocomplete="off"
-                            spellcheck="false"
-                        >
-                    </div>
-
-                    <div class="support-cards">
-                        <article class="support-card">
-                            <div class="support-card__title">{{ __('ui.support.portal_card_knowledge_title') }}</div>
-                            <p class="support-card__text">{{ __('ui.support.portal_card_knowledge_text') }}</p>
-                            <a class="ghost-btn support-card__cta" href="{{ route('support', ['tab' => 'home']) }}#support-knowledge">{{ __('ui.support.portal_card_knowledge_cta') }}</a>
-                        </article>
-                        <article class="support-card">
-                            <div class="support-card__title">{{ __('ui.support.portal_card_tickets_title') }}</div>
-                            <p class="support-card__text">{{ __('ui.support.portal_card_tickets_text') }}</p>
-                            <a class="ghost-btn support-card__cta" href="{{ route('support', ['tab' => 'tickets']) }}">{{ __('ui.support.portal_card_tickets_cta') }}</a>
-                        </article>
-                        <article class="support-card">
-                            <div class="support-card__title">{{ __('ui.support.portal_card_new_title') }}</div>
-                            <p class="support-card__text">{{ __('ui.support.portal_card_new_text') }}</p>
-                            <a class="ghost-btn support-card__cta" href="{{ route('support', ['tab' => 'new']) }}">{{ __('ui.support.portal_card_new_cta') }}</a>
-                        </article>
-                    </div>
-
-                    <div class="support-knowledge" id="support-knowledge">
-                        <div class="support-knowledge__header">
-                            <h3>{{ __('ui.support.portal_kb_title') }}</h3>
-                            <p>{{ __('ui.support.portal_kb_text') }}</p>
+            <div class="support-page support-page--kb">
+                <header class="support-banner">
+                    <div class="support-banner__inner">
+                        <div class="support-banner__content">
+                            <div class="support-breadcrumbs">
+                                <a class="support-breadcrumbs__link" href="{{ route('support') }}">{{ __('ui.support.title') }}</a>
+                                <span class="support-breadcrumbs__sep">/</span>
+                                <span>{{ __('ui.support.portal_kb_title') }}</span>
+                            </div>
+                            <h1>{{ __('ui.support.portal_kb_title') }}</h1>
+                            <p class="support-banner__summary">{{ __('ui.support.portal_kb_text') }}</p>
                         </div>
-                        <div class="support-knowledge__list">
-                            @foreach ($supportArticles as $article)
-                                <a
-                                    class="support-knowledge__item"
-                                    href="{{ $article['url'] ?? '#' }}"
-                                    data-support-item
-                                    data-support-search="{{ $article['search'] ?? '' }}"
-                                >
-                                    <div class="support-knowledge__title">{{ $article['title'] ?? '' }}</div>
-                                    <div class="support-knowledge__text">{{ $article['summary'] ?? '' }}</div>
-                                </a>
-                            @endforeach
-                            <div class="support-empty support-empty--inline" data-support-empty @if ($supportArticles->isNotEmpty()) hidden @endif>
-                                <div class="support-empty__title">{{ __('ui.support.portal_kb_empty') }}</div>
+                        <label class="support-banner__search" role="search">
+                            <i data-lucide="search" class="icon"></i>
+                            <input
+                                class="support-search__input"
+                                type="search"
+                                placeholder="{{ __('ui.support.portal_search_placeholder') }}"
+                                aria-label="{{ __('ui.support.portal_search_label') }}"
+                                data-support-search
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                        </label>
+                    </div>
+                </header>
+
+                <div class="support-kb">
+                    <div class="support-kb__list">
+                        @foreach ($supportKbSections as $section)
+                            <details class="support-kb__section" data-support-group @if ($loop->first) open @endif>
+                                <summary class="support-kb__summary">
+                                    <div>
+                                        <div class="support-kb__title">{{ $section['title'] ?? '' }}</div>
+                                        @if (!empty($section['summary']))
+                                            <div class="support-kb__summary-text">{{ $section['summary'] }}</div>
+                                        @endif
+                                    </div>
+                                    <span class="support-kb__chevron"></span>
+                                </summary>
+                                <div class="support-kb__items">
+                                    @foreach (($section['items'] ?? []) as $article)
+                                        <a
+                                            class="support-kb__item"
+                                            href="{{ $article['url'] ?? '#' }}"
+                                            data-support-item
+                                            data-support-search="{{ $article['search'] ?? '' }}"
+                                        >
+                                            <div class="support-kb__item-title">{{ $article['title'] ?? '' }}</div>
+                                            <div class="support-kb__item-text">{{ $article['summary'] ?? '' }}</div>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </details>
+                        @endforeach
+                        <div class="support-empty support-empty--inline" data-support-empty @if ($supportHasKnowledge) hidden @endif>
+                            <div class="support-empty__title">{{ __('ui.support.portal_kb_empty') }}</div>
+                        </div>
+                    </div>
+
+                    @if ($supportLegalArticles->isNotEmpty())
+                        <div class="support-kb__legal" data-support-group>
+                            <div class="support-kb__legal-header">
+                                <h2>{{ __('ui.support.sections.legal.title') }}</h2>
+                                <p>{{ __('ui.support.sections.legal.summary') }}</p>
+                            </div>
+                            <div class="support-kb__legal-list">
+                                @foreach ($supportLegalArticles as $article)
+                                    <a
+                                        class="support-kb__legal-item"
+                                        href="{{ $article['url'] ?? '#' }}"
+                                        data-support-item
+                                        data-support-search="{{ $article['search'] ?? '' }}"
+                                    >
+                                        {{ $article['title'] ?? '' }}
+                                    </a>
+                                @endforeach
                             </div>
                         </div>
-                    </div>
+                    @endif
                 </div>
             </div>
         </section>
