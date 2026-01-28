@@ -60,6 +60,7 @@
                     <button class="settings-nav" type="button" data-settings-nav="notifications" aria-controls="settings-notifications">{{ __('ui.profile_settings.nav_notifications') }}</button>
                     <button class="settings-nav" type="button" data-settings-nav="connections" aria-controls="settings-connections">{{ __('ui.profile_settings.nav_connections') }}</button>
                     <button class="settings-nav" type="button" data-settings-nav="devices" aria-controls="settings-devices">{{ __('ui.profile_settings.nav_devices') }}</button>
+                    <button class="settings-nav" type="button" data-settings-nav="support" aria-controls="settings-support">{{ __('ui.profile_settings.nav_support') }}</button>
                 </div>
             </div>
         </aside>
@@ -309,6 +310,24 @@
                     </div>
                     <div class="settings-actions">
                         <button type="submit" class="submit-btn" name="section" value="devices">{{ __('ui.profile_settings.save') }}</button>
+                    </div>
+                </div>
+
+                <div class="settings-panel" id="settings-support" data-settings-section="support">
+                    <div class="settings-panel__header">
+                        <div>
+                            <div class="settings-panel__title">{{ __('ui.profile_settings.support_title') }}</div>
+                            <div class="settings-panel__subtitle">{{ __('ui.profile_settings.support_hint') }}</div>
+                        </div>
+                    </div>
+                    <div class="settings-row settings-row--info">
+                        <div class="settings-row__label">
+                            <span>{{ __('ui.support.title') }}</span>
+                        </div>
+                        <div class="settings-row__control">
+                            <div class="settings-note">{{ __('ui.profile_settings.support_note') }}</div>
+                            <a class="ghost-btn ghost-btn--compact" href="{{ route('support') }}">{{ __('ui.profile_settings.support_cta') }}</a>
+                        </div>
                     </div>
                 </div>
 

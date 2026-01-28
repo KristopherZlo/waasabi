@@ -43,10 +43,6 @@
             @endif
             <div class="top-actions">
                 <button class="icon-btn" type="button" aria-label="{{ __('ui.topbar.search') }}" data-search-open><i data-lucide="search" class="icon"></i></button>
-                <a class="ghost-btn top-support-btn" href="{{ route('support') }}">
-                    <i data-lucide="life-buoy" class="icon"></i>
-                    <span>{{ __('ui.support.cta_short') }}</span>
-                </a>
                 <div class="read-later">
                     <button class="icon-btn read-later__trigger" type="button" aria-label="{{ __('ui.topbar.read_later') }}" aria-haspopup="menu" aria-expanded="false" data-read-later-toggle>
                         <i data-lucide="bookmark" class="icon"></i>
@@ -239,6 +235,15 @@
                         <label class="settings-option"><input type="radio" name="theme" data-setting="theme" value="dark">{{ __('ui.settings.theme_dark') }}</label>
                         <label class="settings-option"><input type="radio" name="theme" data-setting="theme" value="light">{{ __('ui.settings.theme_light') }}</label>
                         <label class="settings-option"><input type="radio" name="theme" data-setting="theme" value="system" checked>{{ __('ui.settings.theme_system') }}</label>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <div class="settings-label">{{ __('ui.support.title') }}</div>
+                    <div class="settings-stack">
+                        <a class="settings-option" href="{{ route('support') }}">
+                            <i data-lucide="life-buoy" class="icon"></i>
+                            <span>{{ __('ui.profile_settings.support_cta') }}</span>
+                        </a>
                     </div>
                 </div>
             </div>

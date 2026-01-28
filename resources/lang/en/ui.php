@@ -319,6 +319,7 @@ return [
         'nav_notifications' => 'Notifications',
         'nav_connections' => 'Connections',
         'nav_devices' => 'Devices',
+        'nav_support' => 'Support',
         'account_title' => 'My account',
         'account_hint' => 'Manage your profile details and presence.',
         'view_profile' => 'View profile',
@@ -354,6 +355,10 @@ return [
         'devices_hint' => 'Manage login alerts for your account.',
         'devices_login_alerts_title' => 'New login alerts',
         'devices_login_alerts_desc' => 'Email me when a new device signs in.',
+        'support_title' => 'Help & support',
+        'support_hint' => 'Open the support portal or start a new ticket.',
+        'support_note' => 'Find answers or contact the team.',
+        'support_cta' => 'Open support',
     ],
     'admin' => [
         'title' => 'Admin',
