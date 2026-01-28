@@ -1910,50 +1910,50 @@ $notifications = [
 $supportArticles = [
     [
         'id' => 'support-terms',
-        'title' => 'Terms of Service',
-        'summary' => 'Основные правила пользования сервисом.',
+        'title' => 'ui.support.articles.terms.title',
+        'summary' => 'ui.support.articles.terms.summary',
         'path' => '/legal/terms',
         'tags' => ['terms', 'tos', 'rules'],
     ],
     [
         'id' => 'support-privacy',
-        'title' => 'Privacy Policy',
-        'summary' => 'Как мы храним и обрабатываем данные.',
+        'title' => 'ui.support.articles.privacy.title',
+        'summary' => 'ui.support.articles.privacy.summary',
         'path' => '/legal/privacy',
         'tags' => ['privacy', 'data', 'policy'],
     ],
     [
         'id' => 'support-cookies',
-        'title' => 'Cookie Policy',
-        'summary' => 'Какие cookies используются на сайте.',
+        'title' => 'ui.support.articles.cookies.title',
+        'summary' => 'ui.support.articles.cookies.summary',
         'path' => '/legal/cookies',
         'tags' => ['cookies', 'tracking'],
     ],
     [
         'id' => 'support-guidelines',
-        'title' => 'Community Guidelines',
-        'summary' => 'Что можно публиковать и как вести себя в сообществе.',
+        'title' => 'ui.support.articles.guidelines.title',
+        'summary' => 'ui.support.articles.guidelines.summary',
         'path' => '/legal/guidelines',
         'tags' => ['community', 'rules', 'moderation'],
     ],
     [
         'id' => 'support-notice',
-        'title' => 'Notice & Action',
-        'summary' => 'Порядок жалоб и модерации контента.',
+        'title' => 'ui.support.articles.notice.title',
+        'summary' => 'ui.support.articles.notice.summary',
         'path' => '/legal/notice-and-action',
         'tags' => ['moderation', 'complaints', 'reports'],
     ],
     [
         'id' => 'support-legal',
-        'title' => 'Legal Notice',
-        'summary' => 'Юридическая информация о сервисе.',
+        'title' => 'ui.support.articles.legal.title',
+        'summary' => 'ui.support.articles.legal.summary',
         'path' => '/legal/legal-notice',
         'tags' => ['legal', 'company', 'notice'],
     ],
     [
         'id' => 'support-ticket',
-        'title' => 'Как работает поддержка',
-        'summary' => 'Создание тикета, ожидание ответа и диалоги.',
+        'title' => 'ui.support.articles.ticket.title',
+        'summary' => 'ui.support.articles.ticket.summary',
         'path' => '/support?tab=new',
         'tags' => ['support', 'tickets', 'chat'],
     ],
@@ -4417,11 +4417,13 @@ Route::get('/support', function (Request $request) use ($supportArticles) {
 
     $supportArticleEntries = collect($supportArticles)
         ->map(static function (array $article) {
-            $title = trim((string) ($article['title'] ?? ''));
+            $titleKey = (string) ($article['title'] ?? '');
+            $title = trim((string) __($titleKey));
             if ($title === '') {
                 return null;
             }
-            $summary = trim((string) ($article['summary'] ?? ''));
+            $summaryKey = (string) ($article['summary'] ?? '');
+            $summary = trim((string) __($summaryKey));
             $tags = array_filter(array_map('strval', $article['tags'] ?? []));
             $search = implode(' ', array_filter([$title, $summary, implode(' ', $tags)]));
             $path = trim((string) ($article['path'] ?? ''));
