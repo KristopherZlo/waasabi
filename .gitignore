@@ -43,6 +43,7 @@ pip-delete-this-directory.txt
 /public/build
 /public/hot
 /public/storage
+/public/avatars/
 /storage/*.key
 /storage/pail
 /storage/route-split/
