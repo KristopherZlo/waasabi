@@ -27,6 +27,7 @@ use App\Services\BadgeCatalogService;
 use App\Services\ContentModerationService;
 use App\Services\FeedService;
 use App\Services\ImageUploadService;
+use App\Services\VisibilityService;
 use App\Services\MakerPromotionService;
 use App\Services\TextModerationService;
 use App\Services\UserSlugService;
@@ -158,42 +159,6 @@ if (!function_exists('isModeratorRole')) {
         return $user ? $user->hasRole('moderator') : false;
     }
 }
-
-if (!function_exists('applyVisibilityFilters')) {
-    function applyVisibilityFilters($query, string $table, ?User $viewer): void
-    {
-        if ($table === 'posts' && safeHasTable('users') && safeHasColumn('users', 'is_banned')) {
-            $query->whereNotIn($table . '.user_id', function ($sub) {
-                $sub->select('id')
-                    ->from('users')
-                    ->where('is_banned', true);
-            });
-        }
-        if (isModeratorRole($viewer)) {
-            return;
-        }
-        if (safeHasColumn($table, 'is_hidden')) {
-            $query->where($table . '.is_hidden', false);
-        }
-        if (safeHasColumn($table, 'moderation_status')) {
-            $query->where($table . '.moderation_status', 'approved');
-        }
-    }
-}
-
-if (!function_exists('canViewHiddenContent')) {
-    function canViewHiddenContent(?User $viewer, ?int $ownerId = null): bool
-    {
-        if (isModeratorRole($viewer)) {
-            return true;
-        }
-        return $viewer && $ownerId && $viewer->id === $ownerId;
-    }
-}
-
-
-
-
 
 if (!function_exists('getTopbarPromos')) {
     function getTopbarPromos(bool $onlyActive = true): array
@@ -1368,7 +1333,7 @@ $top_projects = Cache::remember('feed.top_projects.v1', now()->addMinutes(10), f
             ->orderByDesc('score')
             ->orderBy('posts.title')
             ->limit(4);
-        applyVisibilityFilters($rowsQuery, 'posts', null);
+        app(VisibilityService::class)->applyToQuery($rowsQuery, 'posts', null);
         $rows = $rowsQuery->get();
 
         $entries = [];
@@ -1445,12 +1410,12 @@ $reading_now = Cache::remember('feed.reading_now.v2', now()->addMinutes(2), func
     if (safeHasTable('posts')) {
         if (!empty($postIds)) {
             $postQuery = Post::whereIn('id', $postIds);
-            applyVisibilityFilters($postQuery, 'posts', null);
+            app(VisibilityService::class)->applyToQuery($postQuery, 'posts', null);
             $postMapById = $postQuery->get(['id', 'slug', 'title'])->keyBy('id');
         }
         if (!empty($postSlugs)) {
             $postQuery = Post::whereIn('slug', $postSlugs);
-            applyVisibilityFilters($postQuery, 'posts', null);
+            app(VisibilityService::class)->applyToQuery($postQuery, 'posts', null);
             $postMapBySlug = $postQuery->get(['id', 'slug', 'title'])->keyBy('slug');
         }
     }
@@ -1498,7 +1463,7 @@ $searchIndex = Cache::remember('search.index.v1', now()->addMinutes(5), function
     if ($useDbFeed) {
         $postsQuery = Post::with('user:id,name,slug')
             ->orderByDesc('created_at');
-        applyVisibilityFilters($postsQuery, 'posts', null);
+        app(VisibilityService::class)->applyToQuery($postsQuery, 'posts', null);
         $posts = $postsQuery
             ->limit(200)
             ->get(['id', 'slug', 'title', 'subtitle', 'type', 'user_id', 'tags']);
@@ -1763,7 +1728,7 @@ Route::get('/projects/{slug}', function (string $slug) use ($projects, $mapPostT
             if (safeHasColumn('users', 'is_banned') && $dbPost->user?->is_banned) {
                 abort(404);
             }
-            if (!canViewHiddenContent($viewer, $dbPost->user_id)) {
+            if (!app(VisibilityService::class)->canViewHidden($viewer, $dbPost->user_id)) {
                 $isHidden = (bool) ($dbPost->is_hidden ?? false);
                 $status = (string) ($dbPost->moderation_status ?? 'approved');
                 if ($isHidden || $status !== 'approved') {
@@ -1786,13 +1751,13 @@ Route::get('/projects/{slug}', function (string $slug) use ($projects, $mapPostT
     $reviewRows = [];
     if (safeHasTable('post_comments')) {
         $commentCountQuery = PostComment::where('post_slug', $slug)->whereNull('parent_id');
-        applyVisibilityFilters($commentCountQuery, 'post_comments', $viewer);
+        app(VisibilityService::class)->applyToQuery($commentCountQuery, 'post_comments', $viewer);
         $commentTotal = $commentCountQuery->count();
         if ($commentTotal > 0) {
             $parentRowsQuery = PostComment::with('user')
                 ->where('post_slug', $slug)
                 ->whereNull('parent_id');
-            applyVisibilityFilters($parentRowsQuery, 'post_comments', $viewer);
+            app(VisibilityService::class)->applyToQuery($parentRowsQuery, 'post_comments', $viewer);
             $parentRows = $parentRowsQuery
                 ->latest()
                 ->limit($commentPageSize)
@@ -1804,7 +1769,7 @@ Route::get('/projects/{slug}', function (string $slug) use ($projects, $mapPostT
                 : tap(PostComment::with('user')
                     ->where('post_slug', $slug)
                     ->whereIn('parent_id', $parentIds), function ($query) use ($viewer) {
-                    applyVisibilityFilters($query, 'post_comments', $viewer);
+                    app(VisibilityService::class)->applyToQuery($query, 'post_comments', $viewer);
                 })
                     ->orderBy('created_at')
                     ->get();
@@ -1864,7 +1829,7 @@ Route::get('/projects/{slug}', function (string $slug) use ($projects, $mapPostT
     if (safeHasTable('post_reviews')) {
         $reviewQuery = PostReview::with('user')
             ->where('post_slug', $slug);
-        applyVisibilityFilters($reviewQuery, 'post_reviews', $viewer);
+        app(VisibilityService::class)->applyToQuery($reviewQuery, 'post_reviews', $viewer);
         $reviewRows = $reviewQuery
             ->latest()
             ->get()
@@ -1917,7 +1882,7 @@ Route::post('/projects/{slug}/comments', function (StoreCommentRequest $request,
 
     if (safeHasTable('posts')) {
         $post = Post::where('slug', $slug)->where('type', 'post')->first();
-        if ($post && !canViewHiddenContent($user, $post->user_id)) {
+        if ($post && !app(VisibilityService::class)->canViewHidden($user, $post->user_id)) {
             $isHidden = (bool) ($post->is_hidden ?? false);
             $status = (string) ($post->moderation_status ?? 'approved');
             if ($isHidden || $status !== 'approved') {
@@ -2020,7 +1985,7 @@ Route::get('/projects/{slug}/comments/chunk', function (Request $request, string
     }
     if ($dbExists) {
         $post = Post::with(['user', 'editedBy'])->where('slug', $slug)->where('type', 'post')->first();
-        if ($post && !canViewHiddenContent($viewer, $post->user_id)) {
+        if ($post && !app(VisibilityService::class)->canViewHidden($viewer, $post->user_id)) {
             $isHidden = (bool) ($post->is_hidden ?? false);
             $status = (string) ($post->moderation_status ?? 'approved');
             if ($isHidden || $status !== 'approved') {
@@ -2036,13 +2001,13 @@ Route::get('/projects/{slug}/comments/chunk', function (Request $request, string
 
     if (safeHasTable('post_comments')) {
         $commentCountQuery = PostComment::where('post_slug', $slug)->whereNull('parent_id');
-        applyVisibilityFilters($commentCountQuery, 'post_comments', $viewer);
+        app(VisibilityService::class)->applyToQuery($commentCountQuery, 'post_comments', $viewer);
         $commentTotal = $commentCountQuery->count();
         if ($commentTotal > 0) {
             $parentRowsQuery = PostComment::with('user')
                 ->where('post_slug', $slug)
                 ->whereNull('parent_id');
-            applyVisibilityFilters($parentRowsQuery, 'post_comments', $viewer);
+            app(VisibilityService::class)->applyToQuery($parentRowsQuery, 'post_comments', $viewer);
             $parentRows = $parentRowsQuery
                 ->latest()
                 ->skip($offset)
@@ -2055,7 +2020,7 @@ Route::get('/projects/{slug}/comments/chunk', function (Request $request, string
                 : tap(PostComment::with('user')
                     ->where('post_slug', $slug)
                     ->whereIn('parent_id', $parentIds), function ($query) use ($viewer) {
-                    applyVisibilityFilters($query, 'post_comments', $viewer);
+                    app(VisibilityService::class)->applyToQuery($query, 'post_comments', $viewer);
                 })
                     ->orderBy('created_at')
                     ->get();
@@ -2151,7 +2116,7 @@ Route::post('/projects/{slug}/reviews', function (StoreReviewRequest $request, s
 
     if (safeHasTable('posts')) {
         $post = Post::where('slug', $slug)->where('type', 'post')->first();
-        if ($post && !canViewHiddenContent($user, $post->user_id)) {
+        if ($post && !app(VisibilityService::class)->canViewHidden($user, $post->user_id)) {
             $isHidden = (bool) ($post->is_hidden ?? false);
             $status = (string) ($post->moderation_status ?? 'approved');
             if ($isHidden || $status !== 'approved') {
@@ -2238,7 +2203,7 @@ Route::get('/questions/{slug}', function (string $slug) use ($qa_questions, $map
             if (safeHasColumn('users', 'is_banned') && $dbPost->user?->is_banned) {
                 abort(404);
             }
-            if (!canViewHiddenContent($viewer, $dbPost->user_id)) {
+            if (!app(VisibilityService::class)->canViewHidden($viewer, $dbPost->user_id)) {
                 $isHidden = (bool) ($dbPost->is_hidden ?? false);
                 $status = (string) ($dbPost->moderation_status ?? 'approved');
                 if ($isHidden || $status !== 'approved') {
@@ -2261,13 +2226,13 @@ Route::get('/questions/{slug}', function (string $slug) use ($qa_questions, $map
 
     if (safeHasTable('post_comments')) {
         $answerCountQuery = PostComment::where('post_slug', $slug)->whereNull('parent_id');
-        applyVisibilityFilters($answerCountQuery, 'post_comments', $viewer);
+        app(VisibilityService::class)->applyToQuery($answerCountQuery, 'post_comments', $viewer);
         $answerTotal = $answerCountQuery->count();
         if ($answerTotal > 0) {
             $parentRowsQuery = PostComment::with('user')
                 ->where('post_slug', $slug)
                 ->whereNull('parent_id');
-            applyVisibilityFilters($parentRowsQuery, 'post_comments', $viewer);
+            app(VisibilityService::class)->applyToQuery($parentRowsQuery, 'post_comments', $viewer);
             $parentRows = $parentRowsQuery
                 ->latest()
                 ->limit($commentPageSize)
@@ -2278,7 +2243,7 @@ Route::get('/questions/{slug}', function (string $slug) use ($qa_questions, $map
                 : tap(PostComment::with('user')
                     ->where('post_slug', $slug)
                     ->whereIn('parent_id', $parentIds), function ($query) use ($viewer) {
-                    applyVisibilityFilters($query, 'post_comments', $viewer);
+                    app(VisibilityService::class)->applyToQuery($query, 'post_comments', $viewer);
                 })
                     ->orderBy('created_at')
                     ->get();
@@ -2368,7 +2333,7 @@ Route::get('/questions/{slug}/comments/chunk', function (Request $request, strin
 
     if (safeHasTable('posts')) {
         $post = Post::where('slug', $slug)->where('type', 'question')->first();
-        if ($post && !canViewHiddenContent($viewer, $post->user_id)) {
+        if ($post && !app(VisibilityService::class)->canViewHidden($viewer, $post->user_id)) {
             $isHidden = (bool) ($post->is_hidden ?? false);
             $status = (string) ($post->moderation_status ?? 'approved');
             if ($isHidden || $status !== 'approved') {
@@ -2379,13 +2344,13 @@ Route::get('/questions/{slug}/comments/chunk', function (Request $request, strin
 
     if (safeHasTable('post_comments')) {
         $answerCountQuery = PostComment::where('post_slug', $slug)->whereNull('parent_id');
-        applyVisibilityFilters($answerCountQuery, 'post_comments', $viewer);
+        app(VisibilityService::class)->applyToQuery($answerCountQuery, 'post_comments', $viewer);
         $total = $answerCountQuery->count();
         if ($total > 0) {
             $parentRowsQuery = PostComment::with('user')
                 ->where('post_slug', $slug)
                 ->whereNull('parent_id');
-            applyVisibilityFilters($parentRowsQuery, 'post_comments', $viewer);
+            app(VisibilityService::class)->applyToQuery($parentRowsQuery, 'post_comments', $viewer);
             $parentRows = $parentRowsQuery
                 ->latest()
                 ->skip($offset)
@@ -2397,7 +2362,7 @@ Route::get('/questions/{slug}/comments/chunk', function (Request $request, strin
                 : tap(PostComment::with('user')
                     ->where('post_slug', $slug)
                     ->whereIn('parent_id', $parentIds), function ($query) use ($viewer) {
-                    applyVisibilityFilters($query, 'post_comments', $viewer);
+                    app(VisibilityService::class)->applyToQuery($query, 'post_comments', $viewer);
                 })
                     ->orderBy('created_at')
                     ->get();
@@ -2578,7 +2543,7 @@ Route::post('/posts/{slug}/save', function (Request $request, string $slug) {
     }
 
     $post = Post::where('slug', $slug)->firstOrFail();
-    if (!canViewHiddenContent($request->user(), $post->user_id)) {
+    if (!app(VisibilityService::class)->canViewHidden($request->user(), $post->user_id)) {
         $isHidden = (bool) ($post->is_hidden ?? false);
         $status = (string) ($post->moderation_status ?? 'approved');
         if ($isHidden || $status !== 'approved') {
@@ -2618,7 +2583,7 @@ Route::post('/posts/{slug}/upvote', function (Request $request, string $slug) {
     }
 
     $post = Post::where('slug', $slug)->firstOrFail();
-    if (!canViewHiddenContent($request->user(), $post->user_id)) {
+    if (!app(VisibilityService::class)->canViewHidden($request->user(), $post->user_id)) {
         $isHidden = (bool) ($post->is_hidden ?? false);
         $status = (string) ($post->moderation_status ?? 'approved');
         if ($isHidden || $status !== 'approved') {
@@ -2778,8 +2743,8 @@ Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, 
     $questionsList = [];
     if (!$isBanned && safeHasTable('posts')) {
         $userPostsQuery = Post::with(['user', 'editedBy'])->where('user_id', $user->id);
-        if (!canViewHiddenContent($viewer, $user->id)) {
-            applyVisibilityFilters($userPostsQuery, 'posts', $viewer);
+        if (!app(VisibilityService::class)->canViewHidden($viewer, $user->id)) {
+            app(VisibilityService::class)->applyToQuery($userPostsQuery, 'posts', $viewer);
         }
         $userPosts = $userPostsQuery->latest()->get();
         $stats = $preparePostStats($userPosts);
@@ -2799,8 +2764,8 @@ Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, 
     if (safeHasTable('post_comments')) {
         $commentQuery = PostComment::with('user')
             ->where('user_id', $user->id);
-        if (!canViewHiddenContent($viewer, $user->id)) {
-            applyVisibilityFilters($commentQuery, 'post_comments', $viewer);
+        if (!app(VisibilityService::class)->canViewHidden($viewer, $user->id)) {
+            app(VisibilityService::class)->applyToQuery($commentQuery, 'post_comments', $viewer);
         }
         $commentRows = $commentQuery
             ->latest()
@@ -2810,8 +2775,8 @@ Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, 
         $postMap = collect();
         if (safeHasTable('posts') && $commentRows->isNotEmpty()) {
             $postMapQuery = Post::whereIn('slug', $commentRows->pluck('post_slug')->all());
-            if (!canViewHiddenContent($viewer, $user->id)) {
-                applyVisibilityFilters($postMapQuery, 'posts', $viewer);
+            if (!app(VisibilityService::class)->canViewHidden($viewer, $user->id)) {
+                app(VisibilityService::class)->applyToQuery($postMapQuery, 'posts', $viewer);
             }
             $postMap = $postMapQuery
                 ->get(['slug', 'title', 'type'])
@@ -3207,7 +3172,7 @@ Route::get('/read-later', function () use ($projects, $mapPostToProject, $mapPos
             ->toArray();
         $savedPostsQuery = Post::with(['user', 'editedBy'])
             ->whereIn('id', $savedIds);
-        applyVisibilityFilters($savedPostsQuery, 'posts', $user);
+        app(VisibilityService::class)->applyToQuery($savedPostsQuery, 'posts', $user);
         $savedPosts = $savedPostsQuery
             ->latest()
             ->get();
@@ -3278,7 +3243,7 @@ Route::post('/read-later/sync', function (Request $request) {
         $postsQuery = Post::query()
             ->whereIn('slug', $slugs->all())
             ->select('posts.id', 'posts.slug');
-        applyVisibilityFilters($postsQuery, 'posts', $user);
+        app(VisibilityService::class)->applyToQuery($postsQuery, 'posts', $user);
         $posts = $postsQuery->get();
 
         if ($posts->isNotEmpty()) {
@@ -3309,7 +3274,7 @@ Route::post('/read-later/sync', function (Request $request) {
         ->where('post_saves.user_id', $user->id)
         ->orderByDesc('post_saves.created_at')
         ->select('posts.slug');
-    applyVisibilityFilters($savedQuery, 'posts', $user);
+    app(VisibilityService::class)->applyToQuery($savedQuery, 'posts', $user);
 
     $items = $savedQuery
         ->limit(400)
@@ -3336,7 +3301,7 @@ Route::get('/read-later/render', function () use ($mapPostToProject, $mapPostToQ
         ->orderByDesc('post_saves.created_at')
         ->select('posts.*')
         ->distinct();
-    applyVisibilityFilters($savedPostsQuery, 'posts', $user);
+    app(VisibilityService::class)->applyToQuery($savedPostsQuery, 'posts', $user);
 
     $savedPosts = $savedPostsQuery->get();
     $stats = $preparePostStats($savedPosts);
