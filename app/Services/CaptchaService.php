@@ -9,8 +9,18 @@ class CaptchaService
 {
     public function honeypotTripped(Request $request): bool
     {
-        $value = (string) $request->input('website', '');
-        return trim($value) !== '';
+        $candidates = [
+            (string) $request->input('contact_time', ''),
+            (string) $request->input('website', ''),
+        ];
+
+        foreach ($candidates as $value) {
+            if (trim($value) !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function isEnabled(string $action): bool
