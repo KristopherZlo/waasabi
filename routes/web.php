@@ -15,6 +15,7 @@ use App\Http\Controllers\ProfileSettingsController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SupportTicketController;
+use App\Http\Controllers\UploadController;
 use App\Http\Controllers\ModerationController;
 use App\Http\Controllers\Admin\AdminContentController;
 use App\Http\Controllers\Admin\AdminSupportController;
@@ -2133,36 +2134,9 @@ Route::post('/reading-progress', function (Request $request) use ($postSlugExist
     return response()->json(['ok' => true]);
 })->middleware('throttle:reading-progress')->name('reading-progress');
 
-Route::post('/uploads/images', function (Request $request) {
-    $maxImageKb = max(1, (int) config('waasabi.upload.max_image_mb', 5) * 1024);
-    $request->validate([
-        'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:' . $maxImageKb],
-    ]);
-
-    $file = $request->file('image');
-    if (!$file instanceof UploadedFile) {
-        return response()->json(['message' => 'Invalid upload'], 422);
-    }
-
-    try {
-        $result = app(ImageUploadService::class)->process($file, [
-            'dir' => 'uploads/editor',
-            'preview_dir' => 'uploads/editor/previews',
-            'preview_side' => 480,
-            'max_side' => 2560,
-            'max_pixels' => 16000000,
-        ]);
-    } catch (RuntimeException $exception) {
-        return response()->json(['message' => $exception->getMessage()], 422);
-    }
-
-    maybeFlagImageForModeration($result['path'], $request->user(), 'editor');
-
-    return response()->json([
-        'url' => asset($result['path']),
-        'preview_url' => $result['preview'] ? asset($result['preview']) : null,
-    ]);
-})->middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:uploads'])->name('uploads.images');
+Route::post('/uploads/images', [UploadController::class, 'storeImage'])
+    ->middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:uploads'])
+    ->name('uploads.images');
 
 Route::post('/posts/{slug}/save', function (Request $request, string $slug) {
     if (!safeHasTable('post_saves')) {
