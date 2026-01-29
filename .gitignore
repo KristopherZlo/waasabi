@@ -45,6 +45,7 @@ pip-delete-this-directory.txt
 /public/storage
 /storage/*.key
 /storage/pail
+/storage/route-split/
 /vendor
 Homestead.json
 Homestead.yaml
