@@ -11,6 +11,7 @@ use App\Models\TopbarPromo;
 use App\Models\User;
 use App\Http\Controllers\NotificationsController;
 use App\Http\Controllers\PublishController;
+use App\Http\Controllers\PostController;
 use App\Http\Controllers\ProfileSettingsController;
 use App\Http\Controllers\ProfileBadgeController;
 use App\Http\Controllers\ProfileFollowController;
@@ -2627,26 +2628,9 @@ Route::post('/logout', function (Request $request) {
     return redirect()->route('feed');
 })->name('logout');
 
-Route::delete('/posts/{post}', function (Request $request, Post $post) {
-    $user = $request->user();
-    if (!$user) {
-        if ($request->expectsJson()) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        return redirect()->route('login');
-    }
-    if ($user->cannot('delete', $post)) {
-        abort(403);
-    }
-
-    $post->delete();
-
-    if ($request->expectsJson()) {
-        return response()->json(['ok' => true]);
-    }
-
-    return redirect()->route('feed');
-})->middleware('auth')->name('posts.delete');
+Route::delete('/posts/{post}', [PostController::class, 'destroy'])
+    ->middleware('auth')
+    ->name('posts.delete');
 
 Route::get('/read-later', [ReadLaterController::class, 'index'])
     ->middleware('auth')
