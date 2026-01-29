@@ -29,6 +29,11 @@ class PostReview extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function post(): BelongsTo
+    {
+        return $this->belongsTo(Post::class, 'post_slug', 'slug');
+    }
+
     public function hiddenBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'hidden_by');

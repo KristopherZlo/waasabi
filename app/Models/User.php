@@ -13,6 +13,7 @@ use App\Models\UserBadge;
 use App\Models\UserNotification;
 use App\Models\UserReportProfile;
 use App\Services\BadgeCatalogService;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Schema;
@@ -91,6 +92,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(PostReview::class);
     }
 
+    public function posts(): HasMany
+    {
+        return $this->hasMany(Post::class);
+    }
+
     public function badges(): HasMany
     {
         return $this->hasMany(UserBadge::class);
@@ -119,6 +125,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function following()
     {
         return $this->belongsToMany(User::class, 'user_follows', 'follower_id', 'following_id')->withTimestamps();
+    }
+
+    public function savedPosts(): BelongsToMany
+    {
+        return $this->belongsToMany(Post::class, 'post_saves', 'user_id', 'post_id')->withTimestamps();
+    }
+
+    public function upvotedPosts(): BelongsToMany
+    {
+        return $this->belongsToMany(Post::class, 'post_upvotes', 'user_id', 'post_id')->withTimestamps();
     }
 
     public function roleKey(): string

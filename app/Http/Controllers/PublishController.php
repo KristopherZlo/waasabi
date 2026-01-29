@@ -9,6 +9,7 @@ use App\Services\MarkdownService;
 use App\Services\TextModerationService;
 use App\Http\Requests\StorePublishRequest;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -37,9 +38,7 @@ class PublishController extends Controller
         if (!$user) {
             return redirect()->route('login');
         }
-        if ($post->user_id !== $user->id && !$user->hasRole('moderator')) {
-            abort(403);
-        }
+        Gate::authorize('update', $post);
 
         $coauthorsValue = '';
         if (safeHasColumn('posts', 'coauthor_user_ids') && safeHasColumn('users', 'slug')) {
@@ -99,8 +98,8 @@ class PublishController extends Controller
         if ($postId && !$editingPost) {
             abort(404);
         }
-        if ($editingPost && $editingPost->user_id !== $request->user()->id && !$request->user()->hasRole('moderator')) {
-            abort(403);
+        if ($editingPost) {
+            Gate::authorize('update', $editingPost);
         }
 
         $type = $editingPost ? $editingPost->type : $data['publish_type'];

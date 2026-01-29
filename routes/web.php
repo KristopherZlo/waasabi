@@ -3875,7 +3875,7 @@ Route::delete('/posts/{post}', function (Request $request, Post $post) {
         }
         return redirect()->route('login');
     }
-    if ($post->user_id !== $user->id && !$user->isAdmin()) {
+    if ($user->cannot('delete', $post)) {
         abort(403);
     }
 

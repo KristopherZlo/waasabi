@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Post extends Model
 {
@@ -44,6 +46,26 @@ class Post extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(PostComment::class, 'post_slug', 'slug');
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(PostReview::class, 'post_slug', 'slug');
+    }
+
+    public function upvoters(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'post_upvotes', 'post_id', 'user_id')->withTimestamps();
+    }
+
+    public function savers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'post_saves', 'post_id', 'user_id')->withTimestamps();
     }
 
     public function editedBy()

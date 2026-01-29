@@ -30,6 +30,11 @@ class PostComment extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function post(): BelongsTo
+    {
+        return $this->belongsTo(Post::class, 'post_slug', 'slug');
+    }
+
     public function parent(): BelongsTo
     {
         return $this->belongsTo(PostComment::class, 'parent_id');
