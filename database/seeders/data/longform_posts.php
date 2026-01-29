@@ -696,7 +696,7 @@ We treat it as a suggestion, not a command.
 
 Trust is precious. A safe ladder lets the community grow while keeping security
 boundaries intact.
- MARKDOWN
+MARKDOWN
     ],
     [
         'user_key' => 'nikita',
@@ -984,7 +984,7 @@ in place by hand. Write a safe script and test it.
 
 A clean data model is the foundation of a calm product. It keeps the code simple
 and the app predictable.
- MARKDOWN
+MARKDOWN
     ],
     [
         'user_key' => 'admin',
@@ -1164,7 +1164,7 @@ simple "sensor_ok" flag in the packet to detect this.
 
 Observability is a habit. If you build it in during the prototype, the system
 will be far easier to debug when the stakes are higher.
- MARKDOWN
+MARKDOWN
     ],
     [
         'user_key' => 'katya',
