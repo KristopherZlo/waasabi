@@ -236,6 +236,34 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
+        $longFormPosts = require database_path('seeders/data/longform_posts.php');
+
+        foreach ($longFormPosts as $post) {
+            $markdown = $post['body_markdown'] ?? '';
+            $readTime = $estimateReadTime($markdown);
+            $type = $post['type'] ?? 'post';
+            $slug = $post['slug'] ?? $makePostSlug($post['title']);
+
+            if (Post::where('slug', $slug)->exists()) {
+                continue;
+            }
+
+            Post::create([
+                'user_id' => $users[$post['user_key']]->id,
+                'type' => $type,
+                'slug' => $slug,
+                'title' => $post['title'],
+                'subtitle' => $post['subtitle'] ?? null,
+                'body_markdown' => $markdown,
+                'body_html' => null,
+                'media_url' => $post['media_url'] ?? null,
+                'cover_url' => $post['cover_url'] ?? null,
+                'status' => $type === 'question' ? null : ($post['status'] ?? null),
+                'tags' => $post['tags'] ?? [],
+                'read_time_minutes' => $readTime,
+            ]);
+        }
+
         // --- Generate extra test posts (50+ posts) ---
         $desiredPostTotal = 55;
         $desiredQuestionTotal = 15;
