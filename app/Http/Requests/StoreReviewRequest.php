@@ -8,7 +8,12 @@ class StoreReviewRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        $user = $this->user();
+        if (!$user) {
+            return false;
+        }
+
+        return $user->hasRole('maker');
     }
 
     public function rules(): array

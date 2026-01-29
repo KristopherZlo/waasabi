@@ -424,9 +424,6 @@ class ProjectController extends Controller
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
-        if (!$user->hasRole('maker')) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
         if (!safeHasTable('post_reviews')) {
             return response()->json(['message' => 'Reviews table missing'], 503);
         }
