@@ -14,6 +14,10 @@ use App\Http\Controllers\PublishController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SupportTicketController;
+use App\Http\Controllers\ModerationController;
+use App\Http\Controllers\Admin\AdminContentController;
+use App\Http\Controllers\Admin\AdminSupportController;
+use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Requests\StoreCommentRequest;
 use App\Http\Requests\StoreReviewRequest;
 use App\Services\AutoModerationService;
@@ -4614,573 +4618,56 @@ Route::middleware(['auth', 'can:moderate'])->group(function () {
         ]);
     })->name('admin');
 
-    Route::post('/admin/support-tickets/{ticket}/respond', function (Request $request, SupportTicket $ticket) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return redirect()->route('login');
-        }
-        if (!safeHasTable('support_tickets')) {
-            abort(503);
-        }
+    Route::post('/admin/support-tickets/{ticket}/respond', [AdminSupportController::class, 'respond'])
+        ->name('admin.support-tickets.respond');
 
-        $data = $request->validate([
-            'response' => ['nullable', 'string', 'max:4000'],
-            'status' => ['required', Rule::in(['open', 'waiting', 'closed'])],
-        ]);
+    Route::post('/admin/users/{user}/ban', [AdminUserController::class, 'toggleBan'])
+        ->name('admin.users.ban');
 
-        $response = trim((string) ($data['response'] ?? ''));
-        $status = (string) $data['status'];
-        if ($response !== '' && $status === 'open') {
-            $status = 'waiting';
-        }
+    Route::post('/admin/moderation/posts/{post}/queue', [ModerationController::class, 'queuePost'])
+        ->name('moderation.posts.queue');
 
-        $updates = [
-            'status' => $status,
-        ];
+    Route::post('/admin/moderation/posts/{post}/hide', [ModerationController::class, 'hidePost'])
+        ->name('moderation.posts.hide');
 
-        if ($response !== '') {
-            $updates['response'] = $response;
-            $updates['responded_at'] = now();
-            $updates['responded_by'] = $moderator->id;
+    Route::post('/admin/moderation/posts/{post}/restore', [ModerationController::class, 'restorePost'])
+        ->name('moderation.posts.restore');
 
-            $meta = is_array($ticket->meta) ? $ticket->meta : [];
-            $messages = is_array($meta['messages'] ?? null) ? $meta['messages'] : [];
-            $messages[] = [
-                'author_type' => 'support',
-                'author_id' => $moderator->id,
-                'author_name' => $moderator->name ?? __('ui.support.portal_support_team'),
-                'body' => $response,
-                'created_at' => now()->toDateTimeString(),
-            ];
-            $meta['messages'] = $messages;
-            $updates['meta'] = $meta;
-        }
+    Route::post('/admin/moderation/posts/{post}/nsfw', [ModerationController::class, 'nsfwPost'])
+        ->name('moderation.posts.nsfw');
 
-        if ($status === 'closed') {
-            $updates['resolved_at'] = now();
-            $updates['resolved_by'] = $moderator->id;
-        } else {
-            $updates['resolved_at'] = null;
-            $updates['resolved_by'] = null;
-        }
+    Route::post('/admin/moderation/comments/{comment}/queue', [ModerationController::class, 'queueComment'])
+        ->name('moderation.comments.queue');
 
-        $ticket->fill($updates)->save();
+    Route::post('/admin/moderation/comments/{comment}/hide', [ModerationController::class, 'hideComment'])
+        ->name('moderation.comments.hide');
 
-        if ($response !== '' && $ticket->user) {
-            $ticket->user->sendNotification(
-                __('ui.support.title'),
-                __('ui.support.notification_support_reply', ['id' => $ticket->id, 'subject' => $ticket->subject]),
-                route('support', ['tab' => 'tickets', 'ticket' => $ticket->id]),
-            );
-        }
+    Route::post('/admin/moderation/comments/{comment}/restore', [ModerationController::class, 'restoreComment'])
+        ->name('moderation.comments.restore');
 
-        logModerationAction(
-            $request,
-            $moderator,
-            $response !== '' ? 'support_reply' : 'support_status',
-            'support_ticket',
-            (string) ($ticket->id ?? ''),
-            null,
-            $response !== '' ? $response : null,
-            [
-                'subject' => $ticket->subject,
-                'status' => $status,
-                'ticket_user' => $ticket->user?->name,
-            ],
-        );
+    Route::post('/admin/moderation/reviews/{review}/queue', [ModerationController::class, 'queueReview'])
+        ->name('moderation.reviews.queue');
 
-        return redirect()->back()->with('toast', __('ui.admin.support_ticket_saved'));
-    })->name('admin.support-tickets.respond');
+    Route::post('/admin/moderation/reviews/{review}/hide', [ModerationController::class, 'hideReview'])
+        ->name('moderation.reviews.hide');
 
-    Route::post('/admin/users/{user}/ban', function (Request $request, User $user) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return redirect()->route('login');
-        }
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-        if ($moderator->id === $user->id) {
-            return redirect()->back();
-        }
-        if (shouldBlockModeration($moderator, $user)) {
-            abort(403);
-        }
-        $wasBanned = (bool) ($user->is_banned ?? false);
-        if (safeHasColumn('users', 'is_banned')) {
-            $user->is_banned = !$user->is_banned;
-            $user->role = $user->is_banned ? 'BANNED' : 'user';
-            $user->save();
-        }
-        $nowBanned = (bool) ($user->is_banned ?? false);
-        $action = $nowBanned ? 'ban' : 'unban';
-        $contentUrl = !empty($user->slug) ? route('profile.show', $user->slug) : null;
-        logModerationAction(
-            $request,
-            $moderator,
-            $action,
-            'user',
-            (string) $user->id,
-            $contentUrl,
-            $reason,
-            [
-                'name' => $user->name,
-                'author_name' => $user->name,
-                'slug' => $user->slug,
-                'was_banned' => $wasBanned,
-                'is_banned' => $nowBanned,
-                'role' => $user->role,
-            ],
-        );
-        return redirect()->back();
-    })->name('admin.users.ban');
-
-    Route::post('/admin/moderation/posts/{post}/queue', function (Request $request, Post $post) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-
-        $post->loadMissing('user');
-        if (shouldBlockModeration($moderator, $post->user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        setModerationState($post, $moderator, 'pending');
-        logModerationAction(
-            $request,
-            $moderator,
-            'queue',
-            'post',
-            (string) $post->id,
-            resolvePostUrl($post->slug),
-            $reason,
-            [
-                'slug' => $post->slug,
-                'title' => $post->title,
-                'author_id' => $post->user_id,
-                'author_name' => $post->user?->name,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($post, 'confirmed', 'queue', $reason, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $post->moderation_status]);
-    })->name('moderation.posts.queue');
-
-    Route::post('/admin/moderation/posts/{post}/hide', function (Request $request, Post $post) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-
-        $post->loadMissing('user');
-        if (shouldBlockModeration($moderator, $post->user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        setModerationState($post, $moderator, 'hidden');
-        logModerationAction(
-            $request,
-            $moderator,
-            'hide',
-            'post',
-            (string) $post->id,
-            resolvePostUrl($post->slug),
-            $reason,
-            [
-                'slug' => $post->slug,
-                'title' => $post->title,
-                'author_id' => $post->user_id,
-                'author_name' => $post->user?->name,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($post, 'confirmed', 'hide', $reason, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $post->moderation_status]);
-    })->name('moderation.posts.hide');
-
-    Route::post('/admin/moderation/posts/{post}/restore', function (Request $request, Post $post) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-        setModerationState($post, $moderator, 'approved');
-        logModerationAction(
-            $request,
-            $moderator,
-            'restore',
-            'post',
-            (string) $post->id,
-            resolvePostUrl($post->slug),
-            null,
-            [
-                'slug' => $post->slug,
-                'title' => $post->title,
-                'author_id' => $post->user_id,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($post, 'rejected', 'restore', null, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $post->moderation_status]);
-    })->name('moderation.posts.restore');
-
-    Route::post('/admin/moderation/posts/{post}/nsfw', function (Request $request, Post $post) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-        $post->loadMissing('user');
-        if (shouldBlockModeration($moderator, $post->user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        setModerationState($post, $moderator, 'approved');
-        if (safeHasColumn('posts', 'nsfw')) {
-            $post->nsfw = true;
-            $post->save();
-        }
-        logModerationAction(
-            $request,
-            $moderator,
-            'nsfw',
-            'post',
-            (string) $post->id,
-            resolvePostUrl($post->slug),
-            'Marked NSFW after manual review.',
-            [
-                'slug' => $post->slug,
-                'title' => $post->title,
-                'author_id' => $post->user_id,
-                'author_name' => $post->user?->name,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel(
-            $post,
-            'confirmed',
-            'nsfw',
-            'Marked NSFW after manual review.',
-            $moderator,
-        );
-
-        return response()->json(['ok' => true, 'status' => $post->moderation_status, 'nsfw' => (bool) ($post->nsfw ?? false)]);
-    })->name('moderation.posts.nsfw');
-
-    Route::post('/admin/moderation/comments/{comment}/queue', function (Request $request, PostComment $comment) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-
-        $comment->loadMissing('user');
-        if (shouldBlockModeration($moderator, $comment->user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        setModerationState($comment, $moderator, 'pending');
-        $contentUrl = resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
-        logModerationAction(
-            $request,
-            $moderator,
-            'queue',
-            'comment',
-            (string) $comment->id,
-            $contentUrl,
-            $reason,
-            [
-                'post_slug' => $comment->post_slug,
-                'author_id' => $comment->user_id,
-                'author_name' => $comment->user?->name,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($comment, 'confirmed', 'queue', $reason, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $comment->moderation_status]);
-    })->name('moderation.comments.queue');
-
-    Route::post('/admin/moderation/comments/{comment}/hide', function (Request $request, PostComment $comment) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-
-        $comment->loadMissing('user');
-        if (shouldBlockModeration($moderator, $comment->user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        setModerationState($comment, $moderator, 'hidden');
-        $contentUrl = resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
-        logModerationAction(
-            $request,
-            $moderator,
-            'hide',
-            'comment',
-            (string) $comment->id,
-            $contentUrl,
-            $reason,
-            [
-                'post_slug' => $comment->post_slug,
-                'author_id' => $comment->user_id,
-                'author_name' => $comment->user?->name,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($comment, 'confirmed', 'hide', $reason, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $comment->moderation_status]);
-    })->name('moderation.comments.hide');
-
-    Route::post('/admin/moderation/comments/{comment}/restore', function (Request $request, PostComment $comment) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-        setModerationState($comment, $moderator, 'approved');
-        $contentUrl = resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
-        logModerationAction(
-            $request,
-            $moderator,
-            'restore',
-            'comment',
-            (string) $comment->id,
-            $contentUrl,
-            null,
-            [
-                'post_slug' => $comment->post_slug,
-                'author_id' => $comment->user_id,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($comment, 'rejected', 'restore', null, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $comment->moderation_status]);
-    })->name('moderation.comments.restore');
-
-    Route::post('/admin/moderation/reviews/{review}/queue', function (Request $request, PostReview $review) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-
-        $review->loadMissing('user');
-        if (shouldBlockModeration($moderator, $review->user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        setModerationState($review, $moderator, 'pending');
-        $contentUrl = resolvePostUrl($review->post_slug) . '#review-' . $review->id;
-        logModerationAction(
-            $request,
-            $moderator,
-            'queue',
-            'review',
-            (string) $review->id,
-            $contentUrl,
-            $reason,
-            [
-                'post_slug' => $review->post_slug,
-                'author_id' => $review->user_id,
-                'author_name' => $review->user?->name,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($review, 'confirmed', 'queue', $reason, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $review->moderation_status]);
-    })->name('moderation.reviews.queue');
-
-    Route::post('/admin/moderation/reviews/{review}/hide', function (Request $request, PostReview $review) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-
-        $review->loadMissing('user');
-        if (shouldBlockModeration($moderator, $review->user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        setModerationState($review, $moderator, 'hidden');
-        $contentUrl = resolvePostUrl($review->post_slug) . '#review-' . $review->id;
-        logModerationAction(
-            $request,
-            $moderator,
-            'hide',
-            'review',
-            (string) $review->id,
-            $contentUrl,
-            $reason,
-            [
-                'post_slug' => $review->post_slug,
-                'author_id' => $review->user_id,
-                'author_name' => $review->user?->name,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($review, 'confirmed', 'hide', $reason, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $review->moderation_status]);
-    })->name('moderation.reviews.hide');
-
-    Route::post('/admin/moderation/reviews/{review}/restore', function (Request $request, PostReview $review) {
-        $moderator = $request->user();
-        if (!$moderator) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-        setModerationState($review, $moderator, 'approved');
-        $contentUrl = resolvePostUrl($review->post_slug) . '#review-' . $review->id;
-        logModerationAction(
-            $request,
-            $moderator,
-            'restore',
-            'review',
-            (string) $review->id,
-            $contentUrl,
-            null,
-            [
-                'post_slug' => $review->post_slug,
-                'author_id' => $review->user_id,
-            ],
-        );
-        app(AutoModerationService::class)->resolveReportsForModel($review, 'rejected', 'restore', null, $moderator);
-
-        return response()->json(['ok' => true, 'status' => $review->moderation_status]);
-    })->name('moderation.reviews.restore');
+    Route::post('/admin/moderation/reviews/{review}/restore', [ModerationController::class, 'restoreReview'])
+        ->name('moderation.reviews.restore');
 
 });
 
 Route::middleware(['auth', 'can:admin'])->group(function () {
-    Route::post('/admin/users/{user}/role', function (Request $request, User $user) {
-        $data = $request->validate([
-            'role' => ['required', Rule::in(config('roles.order', ['user', 'maker', 'moderator', 'admin']))],
-        ]);
-        $oldRole = $user->role;
-        $user->update(['role' => $data['role']]);
-        logAuditEvent($request, 'admin.user.role_change', $request->user(), [
-            'from' => $oldRole,
-            'to' => $data['role'],
-        ], 'user', (string) $user->id);
-        return redirect()->route('admin');
-    })->name('admin.users.role');
+    Route::post('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])
+        ->name('admin.users.role');
 
-    Route::delete('/admin/comments/{comment}', function (Request $request, PostComment $comment) {
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-        $moderator = $request->user();
-        $comment->loadMissing('user');
-        $contentUrl = resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
-        if ($moderator) {
-            logModerationAction(
-                $request,
-                $moderator,
-                'delete',
-                'comment',
-                (string) $comment->id,
-                $contentUrl,
-                $reason,
-                [
-                    'post_slug' => $comment->post_slug,
-                    'author_id' => $comment->user_id,
-                    'author_name' => $comment->user?->name,
-                ],
-            );
-        }
-        $comment->delete();
-        if ($request->expectsJson()) {
-            return response()->json(['ok' => true]);
-        }
-        return redirect()->route('admin');
-    })->name('admin.comments.delete');
+    Route::delete('/admin/comments/{comment}', [AdminContentController::class, 'deleteComment'])
+        ->name('admin.comments.delete');
 
-    Route::delete('/admin/reviews/{review}', function (Request $request, PostReview $review) {
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-        $moderator = $request->user();
-        $review->loadMissing('user');
-        $contentUrl = resolvePostUrl($review->post_slug) . '#review-' . $review->id;
-        if ($moderator) {
-            logModerationAction(
-                $request,
-                $moderator,
-                'delete',
-                'review',
-                (string) $review->id,
-                $contentUrl,
-                $reason,
-                [
-                    'post_slug' => $review->post_slug,
-                    'author_id' => $review->user_id,
-                    'author_name' => $review->user?->name,
-                ],
-            );
-        }
-        $review->delete();
-        if ($request->expectsJson()) {
-            return response()->json(['ok' => true]);
-        }
-        return redirect()->route('admin');
-    })->name('admin.reviews.delete');
+    Route::delete('/admin/reviews/{review}', [AdminContentController::class, 'deleteReview'])
+        ->name('admin.reviews.delete');
 
-    Route::delete('/admin/posts/{post}', function (Request $request, Post $post) {
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
-        $reason = trim((string) $data['reason']);
-        $moderator = $request->user();
-        $post->loadMissing('user');
-        $contentUrl = resolvePostUrl($post->slug);
-        if ($moderator) {
-            logModerationAction(
-                $request,
-                $moderator,
-                'delete',
-                'post',
-                (string) $post->id,
-                $contentUrl,
-                $reason,
-                [
-                    'slug' => $post->slug,
-                    'title' => $post->title,
-                    'author_id' => $post->user_id,
-                    'author_name' => $post->user?->name,
-                ],
-            );
-        }
-        $post->delete();
-        if ($request->expectsJson()) {
-            return response()->json(['ok' => true]);
-        }
-        return redirect()->route('admin');
-    })->name('admin.posts.delete');
+    Route::delete('/admin/posts/{post}', [AdminContentController::class, 'deletePost'])
+        ->name('admin.posts.delete');
 
     Route::post('/admin/promos', function (Request $request) {
         if (!safeHasTable('topbar_promos')) {
