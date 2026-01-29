@@ -68,17 +68,20 @@ class AdminTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->delete("/admin/comments/{$comment->id}")
+            ->from('/admin')
+            ->delete("/admin/comments/{$comment->id}", ['reason' => 'Test cleanup'])
             ->assertRedirect(route('admin'));
         $this->assertDatabaseMissing('post_comments', ['id' => $comment->id]);
 
         $this->actingAs($admin)
-            ->delete("/admin/reviews/{$review->id}")
+            ->from('/admin')
+            ->delete("/admin/reviews/{$review->id}", ['reason' => 'Test cleanup'])
             ->assertRedirect(route('admin'));
         $this->assertDatabaseMissing('post_reviews', ['id' => $review->id]);
 
         $this->actingAs($admin)
-            ->delete("/admin/posts/{$post->id}")
+            ->from('/admin')
+            ->delete("/admin/posts/{$post->id}", ['reason' => 'Test cleanup'])
             ->assertRedirect(route('admin'));
         $this->assertDatabaseMissing('posts', ['id' => $post->id]);
     }

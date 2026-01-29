@@ -16,12 +16,12 @@ class AuthTest extends TestCase
         $response = $this->post('/register', [
             'name' => 'Alex Tester',
             'email' => 'alex@example.com',
-            'password' => 'password',
-            'password_confirmation' => 'password',
+            'password' => 'Z9!qT1xP#9Lm',
+            'password_confirmation' => 'Z9!qT1xP#9Lm',
             'accept_legal' => '1',
         ]);
 
-        $response->assertRedirect(route('feed'));
+        $response->assertRedirect(route('verification.notice'));
         $this->assertAuthenticated();
         $this->assertDatabaseHas('users', ['email' => 'alex@example.com']);
     }

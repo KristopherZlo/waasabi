@@ -5,11 +5,27 @@ namespace Tests\Feature;
 use App\Models\Post;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Tests\TestCase;
 
 class PublishTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withoutMiddleware(ThrottleRequests::class);
+    }
+
+    private function makeEligibleUser(array $attributes = []): User
+    {
+        return User::factory()->create(array_merge([
+            'email_verified_at' => now(),
+            'created_at' => now()->subMinutes(20),
+        ], $attributes));
+    }
 
     public function test_guest_cannot_access_publish(): void
     {
@@ -20,7 +36,7 @@ class PublishTest extends TestCase
 
     public function test_user_can_publish_post(): void
     {
-        $user = User::factory()->create();
+        $user = $this->makeEligibleUser();
 
         $payload = [
             'publish_type' => 'post',
@@ -41,7 +57,7 @@ class PublishTest extends TestCase
 
     public function test_user_can_publish_question(): void
     {
-        $user = User::factory()->create();
+        $user = $this->makeEligibleUser();
 
         $payload = [
             'publish_type' => 'question',
@@ -60,7 +76,7 @@ class PublishTest extends TestCase
 
     public function test_publish_validates_required_body_for_post(): void
     {
-        $user = User::factory()->create();
+        $user = $this->makeEligibleUser();
 
         $response = $this->actingAs($user)->from('/publish')->post('/publish', [
             'publish_type' => 'post',

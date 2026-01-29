@@ -46,7 +46,7 @@ class ProfileTest extends TestCase
             'role' => 'admin',
         ]);
 
-        $response->assertRedirect(route('profile.show', $user->slug));
+        $response->assertRedirect(route('profile.settings', ['section' => 'profile']));
         $this->assertDatabaseHas('users', [
             'id' => $user->id,
             'name' => 'Updated Name',
@@ -54,7 +54,7 @@ class ProfileTest extends TestCase
         ]);
     }
 
-    public function test_admin_can_change_own_role(): void
+    public function test_admin_cannot_change_own_role_from_profile_settings(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
@@ -65,10 +65,10 @@ class ProfileTest extends TestCase
             'role' => 'maker',
         ]);
 
-        $response->assertRedirect(route('profile.show', $admin->slug));
+        $response->assertRedirect(route('profile.settings', ['section' => 'profile']));
         $this->assertDatabaseHas('users', [
             'id' => $admin->id,
-            'role' => 'maker',
+            'role' => 'admin',
         ]);
     }
 

@@ -27,7 +27,7 @@ class PublicPagesTest extends TestCase
     public function test_showcase_and_notifications_pages_load(): void
     {
         $this->get('/showcase')->assertOk();
-        $this->get('/notifications')->assertOk();
+        $this->get('/notifications')->assertRedirect(route('login'));
     }
 
     public function test_login_and_register_pages_load(): void
