@@ -20,6 +20,7 @@ use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\UploadController;
 use App\Http\Controllers\FeedController;
+use App\Http\Controllers\CollaborationController;
 use App\Http\Controllers\ModerationController;
 use App\Http\Controllers\Admin\AdminContentController;
 use App\Http\Controllers\Admin\AdminSupportController;
@@ -67,5 +68,10 @@ Route::get('/promos/{promo}/click', function (TopbarPromo $promo) {
 Route::get('/feed/chunk', [FeedController::class, 'chunk'])->name('feed.chunk');
 
 Route::get('/', [FeedController::class, 'index'])->name('feed');
+
+Route::get('/collaboration', [CollaborationController::class, 'index'])->name('collaboration');
+Route::post('/collaboration', [CollaborationController::class, 'store'])
+    ->middleware(['auth', 'throttle:publish'])
+    ->name('collaboration.store');
 
 

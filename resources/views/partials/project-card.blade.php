@@ -245,6 +245,7 @@
             $tagSlug = \Illuminate\Support\Str::slug((string) $tag);
             $tagClass = $tagSlug === 'collaboration' ? 'chip--collaboration' : '';
         @endphp
+        @continue($tagSlug === 'collaboration')
         <span class="chip chip--tag {{ $tagClass }}">{{ $tag }}</span>
     @endforeach
         @if ($extraTags > 0)

@@ -33,6 +33,7 @@ import { setupCookieConsent } from '../ui/cookie-consent';
 import { setupScrollTopRail } from '../ui/scroll-top';
 import { setupMediaViewer } from '../ui/media-viewer';
 import { setupSupportFaq } from './support';
+import { setupCollaborationPage } from './collaboration';
 
 export const hydratePage = () => {
     setupIcons();
@@ -90,6 +91,7 @@ export const hydratePage = () => {
     setupNavFooterOffset();
     setupScrollTopRail();
     setupNotFoundPage();
+    setupCollaborationPage();
     renderReadLaterList();
     updateCardsProgress();
 };
