@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProfileSettingsRequest;
 use App\Services\UserPayloadService;
 use App\Services\UserSlugService;
+use App\Services\ImageUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,7 +26,7 @@ class ProfileSettingsController extends Controller
         ]);
     }
 
-    public function update(ProfileSettingsRequest $request, UserSlugService $slugService): RedirectResponse
+    public function update(ProfileSettingsRequest $request, UserSlugService $slugService, ImageUploadService $uploadService): RedirectResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -40,7 +41,7 @@ class ProfileSettingsController extends Controller
 
         if ($request->hasFile('avatar_file')) {
             try {
-                $result = processImageUpload($request->file('avatar_file'), [
+                $result = $uploadService->process($request->file('avatar_file'), [
                     'dir' => 'uploads/avatars',
                     'max_side' => 1024,
                     'max_side_input' => 1024,
@@ -99,7 +100,7 @@ class ProfileSettingsController extends Controller
             ->with('toast', $toastMessage);
     }
 
-    public function updateBanner(Request $request, string $slug): JsonResponse|RedirectResponse
+    public function updateBanner(Request $request, string $slug, ImageUploadService $uploadService): JsonResponse|RedirectResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -121,7 +122,7 @@ class ProfileSettingsController extends Controller
         }
 
         try {
-            $result = processImageUpload($file, [
+            $result = $uploadService->process($file, [
                 'dir' => 'uploads/banners',
                 'max_side_input' => 4096,
                 'max_pixels' => 16000000,
@@ -181,7 +182,7 @@ class ProfileSettingsController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function updateAvatar(Request $request, string $slug): JsonResponse|RedirectResponse
+    public function updateAvatar(Request $request, string $slug, ImageUploadService $uploadService): JsonResponse|RedirectResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -200,7 +201,7 @@ class ProfileSettingsController extends Controller
         }
 
         try {
-            $result = processImageUpload($file, [
+            $result = $uploadService->process($file, [
                 'dir' => 'uploads/avatars',
                 'max_side_input' => 4096,
                 'max_pixels' => 16000000,

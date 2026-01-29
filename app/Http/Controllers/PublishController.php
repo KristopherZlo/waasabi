@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Models\User;
 use App\Services\CoauthorService;
 use App\Services\MarkdownService;
+use App\Services\ImageUploadService;
 use App\Services\TextModerationService;
 use App\Http\Requests\StorePublishRequest;
 use Illuminate\Http\UploadedFile;
@@ -85,7 +86,7 @@ class PublishController extends Controller
         ]);
     }
 
-    public function store(StorePublishRequest $request)
+    public function store(StorePublishRequest $request, ImageUploadService $uploadService)
     {
         if (!safeHasTable('posts')) {
             abort(503);
@@ -245,7 +246,7 @@ class PublishController extends Controller
             $coverFiles = array_slice($coverFiles, 0, $maxCoverImages);
             foreach ($coverFiles as $coverFile) {
                 try {
-                    $result = processImageUpload($coverFile, [
+                    $result = $uploadService->process($coverFile, [
                         'dir' => 'uploads/covers',
                         'max_side' => 2560,
                         'max_pixels' => 16000000,
