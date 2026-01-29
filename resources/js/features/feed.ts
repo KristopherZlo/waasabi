@@ -279,8 +279,27 @@ export const setupFeedTabs = () => {
     const typesByTab: Record<string, string[]> = {
         projects: ['projects', 'qa'],
         questions: ['questions'],
-        collaboration: [],
+        collaboration: ['projects'],
     };
+
+    const slugify = (value: string) =>
+        value
+            .toLowerCase()
+            .trim()
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+    const collaborationSlug = 'collaboration';
+    const getCardTags = (card: HTMLElement) =>
+        (card.dataset.tags ?? '')
+            .split(',')
+            .map((tag) => slugify(tag))
+            .filter(Boolean);
+    const isCollaborationCard = (card: HTMLElement) => getCardTags(card).includes(collaborationSlug);
+
+    const collaborationBanner = document.querySelector<HTMLElement>('[data-feed-collaboration]');
 
     const getItems = () => Array.from(document.querySelectorAll<HTMLElement>('[data-feed-type]'));
     const isLoading = () => (loader ? !loader.hidden : false);
@@ -299,7 +318,10 @@ export const setupFeedTabs = () => {
         let visibleCount = 0;
         items.forEach((item) => {
             const type = item.dataset.feedType ?? 'projects';
-            const shouldShow = allowed.includes(type);
+            const isCollaboration = isCollaborationCard(item);
+            const shouldShow = tab === 'collaboration'
+                ? isCollaboration
+                : allowed.includes(type) && !isCollaboration;
             item.hidden = !shouldShow;
             if (shouldShow && isItemVisible(item)) {
                 visibleCount += 1;
@@ -313,6 +335,10 @@ export const setupFeedTabs = () => {
         const url = new URL(window.location.href);
         url.searchParams.set('stream', tab);
         window.history.replaceState({}, '', url.toString());
+
+        if (collaborationBanner) {
+            collaborationBanner.hidden = tab !== 'collaboration';
+        }
     };
 
     const url = new URL(window.location.href);
@@ -448,6 +474,9 @@ export const setupInfiniteFeed = () => {
 
     const getActiveStream = () => {
         const active = document.querySelector<HTMLElement>('[data-feed-tab].is-active')?.dataset.feedTab ?? 'projects';
+        if (active === 'collaboration') {
+            return 'projects';
+        }
         return streams.includes(active) ? active : null;
     };
 

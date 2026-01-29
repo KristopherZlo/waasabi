@@ -8,6 +8,8 @@
     $pageSubtitle = $isEditing ? __('ui.publish.edit_subtitle') : __('ui.publish.subtitle');
     $submitLabel = $isEditing ? __('ui.publish.edit_cta') : __('ui.publish.publish_cta');
     $coauthorSuggestions = $coauthor_suggestions ?? [];
+    $prefillTags = $prefill_tags ?? '';
+    $tagsValue = old('tags', $editPost['tags'] ?? $prefillTags);
 @endphp
 
 @section('title', $pageTitle)
@@ -70,7 +72,7 @@
                         </div>
                         <label>
                             {{ __('ui.publish.tags_label') }}
-                            <input class="input" type="text" name="tags" placeholder="{{ __('ui.publish.tags_placeholder') }}" value="{{ old('tags', $editPost['tags'] ?? '') }}" data-draft-field="tags">
+                            <input class="input" type="text" name="tags" placeholder="{{ __('ui.publish.tags_placeholder') }}" value="{{ $tagsValue }}" data-draft-field="tags">
                         </label>
                         <label>
                             {{ __('ui.publish.coauthors_label') }}

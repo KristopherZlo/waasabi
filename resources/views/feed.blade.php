@@ -41,6 +41,16 @@
             <button type="button" class="feed-filter" data-feed-filter="fresh">{{ __('ui.feed.filter_fresh') }}</button>
             <button type="button" class="feed-filter" data-feed-filter="reading">{{ __('ui.feed.filter_reading') }}</button>
         </div>
+        <div class="collaboration-banner card" data-feed-collaboration hidden>
+            <div>
+                <div class="collaboration-banner__title">{{ __('ui.feed.collaboration_title') }}</div>
+                <div class="collaboration-banner__subtitle">{{ __('ui.feed.collaboration_subtitle') }}</div>
+            </div>
+            <a class="cta-btn" href="{{ route('publish') }}?collaboration=1">
+                <i data-lucide="users" class="icon"></i>
+                <span>{{ __('ui.feed.collaboration_cta') }}</span>
+            </a>
+        </div>
     </section>
 
     <section class="section" style="margin-top: 16px;">

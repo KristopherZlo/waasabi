@@ -1822,6 +1822,35 @@ body.is-admin-edit .action-menu--inline {
     gap: 8px;
 }
 
+.collaboration-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px;
+    border: 1px dashed var(--border);
+    background: var(--surface-2);
+}
+
+.collaboration-banner__title {
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.collaboration-banner__subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+    .collaboration-banner {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
 .feed-tags {
     display: flex;
     flex-wrap: wrap;
@@ -2276,6 +2305,12 @@ body.is-admin-edit .action-menu--inline {
     border: 1px solid var(--border);
 }
 
+.chip--collaboration {
+    color: var(--accent);
+    background: rgba(78, 161, 255, 0.12);
+    border-color: rgba(78, 161, 255, 0.35);
+}
+
 .badge {
     display: inline-flex;
     align-items: center;
@@ -2314,6 +2349,12 @@ body.is-admin-edit .action-menu--inline {
     color: #fca5a5;
     background: rgba(220, 38, 38, 0.2);
     border-color: rgba(252, 165, 165, 0.35);
+}
+
+.badge--collaboration {
+    color: #93c5fd;
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(147, 197, 253, 0.4);
 }
 
 .badge--author {
@@ -2371,6 +2412,13 @@ body.is-admin-edit .action-menu--inline {
     color: var(--muted);
     font-size: 12px;
     align-items: center;
+}
+
+.post-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0 2px;
 }
 
 .post-edited {

@@ -11,6 +11,7 @@ use App\Services\ImageUploadService;
 use App\Services\ModerationService;
 use App\Services\TextModerationService;
 use App\Http\Requests\StorePublishRequest;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Auth;
@@ -20,14 +21,16 @@ use RuntimeException;
 
 class PublishController extends Controller
 {
-    public function create()
+    public function create(Request $request)
     {
         $user = Auth::user();
         $coauthorSuggestions = $user ? app(CoauthorService::class)->listSuggestions(200, $user) : [];
+        $prefillTags = $request->boolean('collaboration') ? 'collaboration' : '';
 
         return view('publish', [
             'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(),
             'coauthor_suggestions' => $coauthorSuggestions,
+            'prefill_tags' => $prefillTags,
         ]);
     }
 

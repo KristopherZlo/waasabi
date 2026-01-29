@@ -1,5 +1,10 @@
 @php
     $projectTags = $project['tags'] ?? [];
+    $tagSlugs = collect($projectTags)
+        ->map(fn ($tag) => \Illuminate\Support\Str::slug((string) $tag))
+        ->filter()
+        ->values();
+    $isCollaboration = $tagSlugs->contains('collaboration');
     $visibleTags = array_slice($projectTags, 0, 5);
     $extraTags = max(count($projectTags) - count($visibleTags), 0);
     $previewSource = (string) ($project['body_html'] ?? $project['body_markdown'] ?? '');
@@ -189,6 +194,11 @@
             @endif
         @endif
     @endcan
+    @if ($isCollaboration)
+        <div class="post-badges">
+            <span class="badge badge--collaboration">{{ __('ui.feed.collaboration_badge') }}</span>
+        </div>
+    @endif
     <h3 class="post-title"><a href="{{ route('project', $project['slug']) }}">{{ $project['title'] }}</a></h3>
     @if ($hasCarousel)
         <div class="post-cover post-carousel {{ $isNsfw ? 'is-nsfw' : '' }}" data-carousel data-nsfw-cover aria-label="{{ __('ui.js.carousel_label') }}">
@@ -230,9 +240,13 @@
                 <span class="chip chip--moderation chip--{{ $moderationStatus }}">{{ __('ui.moderation.status_' . $moderationStatus) }}</span>
             @endif
         @endcan
-        @foreach ($visibleTags as $tag)
-            <span class="chip chip--tag">{{ $tag }}</span>
-        @endforeach
+    @foreach ($visibleTags as $tag)
+        @php
+            $tagSlug = \Illuminate\Support\Str::slug((string) $tag);
+            $tagClass = $tagSlug === 'collaboration' ? 'chip--collaboration' : '';
+        @endphp
+        <span class="chip chip--tag {{ $tagClass }}">{{ $tag }}</span>
+    @endforeach
         @if ($extraTags > 0)
             <span class="chip chip--count">+{{ $extraTags }}</span>
         @endif
@@ -255,4 +269,3 @@
     <div class="read-mark" data-read-progress-label hidden>{{ __('ui.card.read_mark') }}</div>
     <div class="read-progress" data-read-progress hidden></div>
 </article>
-
