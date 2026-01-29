@@ -11,6 +11,7 @@ use App\Models\TopbarPromo;
 use App\Models\User;
 use App\Http\Controllers\NotificationsController;
 use App\Http\Controllers\PublishController;
+use App\Http\Controllers\ProfileSettingsController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SupportTicketController;
@@ -26,6 +27,7 @@ use App\Services\ContentModerationService;
 use App\Services\FeedService;
 use App\Services\MakerPromotionService;
 use App\Services\TextModerationService;
+use App\Services\UserSlugService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -855,17 +857,7 @@ if (!function_exists('setModerationState')) {
 }
 
 $generateUserSlug = static function (string $name): string {
-    $base = Str::slug($name);
-    if ($base === '') {
-        $base = 'user';
-    }
-    $slug = $base;
-    $counter = 2;
-    while (safeHasTable('users') && User::where('slug', $slug)->exists()) {
-        $slug = $base . '-' . $counter;
-        $counter += 1;
-    }
-    return $slug;
+    return app(UserSlugService::class)->generate($name);
 };
 
 $preparePostStats = static function (iterable $posts): array {
@@ -2998,265 +2990,29 @@ Route::get('/profile', function () use ($projects, $profile, $badgeCatalog) {
     ]);
 })->name('profile');
 
-Route::get('/profile/settings', function () {
-    return view('profile-settings', ['current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(), 'user' => Auth::user()]);
-})->middleware('auth')->name('profile.settings');
+Route::get('/profile/settings', [ProfileSettingsController::class, 'edit'])
+    ->middleware('auth')
+    ->name('profile.settings');
 
-Route::post('/profile/settings', function (Request $request) use ($generateUserSlug) {
-    $user = $request->user();
-    if (!$user) {
-        return redirect()->route('login');
-    }
+Route::post('/profile/settings', [ProfileSettingsController::class, 'update'])
+    ->middleware('auth')
+    ->name('profile.settings.update');
 
-    $section = $request->input('section', 'profile');
-    $allowedSections = ['profile', 'privacy', 'notifications', 'connections', 'devices'];
-    if (!in_array($section, $allowedSections, true)) {
-        $section = 'profile';
-    }
+Route::post('/profile/{slug}/banner', [ProfileSettingsController::class, 'updateBanner'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])
+    ->name('profile.banner.update');
 
-    $maxImageKb = max(1, (int) config('waasabi.upload.max_image_mb', 5) * 1024);
-    $maxCoverImages = max(1, (int) config('waasabi.upload.max_images_per_post', 8));
+Route::delete('/profile/{slug}/banner', [ProfileSettingsController::class, 'deleteBanner'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])
+    ->name('profile.banner.delete');
 
-    $data = $request->validate([
-        'name' => ['required', 'string', 'max:255'],
-        'avatar' => ['nullable', 'url', 'max:255'],
-        'avatar_file' => [
-            'nullable',
-            'file',
-            'mimes:jpg,jpeg,png,webp',
-            'min:512',
-            'max:1024',
-            'dimensions:min_width=512,min_height=512,max_width=1024,max_height=1024',
-        ],
-        'bio' => ['nullable', 'string', 'max:1000'],
-        'role' => ['nullable', Rule::in(config('roles.order', ['user', 'maker', 'moderator', 'admin']))],
-        'privacy_share_activity' => ['nullable', 'boolean'],
-        'privacy_allow_mentions' => ['nullable', 'boolean'],
-        'privacy_personalized_recommendations' => ['nullable', 'boolean'],
-        'notify_comments' => ['nullable', 'boolean'],
-        'notify_reviews' => ['nullable', 'boolean'],
-        'notify_follows' => ['nullable', 'boolean'],
-        'connections_allow_follow' => ['nullable', 'boolean'],
-        'connections_show_follow_counts' => ['nullable', 'boolean'],
-        'security_login_alerts' => ['nullable', 'boolean'],
-    ]);
+Route::post('/profile/{slug}/avatar', [ProfileSettingsController::class, 'updateAvatar'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])
+    ->name('profile.avatar.update');
 
-    $user->name = $data['name'];
-    $avatarUrl = $data['avatar'] ?? null;
-    if ($request->hasFile('avatar_file')) {
-        try {
-            $result = processImageUpload($request->file('avatar_file'), [
-                'dir' => 'uploads/avatars',
-                'max_side' => 1024,
-                'max_side_input' => 1024,
-                'min_side' => 512,
-                'format' => 'webp',
-            ]);
-            $user->avatar = $result['path'];
-            maybeFlagImageForModeration($result['path'], $user, 'avatar');
-        } catch (RuntimeException $exception) {
-            return redirect()
-                ->route('profile.settings', ['section' => $section])
-                ->withErrors(['avatar_file' => $exception->getMessage()])
-                ->withInput();
-        }
-    } elseif (!empty($avatarUrl)) {
-        $user->avatar = $avatarUrl;
-    }
-    $user->bio = $data['bio'] ?? null;
-    if ($request->user()?->isAdmin() && isset($data['role']) && !$user->isAdmin()) {
-        // Prevent admin self-demotion from the profile settings screen.
-        $user->role = $data['role'];
-    }
-    $booleanFields = [
-        'privacy_share_activity',
-        'privacy_allow_mentions',
-        'privacy_personalized_recommendations',
-        'notify_comments',
-        'notify_reviews',
-        'notify_follows',
-        'connections_allow_follow',
-        'connections_show_follow_counts',
-        'security_login_alerts',
-    ];
-    foreach ($booleanFields as $field) {
-        if (!array_key_exists($field, $data)) {
-            continue;
-        }
-        if (safeHasColumn('users', $field)) {
-            $user->{$field} = (bool) $data[$field];
-        }
-    }
-    if (safeHasColumn('users', 'slug') && empty($user->slug)) {
-        $user->slug = $generateUserSlug($user->name);
-    }
-    $user->save();
-
-    $toastMessage = $section === 'profile'
-        ? __('ui.js.profile_saved')
-        : __('ui.js.settings_saved');
-
-    return redirect()
-        ->route('profile.settings', ['section' => $section])
-        ->with('toast', $toastMessage);
-})->middleware('auth')->name('profile.settings.update');
-
-Route::post('/profile/{slug}/banner', function (Request $request, string $slug) {
-    $user = $request->user();
-    if (!$user) {
-        abort(401);
-    }
-    if (!safeHasColumn('users', 'banner_url')) {
-        return response()->json(['message' => 'Banner storage unavailable.'], 503);
-    }
-    if (($user->slug ?? '') !== $slug) {
-        abort(403);
-    }
-
-    $data = $request->validate([
-        'banner_file' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-    ]);
-    $file = $request->file('banner_file');
-    if (!$file instanceof UploadedFile) {
-        return response()->json(['message' => 'Invalid upload.'], 422);
-    }
-
-    try {
-        $result = processImageUpload($file, [
-            'dir' => 'uploads/banners',
-            'max_side_input' => 4096,
-            'max_pixels' => 16000000,
-            'min_width' => 1200,
-            'min_height' => 300,
-            'crop_aspect' => 4,
-            'target_width' => 1600,
-            'target_height' => 400,
-            'format' => 'webp',
-        ]);
-    } catch (RuntimeException $exception) {
-        return response()->json(['message' => $exception->getMessage()], 422);
-    }
-
-    $user->banner_url = $result['path'];
-    $user->save();
-    maybeFlagImageForModeration($result['path'], $user, 'banner');
-
-    if ($request->expectsJson()) {
-        return response()->json([
-            'ok' => true,
-            'url' => asset($result['path']),
-        ]);
-    }
-
-    return redirect()
-        ->route('profile.show', $slug)
-        ->with('toast', __('ui.js.profile_banner_updated'));
-})->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])->name('profile.banner.update');
-
-Route::delete('/profile/{slug}/banner', function (Request $request, string $slug) {
-    $user = $request->user();
-    if (!$user) {
-        abort(401);
-    }
-    if (!safeHasColumn('users', 'banner_url')) {
-        return response()->json(['message' => 'Banner storage unavailable.'], 503);
-    }
-    if (($user->slug ?? '') !== $slug) {
-        abort(403);
-    }
-
-    $previous = trim((string) ($user->banner_url ?? ''));
-    $user->banner_url = null;
-    $user->save();
-
-    if ($previous !== '' && isUserUploadedMediaPath($previous)) {
-        try {
-            $relative = Str::after(ltrim($previous, '/'), 'storage/');
-            Storage::disk('public')->delete($relative);
-        } catch (\Throwable $exception) {
-            Log::warning('Unable to delete banner file.', ['path' => $previous, 'error' => $exception->getMessage()]);
-        }
-    }
-
-    return response()->json(['ok' => true]);
-})->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])->name('profile.banner.delete');
-
-Route::post('/profile/{slug}/avatar', function (Request $request, string $slug) {
-    $user = $request->user();
-    if (!$user) {
-        abort(401);
-    }
-    if (($user->slug ?? '') !== $slug) {
-        abort(403);
-    }
-
-    $request->validate([
-        'avatar_file' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-    ]);
-    $file = $request->file('avatar_file');
-    if (!$file instanceof UploadedFile) {
-        return response()->json(['message' => 'Invalid upload.'], 422);
-    }
-
-    try {
-        $result = processImageUpload($file, [
-            'dir' => 'uploads/avatars',
-            'max_side_input' => 4096,
-            'max_pixels' => 16000000,
-            'min_width' => 256,
-            'min_height' => 256,
-            'crop_aspect' => 1,
-            'target_width' => 512,
-            'target_height' => 512,
-            'format' => 'webp',
-        ]);
-    } catch (RuntimeException $exception) {
-        return response()->json(['message' => $exception->getMessage()], 422);
-    }
-
-    $user->avatar = $result['path'];
-    $user->save();
-    maybeFlagImageForModeration($result['path'], $user, 'avatar');
-
-    if ($request->expectsJson()) {
-        return response()->json([
-            'ok' => true,
-            'url' => asset($result['path']),
-        ]);
-    }
-
-    return redirect()
-        ->route('profile.show', $slug)
-        ->with('toast', __('ui.js.profile_avatar_updated'));
-})->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])->name('profile.avatar.update');
-
-Route::delete('/profile/{slug}/avatar', function (Request $request, string $slug) {
-    $user = $request->user();
-    if (!$user) {
-        abort(401);
-    }
-    if (($user->slug ?? '') !== $slug) {
-        abort(403);
-    }
-
-    $previous = trim((string) ($user->avatar ?? ''));
-    $user->avatar = null;
-    $user->save();
-
-    if ($previous !== '' && isUserUploadedMediaPath($previous)) {
-        try {
-            $relative = Str::after(ltrim($previous, '/'), 'storage/');
-            Storage::disk('public')->delete($relative);
-        } catch (\Throwable $exception) {
-            Log::warning('Unable to delete avatar file.', ['path' => $previous, 'error' => $exception->getMessage()]);
-        }
-    }
-
-    return response()->json([
-        'ok' => true,
-        'default_url' => asset('images/avatar-default.svg'),
-    ]);
-})->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])->name('profile.avatar.delete');
+Route::delete('/profile/{slug}/avatar', [ProfileSettingsController::class, 'deleteAvatar'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])
+    ->name('profile.avatar.delete');
 
 Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, $mapPostToProject, $mapPostToQuestion, $preparePostStats, $badgeCatalog) {
     $viewer = Auth::user();
