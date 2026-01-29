@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Requests\StoreCommentRequest;
 use App\Http\Requests\StoreReviewRequest;
 use App\Services\AutoModerationService;
+use App\Services\BadgePayloadService;
 use App\Services\BadgeCatalogService;
 use App\Services\ContentModerationService;
 use App\Services\FeedService;
@@ -182,46 +183,6 @@ if (!function_exists('notifySupportStaff')) {
 }
 
 $badgeCatalog = app(BadgeCatalogService::class)->all();
-
-if (!function_exists('badgePayload')) {
-    function badgePayload(\App\Models\UserBadge $badge, array $catalogMap): array
-    {
-        $catalog = $catalogMap[$badge->badge_key] ?? null;
-        $defaultName = $catalog['name'] ?? Str::title(str_replace('_', ' ', (string) $badge->badge_key));
-        $defaultDescription = $catalog['description'] ?? '';
-        $iconPath = $catalog['icon'] ?? '';
-        $issuedAt = $badge->issued_at ? $badge->issued_at->format('Y-m-d') : '';
-
-        return [
-            'id' => $badge->id,
-            'key' => $badge->badge_key,
-            'label' => $badge->badge_name ?: $defaultName,
-            'description' => $badge->badge_description ?: $defaultDescription,
-            'reason' => $badge->reason ?? '',
-            'issued_at' => $issuedAt,
-            'icon' => $iconPath !== '' ? asset(ltrim($iconPath, '/')) : '',
-        ];
-    }
-}
-
-if (!function_exists('userBadgesPayload')) {
-    function userBadgesPayload(User $user, array $badgeCatalog): array
-    {
-        if (!safeHasTable('user_badges')) {
-            return [];
-        }
-
-        $catalogMap = collect($badgeCatalog)->keyBy('key')->all();
-
-        return $user->badges()
-            ->orderByDesc('issued_at')
-            ->orderByDesc('id')
-            ->get()
-            ->map(static fn($badge) => badgePayload($badge, $catalogMap))
-            ->values()
-            ->all();
-    }
-}
 
 if (!function_exists('isModeratorRole')) {
     function isModeratorRole(?User $user): bool
@@ -2918,7 +2879,7 @@ Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, 
         }
     }
 
-    $badges = userBadgesPayload($user, $badgeCatalog);
+    $badges = app(BadgePayloadService::class)->forUser($user, $badgeCatalog);
 
     return view('profile', [
         'projects' => $projectsList,
@@ -2975,7 +2936,7 @@ Route::post('/profile/{slug}/badges', function (Request $request, string $slug) 
         abort(503);
     }
 
-    $badges = userBadgesPayload($user->fresh(), $badgeCatalog);
+    $badges = app(BadgePayloadService::class)->forUser($user->fresh(), $badgeCatalog);
     $badgePayload = collect($badges)->firstWhere('id', $badge->id);
 
     return response()->json([
@@ -3002,7 +2963,7 @@ Route::delete('/profile/{slug}/badges/{badgeId}', function (Request $request, st
         return response()->json(['message' => 'Badge not found'], 404);
     }
 
-    $badges = userBadgesPayload($user->fresh(), $badgeCatalog);
+    $badges = app(BadgePayloadService::class)->forUser($user->fresh(), $badgeCatalog);
 
     return response()->json([
         'ok' => true,
