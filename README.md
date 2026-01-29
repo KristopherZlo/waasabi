@@ -4,205 +4,106 @@
 
 # Waasabi
 
-**Project hub for long-form writeups, Q&A, and focused reviews**
+**Forum hub for project writeups, Q&A, and focused reviews**
 
-Waasabi is a Laravel app for sharing student or maker projects, asking questions, and keeping a calm, reading-first feed with saves, reviews, and profiles.
-
----
-
-## Demo / Production
-
-- Demo: not published yet
-- Production: not published yet
+Waasabi is a calm, reading-first forum for makers and students: long project writeups and practical questions in one feed. It is built for thoughtful feedback and sustained reading rather than fast, noisy threads.
 
 ---
 
-## Project status
+## Status
 
-**Prototype**
-
-Demo data is available when database tables are not present.
-
----
-
-## Screenshots (placeholders)
-
-| Feed | Project | Q&A |
-| --- | --- | --- |
-| <img src="public/images/cover-1.svg" alt="Feed placeholder" width="300"> | <img src="public/images/cover-2.svg" alt="Project placeholder" width="300"> | <img src="public/images/cover-3.svg" alt="Q&A placeholder" width="300"> |
-
-| Profile | Read later | Admin |
-| --- | --- | --- |
-| <img src="public/images/cover-4.svg" alt="Profile placeholder" width="300"> | <img src="public/images/cover-gradient.svg" alt="Read later placeholder" width="300"> | <img src="public/images/cover-1.svg" alt="Admin placeholder" width="300"> |
+- Prototype
+- Demo/production: not published yet
+- If database tables are missing, demo content is loaded from `routes/web.php`
 
 ---
 
-## How it works (high level)
+## Implemented
 
-1. Makers publish a project writeup or a short question with media and tags.
-2. Readers browse the feed, save posts for later, and leave comments or structured reviews.
-3. Activity signals (saves, returns, upvotes) shape the showcase and reading flow.
-4. Admins moderate users, comments, reviews, and reported content.
+- Two content types: projects (long-form) and questions
+- Markdown editor (Tiptap), covers and albums, project status (in-progress / paused / done)
+- Comment threads + structured project reviews (improve / why / how)
+- Feed with filters (fresh / best / reading) and infinite loading
+- Tags, showcases, and a reading-now block
+- Search across posts, tags, and authors
+- Saves, upvotes, reading progress, follows
+- Profiles, badges, privacy/notification settings
+- Notifications with read/unread state
+- Support portal and basic moderation tools
 
----
+## Experimental
 
-## Features
+- Weighted reporting with auto-hide thresholds
+- Text moderation heuristics (low-quality detection)
+- Optional image scanning via AWS Rekognition
 
-### Readers
+## Planned
 
-* Feed with project and question streams plus filters (fresh, best, reading)
-* Read-later library with reading progress
-* Search spotlight across posts, questions, and people
-* Upvote, save, share, and report flows
-
-### Makers
-
-* Publish flow with Markdown editor (Tiptap), cover, album, tags, and status
-* Structured reviews: improve, why, and how
-* Q&A threads with answers and replies
-* Profiles with projects, questions, and comments
-
-### Admin / moderation
-
-* Role management
-* Reported posts queue
-* Comment, review, and post removal tools
-
-### Localization
-
-* English and Finnish UI
+- Move large route closures into controllers/services
+- Seed demo content via seeders
+- Add feature tests for core routes and JSON actions
 
 ---
 
-## Security & access control
-
-* Session-based auth and CSRF protection
-* Role checks for admin actions
-* Throttling for login, registration, publish, and report endpoints
-* Content reporting workflow
-
----
-
-## Tech stack
+## Technical overview
 
 ### Backend
-
-* Laravel 12
-* Blade templates
-* Eloquent ORM + Query Builder
+- PHP 8.2, Laravel 12
+- Blade templates + routes in `routes/web.php` (closures + controllers)
+- Eloquent ORM + Query Builder
+- Sessions, email verification, access policies
+- Queues and cache (database by default, Redis optional)
 
 ### Frontend
+- Vite, TypeScript, Tailwind CSS 4
+- Tiptap editor + Markdown <-> HTML (marked/turndown)
+- Progressive navigation: replace `<main>` and re-hydrate (custom)
 
-* Vite
-* Tailwind CSS
-* TypeScript
-* Tiptap editor + Markdown conversion
-* Lucide icons
+### Data and entities
+Primary tables:
+`users`, `posts`, `post_comments`, `post_reviews`, `post_upvotes`, `post_saves`, `user_follows`,
+`reading_progress`, `content_reports`, `moderation_logs`, `user_notifications`, `support_tickets`,
+`topbar_promos`.
 
-### Storage & infrastructure
+### Security and anti-spam
+- CSRF protection and server-side validation
+- Rate limiting per action (see `config/waasabi.php`)
+- Honeypot + Cloudflare Turnstile (optional)
+- Moderation and audit logs
 
-* MySQL / MariaDB
-* Database-backed sessions, cache, and queues (default)
-* Redis optional
-
----
-
-## Server requirements
-
-* PHP 8.2+ with extensions:
-  * pdo_mysql
-  * mbstring
-  * openssl
-  * json
-  * ctype
-  * fileinfo
-  * tokenizer
-  * xml
-  * bcmath (recommended)
-* Composer 2.x
-* Node.js 18+ and npm
-* MySQL / MariaDB 10.5+ (or compatible)
+### Localization
+- English and Finnish (`resources/lang/en`, `resources/lang/fi`)
 
 ---
 
 ## Quick start (local)
 
 ```bash
-git clone <your-repo-url>
-cd the-hub
+git clone https://github.com/KristopherZlo/waasabi
+cd waasabi
 
 cp .env.example .env
+# Configure DB_* in .env
+
 composer install
 npm install
 
 php artisan key:generate
-# create a database and set DB_* variables in .env
 php artisan migrate
+php artisan storage:link
 
 php artisan serve   # http://localhost:8000
-npm run dev         # assets + HMR
+npm run dev         # Vite + HMR
 ```
-
-If using queues (`QUEUE_CONNECTION=database`), run a worker in another terminal:
-
-```bash
-php artisan queue:work
-```
-
----
-
-## Build and deploy to your server
-
-```bash
-git clone <your-repo-url>
-cd the-hub
-
-cp .env.example .env
-# set APP_ENV=production
-# set APP_DEBUG=false
-# set APP_URL=https://your-domain
-# configure database credentials
-
-composer install --no-dev --optimize-autoloader
-php artisan key:generate
-php artisan migrate --force
-
-npm install
-npm run build
-```
-
-Deployment notes:
-
-* Ensure `storage/` and `bootstrap/cache/` are writable by the web server.
-* Point the web server document root to `public/`.
-* Keep `php artisan queue:work` running under supervisor or systemd if queues are used.
-
----
-
-## Useful commands
-
-* Run tests: `php artisan test`
-* Dev mode (all services): `composer run dev`
-* Rebuild frontend assets: `npm run build`
-* Clear config cache: `php artisan config:clear`
-
----
-
-## TODO
-
-* [ ] Persist comment votes server-side
-* [ ] Move demo data into seeders
-* [ ] Add feature tests for core routes and JSON endpoints
-* [ ] Improve error handling for JSON endpoints
 
 ---
 
 ## License
 
-License is not specified yet.
+Closed-source; terms are in `LICENSE`.
 
 ---
 
 ## Author
 
-Created and maintained by **KristopherZlo**.
+KristopherZlo.
