@@ -4557,7 +4557,6 @@ body[data-page='profile-settings'] .switch input:focus-visible + .switch__track 
 
 .settings-card .submit-btn {
     margin: 8px 16px 16px;
-    width: 100%;
     display: block;
     text-align: center;
     border-radius: 10px;
