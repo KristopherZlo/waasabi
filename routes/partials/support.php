@@ -19,6 +19,7 @@ use App\Http\Controllers\ReadLaterController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\UploadController;
+use App\Http\Controllers\ShowcaseController;
 use App\Http\Controllers\ModerationController;
 use App\Http\Controllers\Admin\AdminContentController;
 use App\Http\Controllers\Admin\AdminSupportController;
@@ -54,9 +55,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
-Route::get('/showcase', function () use ($showcase) {
-    return view('showcase', ['showcase' => $showcase, 'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload()]);
-})->name('showcase');
+Route::get('/showcase', [ShowcaseController::class, 'index'])->name('showcase');
 
 Route::get('/notifications', [NotificationsController::class, 'index'])
     ->middleware('auth')
