@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Models\User;
 use App\Services\CoauthorService;
+use App\Services\ContentImageService;
 use App\Services\MarkdownService;
 use App\Services\ImageUploadService;
+use App\Services\ModerationService;
 use App\Services\TextModerationService;
 use App\Http\Requests\StorePublishRequest;
 use Illuminate\Http\UploadedFile;
@@ -86,7 +88,7 @@ class PublishController extends Controller
         ]);
     }
 
-    public function store(StorePublishRequest $request, ImageUploadService $uploadService)
+    public function store(StorePublishRequest $request, ImageUploadService $uploadService, ModerationService $moderation, ContentImageService $contentImages)
     {
         if (!safeHasTable('posts')) {
             abort(503);
@@ -228,7 +230,7 @@ class PublishController extends Controller
         };
 
         if ($type === 'post') {
-            $bodyImagePaths = extractUserUploadedImagePathsFromHtml($bodyHtml);
+            $bodyImagePaths = $contentImages->extractUploadedImagePathsFromHtml($bodyHtml);
             foreach ($bodyImagePaths as $bodyImagePath) {
                 $scanResult = maybeFlagImageForModeration($bodyImagePath, $request->user(), 'editor');
                 $captureModeration($scanResult, 'editor');
@@ -350,17 +352,27 @@ class PublishController extends Controller
                 ? route('questions.show', $post->slug)
                 : route('project', $post->slug);
 
-            logModerationAction($request, 'text_moderation', 'post', $post->id, $contentUrl, [
-                'details' => $moderationDetails,
-                'meta' => [
-                    'reason' => 'text_moderation',
-                    'score' => $textModerationResult['score'] ?? null,
-                    'threshold' => $textModerationResult['threshold'] ?? null,
-                    'signals' => array_values(array_unique($signals)),
-                    'details' => $textModerationResult['details'] ?? [],
-                    'metrics' => $textModerationResult['metrics'] ?? [],
+            $summary = trim((string) ($textModerationResult['summary'] ?? ''));
+            $moderation->logSystemAction(
+                $request,
+                'text_moderation',
+                'post',
+                (string) $post->id,
+                $contentUrl,
+                $summary !== '' ? $summary : null,
+                [
+                    'details' => $moderationDetails,
+                    'actor_id' => $request->user()?->id,
+                    'meta' => [
+                        'reason' => 'text_moderation',
+                        'score' => $textModerationResult['score'] ?? null,
+                        'threshold' => $textModerationResult['threshold'] ?? null,
+                        'signals' => array_values(array_unique($signals)),
+                        'details' => $textModerationResult['details'] ?? [],
+                        'metrics' => $textModerationResult['metrics'] ?? [],
+                    ],
                 ],
-            ]);
+            );
 
             $request->user()?->sendNotification(
                 'Moderation',

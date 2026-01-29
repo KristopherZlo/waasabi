@@ -5,11 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AdminSupportTicketResponseRequest;
 use App\Models\SupportTicket;
+use App\Services\ModerationService;
 use Illuminate\Http\RedirectResponse;
 
 class AdminSupportController extends Controller
 {
-    public function respond(AdminSupportTicketResponseRequest $request, SupportTicket $ticket): RedirectResponse
+    public function respond(AdminSupportTicketResponseRequest $request, SupportTicket $ticket, ModerationService $moderation): RedirectResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -67,7 +68,7 @@ class AdminSupportController extends Controller
             );
         }
 
-        logModerationAction(
+        $moderation->logAction(
             $request,
             $moderator,
             $response !== '' ? 'support_reply' : 'support_status',

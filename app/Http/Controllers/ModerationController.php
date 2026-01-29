@@ -7,12 +7,13 @@ use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\PostReview;
 use App\Services\AutoModerationService;
+use App\Services\ModerationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ModerationController extends Controller
 {
-    public function queuePost(ModerationReasonRequest $request, Post $post): JsonResponse
+    public function queuePost(ModerationReasonRequest $request, Post $post, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -22,18 +23,18 @@ class ModerationController extends Controller
         $reason = trim((string) $data['reason']);
 
         $post->loadMissing('user');
-        if (shouldBlockModeration($moderator, $post->user)) {
+        if ($moderation->shouldBlock($moderator, $post->user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        setModerationState($post, $moderator, 'pending');
-        logModerationAction(
+        $moderation->setState($post, $moderator, 'pending');
+        $moderation->logAction(
             $request,
             $moderator,
             'queue',
             'post',
             (string) $post->id,
-            resolvePostUrl($post->slug),
+            $moderation->resolvePostUrl($post->slug),
             $reason,
             [
                 'slug' => $post->slug,
@@ -47,7 +48,7 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $post->moderation_status]);
     }
 
-    public function hidePost(ModerationReasonRequest $request, Post $post): JsonResponse
+    public function hidePost(ModerationReasonRequest $request, Post $post, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -57,18 +58,18 @@ class ModerationController extends Controller
         $reason = trim((string) $data['reason']);
 
         $post->loadMissing('user');
-        if (shouldBlockModeration($moderator, $post->user)) {
+        if ($moderation->shouldBlock($moderator, $post->user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        setModerationState($post, $moderator, 'hidden');
-        logModerationAction(
+        $moderation->setState($post, $moderator, 'hidden');
+        $moderation->logAction(
             $request,
             $moderator,
             'hide',
             'post',
             (string) $post->id,
-            resolvePostUrl($post->slug),
+            $moderation->resolvePostUrl($post->slug),
             $reason,
             [
                 'slug' => $post->slug,
@@ -82,21 +83,21 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $post->moderation_status]);
     }
 
-    public function restorePost(Request $request, Post $post): JsonResponse
+    public function restorePost(Request $request, Post $post, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        setModerationState($post, $moderator, 'approved');
-        logModerationAction(
+        $moderation->setState($post, $moderator, 'approved');
+        $moderation->logAction(
             $request,
             $moderator,
             'restore',
             'post',
             (string) $post->id,
-            resolvePostUrl($post->slug),
+            $moderation->resolvePostUrl($post->slug),
             null,
             [
                 'slug' => $post->slug,
@@ -109,7 +110,7 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $post->moderation_status]);
     }
 
-    public function nsfwPost(Request $request, Post $post): JsonResponse
+    public function nsfwPost(Request $request, Post $post, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -117,23 +118,23 @@ class ModerationController extends Controller
         }
 
         $post->loadMissing('user');
-        if (shouldBlockModeration($moderator, $post->user)) {
+        if ($moderation->shouldBlock($moderator, $post->user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        setModerationState($post, $moderator, 'approved');
+        $moderation->setState($post, $moderator, 'approved');
         if (safeHasColumn('posts', 'nsfw')) {
             $post->nsfw = true;
             $post->save();
         }
 
-        logModerationAction(
+        $moderation->logAction(
             $request,
             $moderator,
             'nsfw',
             'post',
             (string) $post->id,
-            resolvePostUrl($post->slug),
+            $moderation->resolvePostUrl($post->slug),
             null,
             [
                 'slug' => $post->slug,
@@ -146,7 +147,7 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $post->moderation_status]);
     }
 
-    public function queueComment(ModerationReasonRequest $request, PostComment $comment): JsonResponse
+    public function queueComment(ModerationReasonRequest $request, PostComment $comment, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -156,13 +157,13 @@ class ModerationController extends Controller
         $reason = trim((string) $data['reason']);
 
         $comment->loadMissing('user');
-        if (shouldBlockModeration($moderator, $comment->user)) {
+        if ($moderation->shouldBlock($moderator, $comment->user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        setModerationState($comment, $moderator, 'pending');
-        $contentUrl = resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
-        logModerationAction(
+        $moderation->setState($comment, $moderator, 'pending');
+        $contentUrl = $moderation->resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
+        $moderation->logAction(
             $request,
             $moderator,
             'queue',
@@ -181,7 +182,7 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $comment->moderation_status]);
     }
 
-    public function hideComment(ModerationReasonRequest $request, PostComment $comment): JsonResponse
+    public function hideComment(ModerationReasonRequest $request, PostComment $comment, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -191,13 +192,13 @@ class ModerationController extends Controller
         $reason = trim((string) $data['reason']);
 
         $comment->loadMissing('user');
-        if (shouldBlockModeration($moderator, $comment->user)) {
+        if ($moderation->shouldBlock($moderator, $comment->user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        setModerationState($comment, $moderator, 'hidden');
-        $contentUrl = resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
-        logModerationAction(
+        $moderation->setState($comment, $moderator, 'hidden');
+        $contentUrl = $moderation->resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
+        $moderation->logAction(
             $request,
             $moderator,
             'hide',
@@ -216,16 +217,16 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $comment->moderation_status]);
     }
 
-    public function restoreComment(Request $request, PostComment $comment): JsonResponse
+    public function restoreComment(Request $request, PostComment $comment, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        setModerationState($comment, $moderator, 'approved');
-        $contentUrl = resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
-        logModerationAction(
+        $moderation->setState($comment, $moderator, 'approved');
+        $contentUrl = $moderation->resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
+        $moderation->logAction(
             $request,
             $moderator,
             'restore',
@@ -243,7 +244,7 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $comment->moderation_status]);
     }
 
-    public function queueReview(ModerationReasonRequest $request, PostReview $review): JsonResponse
+    public function queueReview(ModerationReasonRequest $request, PostReview $review, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -253,13 +254,13 @@ class ModerationController extends Controller
         $reason = trim((string) $data['reason']);
 
         $review->loadMissing('user');
-        if (shouldBlockModeration($moderator, $review->user)) {
+        if ($moderation->shouldBlock($moderator, $review->user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        setModerationState($review, $moderator, 'pending');
-        $contentUrl = resolvePostUrl($review->post_slug) . '#review-' . $review->id;
-        logModerationAction(
+        $moderation->setState($review, $moderator, 'pending');
+        $contentUrl = $moderation->resolvePostUrl($review->post_slug) . '#review-' . $review->id;
+        $moderation->logAction(
             $request,
             $moderator,
             'queue',
@@ -278,7 +279,7 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $review->moderation_status]);
     }
 
-    public function hideReview(ModerationReasonRequest $request, PostReview $review): JsonResponse
+    public function hideReview(ModerationReasonRequest $request, PostReview $review, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -288,13 +289,13 @@ class ModerationController extends Controller
         $reason = trim((string) $data['reason']);
 
         $review->loadMissing('user');
-        if (shouldBlockModeration($moderator, $review->user)) {
+        if ($moderation->shouldBlock($moderator, $review->user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        setModerationState($review, $moderator, 'hidden');
-        $contentUrl = resolvePostUrl($review->post_slug) . '#review-' . $review->id;
-        logModerationAction(
+        $moderation->setState($review, $moderator, 'hidden');
+        $contentUrl = $moderation->resolvePostUrl($review->post_slug) . '#review-' . $review->id;
+        $moderation->logAction(
             $request,
             $moderator,
             'hide',
@@ -313,16 +314,16 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $review->moderation_status]);
     }
 
-    public function restoreReview(Request $request, PostReview $review): JsonResponse
+    public function restoreReview(Request $request, PostReview $review, ModerationService $moderation): JsonResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        setModerationState($review, $moderator, 'approved');
-        $contentUrl = resolvePostUrl($review->post_slug) . '#review-' . $review->id;
-        logModerationAction(
+        $moderation->setState($review, $moderator, 'approved');
+        $contentUrl = $moderation->resolvePostUrl($review->post_slug) . '#review-' . $review->id;
+        $moderation->logAction(
             $request,
             $moderator,
             'restore',

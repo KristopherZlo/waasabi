@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AdminBanRequest;
 use App\Http\Requests\AdminRoleRequest;
 use App\Models\User;
+use App\Services\ModerationService;
 use Illuminate\Http\RedirectResponse;
 
 class AdminUserController extends Controller
@@ -24,7 +25,7 @@ class AdminUserController extends Controller
         return redirect()->route('admin');
     }
 
-    public function toggleBan(AdminBanRequest $request, User $user): RedirectResponse
+    public function toggleBan(AdminBanRequest $request, User $user, ModerationService $moderation): RedirectResponse
     {
         $moderator = $request->user();
         if (!$moderator) {
@@ -37,7 +38,7 @@ class AdminUserController extends Controller
         if ($moderator->id === $user->id) {
             return redirect()->back();
         }
-        if (shouldBlockModeration($moderator, $user)) {
+        if ($moderation->shouldBlock($moderator, $user)) {
             abort(403);
         }
 
@@ -51,7 +52,7 @@ class AdminUserController extends Controller
         $action = $nowBanned ? 'ban' : 'unban';
         $contentUrl = !empty($user->slug) ? route('profile.show', $user->slug) : null;
 
-        logModerationAction(
+        $moderation->logAction(
             $request,
             $moderator,
             $action,

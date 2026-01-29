@@ -29,7 +29,9 @@ use App\Services\FeedService;
 use App\Services\ImageUploadService;
 use App\Services\VisibilityService;
 use App\Services\MakerPromotionService;
+use App\Services\ModerationService;
 use App\Services\TextModerationService;
+use App\Services\TopbarPromoService;
 use App\Services\UserSlugService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -152,378 +154,6 @@ if (!function_exists('verifyCaptcha')) {
 }
 
 $badgeCatalog = app(BadgeCatalogService::class)->all();
-
-if (!function_exists('isModeratorRole')) {
-    function isModeratorRole(?User $user): bool
-    {
-        return $user ? $user->hasRole('moderator') : false;
-    }
-}
-
-if (!function_exists('getTopbarPromos')) {
-    function getTopbarPromos(bool $onlyActive = true): array
-    {
-        if (!safeHasTable('topbar_promos')) {
-            return [];
-        }
-        $query = DB::table('topbar_promos')->select('id', 'label', 'url', 'is_active', 'sort_order');
-        if ($onlyActive) {
-            $query->where('is_active', true);
-        }
-        return $query
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->get()
-            ->map(fn ($row) => [
-                'id' => (int) $row->id,
-                'label' => (string) $row->label,
-                'url' => (string) $row->url,
-                'is_active' => (bool) $row->is_active,
-                'sort_order' => (int) $row->sort_order,
-            ])
-            ->all();
-    }
-}
-
-if (!function_exists('pickTopbarPromo')) {
-    function pickTopbarPromo(): ?array
-    {
-        if (!safeHasTable('topbar_promos')) {
-            return null;
-        }
-        $hasStartsAt = safeHasColumn('topbar_promos', 'starts_at');
-        $hasEndsAt = safeHasColumn('topbar_promos', 'ends_at');
-        $hasMaxImpressions = safeHasColumn('topbar_promos', 'max_impressions');
-        $hasImpressionsCount = safeHasColumn('topbar_promos', 'impressions_count');
-
-        $now = now();
-        $attempts = 3;
-        while ($attempts > 0) {
-            $attempts -= 1;
-            $query = TopbarPromo::query()->where('is_active', true);
-            if ($hasStartsAt) {
-                $query->where(function ($sub) use ($now) {
-                    $sub->whereNull('starts_at')->orWhere('starts_at', '<=', $now);
-                });
-            }
-            if ($hasEndsAt) {
-                $query->where(function ($sub) use ($now) {
-                    $sub->whereNull('ends_at')->orWhere('ends_at', '>=', $now);
-                });
-            }
-            if ($hasMaxImpressions && $hasImpressionsCount) {
-                $query->where(function ($sub) {
-                    $sub->whereNull('max_impressions')->orWhereColumn('impressions_count', '<', 'max_impressions');
-                });
-            }
-            $promo = $query->inRandomOrder()->first();
-
-            if (!$promo) {
-                return null;
-            }
-
-            $updated = 1;
-            if ($hasImpressionsCount) {
-                $updateQuery = TopbarPromo::query()->where('id', $promo->id);
-                if ($hasMaxImpressions) {
-                    $updateQuery->where(function ($sub) {
-                        $sub->whereNull('max_impressions')->orWhereColumn('impressions_count', '<', 'max_impressions');
-                    });
-                }
-                $updated = $updateQuery->update(['impressions_count' => DB::raw('impressions_count + 1')]);
-            }
-
-            if ($updated > 0) {
-                return [
-                    'id' => (int) $promo->id,
-                    'label' => (string) $promo->label,
-                    'url' => (string) $promo->url,
-                ];
-            }
-        }
-
-        return null;
-    }
-}
-
-if (!function_exists('resolveModerationStoragePath')) {
-    function resolveModerationStoragePath(string $publicPath): ?string
-    {
-        $path = ltrim($publicPath, '/');
-        if (!Str::startsWith($path, 'storage/')) {
-            return null;
-        }
-        $relative = Str::after($path, 'storage/');
-        return storage_path('app/public/' . $relative);
-    }
-}
-
-if (!function_exists('isUserUploadedMediaPath')) {
-    function isUserUploadedMediaPath(string $publicPath): bool
-    {
-        $path = ltrim($publicPath, '/');
-        if (!Str::startsWith($path, 'storage/')) {
-            return false;
-        }
-        $relative = Str::after($path, 'storage/');
-        return Str::startsWith($relative, 'uploads/');
-    }
-}
-
-if (!function_exists('formatModerationDetails')) {
-    function formatModerationDetails(array $labels, string $context): string
-    {
-        $parts = [];
-        foreach ($labels as $label) {
-            $name = (string) ($label['name'] ?? '');
-            $parent = (string) ($label['parent'] ?? '');
-            $confidence = $label['confidence'] ?? null;
-            if ($name === '' && $parent === '') {
-                continue;
-            }
-            $labelText = $name;
-            if ($parent !== '' && $parent !== $name) {
-                $labelText = $parent . ' / ' . $name;
-            }
-            if (is_numeric($confidence)) {
-                $labelText .= ' ' . number_format((float) $confidence, 1) . '%';
-            }
-            $parts[] = $labelText;
-        }
-        $prefix = $context !== '' ? ('Rekognition (' . $context . ')') : 'Rekognition';
-        $body = implode('; ', $parts);
-        return $body !== '' ? ($prefix . ': ' . $body) : $prefix;
-    }
-}
-
-if (!function_exists('formatModerationFallbackDetails')) {
-    function formatModerationFallbackDetails(?string $reason, string $context): string
-    {
-        $reason = $reason ? str_replace('_', ' ', $reason) : 'unknown';
-        $prefix = $context !== '' ? ('Rekognition (' . $context . ')') : 'Rekognition';
-        return $prefix . ' unavailable: ' . $reason;
-    }
-}
-
-if (!function_exists('maybeFlagImageForModeration')) {
-    function maybeFlagImageForModeration(string $publicPath, ?User $user, string $context): array
-    {
-        $result = [
-            'status' => 'skipped',
-            'flagged' => false,
-            'labels' => [],
-            'reason' => null,
-        ];
-
-        if (!config('services.rekognition.enabled')) {
-            $result['reason'] = 'disabled';
-            return $result;
-        }
-
-        $fallbackAction = (string) config('services.rekognition.fallback_action', 'mod');
-        $fallbackAction = in_array($fallbackAction, ['post', 'nsfw', 'mod'], true) ? $fallbackAction : 'mod';
-
-        $normalized = ltrim($publicPath, '/');
-        if (Str::startsWith($normalized, 'storage/')) {
-            $publicPath = 'storage/' . Str::after($normalized, 'storage/');
-        } else {
-            $publicPath = $normalized;
-        }
-
-        if ($user && $user->isAdmin()) {
-            $result['reason'] = 'admin_skip';
-            return $result;
-        }
-
-        if (!isUserUploadedMediaPath($publicPath)) {
-            $result['reason'] = 'not_user_upload';
-            return $result;
-        }
-
-        $absolutePath = resolveModerationStoragePath($publicPath);
-        if ($absolutePath === null) {
-            $result['status'] = 'error';
-            $result['reason'] = 'path_unresolvable';
-            return $result;
-        }
-
-        try {
-            $service = app(ContentModerationService::class);
-            $scan = $service->scanImageForSexualContent($absolutePath);
-        } catch (\Throwable $exception) {
-            Log::warning('Moderation scan failed.', ['error' => $exception->getMessage()]);
-            $result['status'] = 'error';
-            $result['reason'] = 'scan_exception';
-            return $result;
-        }
-
-        if (is_array($scan)) {
-            $result = array_merge($result, $scan);
-        }
-
-        if (!safeHasTable('content_reports')) {
-            return $result;
-        }
-
-        $status = (string) ($result['status'] ?? '');
-        $labels = $result['labels'] ?? [];
-        $shouldLog = !empty($labels) || ($fallbackAction === 'mod' && $status !== 'ok');
-
-        if (!$shouldLog) {
-            return $result;
-        }
-
-        $alreadyLogged = ContentReport::query()
-            ->where('content_type', 'content')
-            ->where('content_url', $publicPath)
-            ->where('reason', 'admin_flag')
-            ->exists();
-
-        if ($alreadyLogged) {
-            return $result;
-        }
-
-        $details = !empty($labels)
-            ? formatModerationDetails($labels, $context)
-            : formatModerationFallbackDetails($result['reason'] ?? null, $context);
-
-        ContentReport::create([
-            'user_id' => $user?->id,
-            'content_type' => 'content',
-            'content_id' => null,
-            'content_url' => $publicPath,
-            'reason' => 'admin_flag',
-            'details' => $details,
-        ]);
-
-        return $result;
-    }
-}
-
-if (!function_exists('extractUserUploadedImagePathsFromHtml')) {
-    function extractUserUploadedImagePathsFromHtml(string $html): array
-    {
-        if (trim($html) === '') {
-            return [];
-        }
-
-        $matches = [];
-        preg_match_all('/<img[^>]+src=["\\\']([^"\\\']+)["\\\']/i', $html, $matches);
-        $sources = $matches[1] ?? [];
-        if (empty($sources)) {
-            return [];
-        }
-
-        $paths = [];
-        foreach ($sources as $source) {
-            $source = trim((string) $source);
-            if ($source === '') {
-                continue;
-            }
-            $path = parse_url($source, PHP_URL_PATH);
-            $path = is_string($path) && $path !== '' ? $path : $source;
-            $normalized = $path;
-            $storagePos = strpos($normalized, '/storage/');
-            if ($storagePos !== false) {
-                $normalized = substr($normalized, $storagePos + 1);
-            } else {
-                $normalized = ltrim($normalized, '/');
-            }
-            if (!Str::startsWith($normalized, 'storage/')) {
-                continue;
-            }
-            $paths[] = $normalized;
-        }
-
-        return array_values(array_unique($paths));
-    }
-}
-
-if (!function_exists('resolveModerationLocation')) {
-    function resolveModerationLocation(Request $request): ?string
-    {
-        $country = $request->header('CF-IPCountry')
-            ?? $request->header('X-Geo-Country')
-            ?? $request->header('X-Appengine-Country')
-            ?? $request->header('X-Country');
-        $country = is_string($country) ? trim($country) : null;
-        if ($country === '' || $country === 'XX') {
-            $country = null;
-        }
-
-        $region = $request->header('X-Geo-Region') ?? $request->header('X-Region');
-        $region = is_string($region) ? trim($region) : null;
-        if ($region === '') {
-            $region = null;
-        }
-
-        if ($country && $region) {
-            return $country . '-' . $region;
-        }
-
-        return $country ?: $region;
-    }
-}
-
-if (!function_exists('logModerationAction')) {
-    function logModerationAction(Request $request, User $moderator, string $action, string $contentType, ?string $contentId, ?string $contentUrl, ?string $notes = null, array $meta = []): void
-    {
-        if (!safeHasTable('moderation_logs')) {
-            return;
-        }
-
-        if (!isModeratorRole($moderator)) {
-            return;
-        }
-
-        ModerationLog::create([
-            'moderator_id' => $moderator->id,
-            'moderator_name' => $moderator->name ?? 'moderator',
-            'moderator_role' => $moderator->role ?? 'moderator',
-            'action' => $action,
-            'content_type' => $contentType,
-            'content_id' => $contentId,
-            'content_url' => $contentUrl,
-            'notes' => $notes,
-            'ip_address' => $request->ip(),
-            'location' => resolveModerationLocation($request),
-            'user_agent' => $request->userAgent(),
-            'meta' => $meta,
-        ]);
-    }
-}
-
-if (!function_exists('resolvePostUrl')) {
-    function resolvePostUrl(string $slug): string
-    {
-        if (safeHasTable('posts')) {
-            $post = Post::where('slug', $slug)->first();
-            if ($post?->type === 'question') {
-                return route('questions.show', $slug);
-            }
-        }
-        return route('project', $slug);
-    }
-}
-
-if (!function_exists('shouldBlockModeration')) {
-    function shouldBlockModeration(User $actor, ?User $owner): bool
-    {
-        return $owner !== null && $actor->roleKey() === 'moderator' && $owner->isAdmin();
-    }
-}
-
-if (!function_exists('setModerationState')) {
-    function setModerationState($model, ?User $actor, string $status): void
-    {
-        $isHidden = $status !== 'approved';
-        $model->is_hidden = $isHidden;
-        $model->moderation_status = $status;
-        $model->hidden_at = $isHidden ? now() : null;
-        $model->hidden_by = $isHidden ? ($actor?->id) : null;
-        $model->save();
-    }
-}
 
 $generateUserSlug = static function (string $name): string {
     return app(UserSlugService::class)->generate($name);
@@ -1580,7 +1210,7 @@ $searchIndex = Cache::remember('search.index.v1', now()->addMinutes(5), function
     return $items;
 });
 
-$topbarPromo = pickTopbarPromo();
+$topbarPromo = app(TopbarPromoService::class)->pickPromo();
 
 view()->composer(['layouts.app', 'layouts.support'], function ($view) {
     $payload = app(\App\Services\NotificationService::class)
@@ -1946,7 +1576,7 @@ Route::post('/projects/{slug}/comments', function (StoreCommentRequest $request,
             'user_id' => $user->id,
             'content_type' => 'comment',
             'content_id' => (string) $comment->id,
-            'content_url' => resolvePostUrl($slug) . '#comment-' . $comment->id,
+            'content_url' => app(ModerationService::class)->resolvePostUrl($slug) . '#comment-' . $comment->id,
             'reason' => 'admin_flag',
             'details' => $detailText,
         ]);
@@ -2173,7 +1803,7 @@ Route::post('/projects/{slug}/reviews', function (StoreReviewRequest $request, s
             'user_id' => $user->id,
             'content_type' => 'review',
             'content_id' => (string) $review->id,
-            'content_url' => resolvePostUrl($slug) . '#review-' . $review->id,
+            'content_url' => app(ModerationService::class)->resolvePostUrl($slug) . '#review-' . $review->id,
             'reason' => 'admin_flag',
             'details' => $detailText,
         ]);
@@ -3751,7 +3381,7 @@ Route::middleware(['auth', 'can:moderate'])->group(function () {
                         $post = $contextPosts->get($comment->post_slug);
                         $postUrl = $post
                             ? ($post->type === 'question' ? route('questions.show', $comment->post_slug) : route('project', $comment->post_slug))
-                            : ($comment->post_slug ? resolvePostUrl($comment->post_slug) : $contentUrl);
+                            : ($comment->post_slug ? app(ModerationService::class)->resolvePostUrl($comment->post_slug) : $contentUrl);
 
                         return [
                             'type' => 'comment',
@@ -3788,7 +3418,7 @@ Route::middleware(['auth', 'can:moderate'])->group(function () {
                         $post = $contextPosts->get($review->post_slug);
                         $postUrl = $post
                             ? ($post->type === 'question' ? route('questions.show', $review->post_slug) : route('project', $review->post_slug))
-                            : ($review->post_slug ? resolvePostUrl($review->post_slug) : $contentUrl);
+                            : ($review->post_slug ? app(ModerationService::class)->resolvePostUrl($review->post_slug) : $contentUrl);
 
                         return [
                             'type' => 'review',

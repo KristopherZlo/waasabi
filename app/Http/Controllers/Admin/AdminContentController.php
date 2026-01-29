@@ -7,21 +7,22 @@ use App\Http\Requests\AdminDeleteRequest;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\PostReview;
+use App\Services\ModerationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 
 class AdminContentController extends Controller
 {
-    public function deleteComment(AdminDeleteRequest $request, PostComment $comment): JsonResponse|RedirectResponse
+    public function deleteComment(AdminDeleteRequest $request, PostComment $comment, ModerationService $moderation): JsonResponse|RedirectResponse
     {
         $data = $request->validated();
         $reason = trim((string) $data['reason']);
         $moderator = $request->user();
         $comment->loadMissing('user');
-        $contentUrl = resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
+        $contentUrl = $moderation->resolvePostUrl($comment->post_slug) . '#comment-' . $comment->id;
 
         if ($moderator) {
-            logModerationAction(
+            $moderation->logAction(
                 $request,
                 $moderator,
                 'delete',
@@ -46,16 +47,16 @@ class AdminContentController extends Controller
         return redirect()->route('admin');
     }
 
-    public function deleteReview(AdminDeleteRequest $request, PostReview $review): JsonResponse|RedirectResponse
+    public function deleteReview(AdminDeleteRequest $request, PostReview $review, ModerationService $moderation): JsonResponse|RedirectResponse
     {
         $data = $request->validated();
         $reason = trim((string) $data['reason']);
         $moderator = $request->user();
         $review->loadMissing('user');
-        $contentUrl = resolvePostUrl($review->post_slug) . '#review-' . $review->id;
+        $contentUrl = $moderation->resolvePostUrl($review->post_slug) . '#review-' . $review->id;
 
         if ($moderator) {
-            logModerationAction(
+            $moderation->logAction(
                 $request,
                 $moderator,
                 'delete',
@@ -80,16 +81,16 @@ class AdminContentController extends Controller
         return redirect()->route('admin');
     }
 
-    public function deletePost(AdminDeleteRequest $request, Post $post): JsonResponse|RedirectResponse
+    public function deletePost(AdminDeleteRequest $request, Post $post, ModerationService $moderation): JsonResponse|RedirectResponse
     {
         $data = $request->validated();
         $reason = trim((string) $data['reason']);
         $moderator = $request->user();
         $post->loadMissing('user');
-        $contentUrl = resolvePostUrl($post->slug);
+        $contentUrl = $moderation->resolvePostUrl($post->slug);
 
         if ($moderator) {
-            logModerationAction(
+            $moderation->logAction(
                 $request,
                 $moderator,
                 'delete',
