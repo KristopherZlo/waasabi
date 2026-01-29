@@ -15,6 +15,7 @@ use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Requests\StoreCommentRequest;
+use App\Http\Requests\StoreReviewRequest;
 use App\Services\AutoModerationService;
 use App\Services\BadgeCatalogService;
 use App\Services\ContentModerationService;
@@ -2586,16 +2587,11 @@ Route::get('/projects/{slug}/comments/chunk', function (Request $request, string
     ]);
 })->name('project.comments.chunk');
 
-Route::post('/projects/{slug}/reviews', function (Request $request, string $slug) use ($postSlugExists) {
+Route::post('/projects/{slug}/reviews', function (StoreReviewRequest $request, string $slug) use ($postSlugExists) {
     if (!$postSlugExists($slug)) {
         return response()->json(['message' => 'Post not found'], 404);
     }
-
-    $request->validate([
-        'improve' => ['required', 'string', 'max:2000'],
-        'why' => ['required', 'string', 'max:2000'],
-        'how' => ['required', 'string', 'max:2000'],
-    ]);
+    $data = $request->validated();
 
     $user = $request->user();
     if (!$user) {
@@ -2619,9 +2615,9 @@ Route::post('/projects/{slug}/reviews', function (Request $request, string $slug
         }
     }
 
-    $improve = (string) $request->input('improve');
-    $why = (string) $request->input('why');
-    $how = (string) $request->input('how');
+    $improve = (string) ($data['improve'] ?? '');
+    $why = (string) ($data['why'] ?? '');
+    $how = (string) ($data['how'] ?? '');
     $reviewText = trim(implode("\n\n", array_filter([$improve, $why, $how], static fn ($value) => trim((string) $value) !== '')));
     $textModerationResult = [
         'flagged' => false,
