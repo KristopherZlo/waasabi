@@ -12,6 +12,8 @@ use App\Models\User;
 use App\Http\Controllers\NotificationsController;
 use App\Http\Controllers\PublishController;
 use App\Http\Controllers\ProfileSettingsController;
+use App\Http\Controllers\ProfileBadgeController;
+use App\Http\Controllers\ProfileFollowController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SupportTicketController;
@@ -2433,138 +2435,17 @@ Route::get('/profile/{slug}', function (string $slug) use ($projects, $profile, 
     ]);
 })->name('profile.show');
 
-Route::post('/profile/{slug}/badges', function (Request $request, string $slug) use ($badgeCatalog) {
-    $viewer = $request->user();
-    if (!$viewer || !$viewer->isAdmin()) {
-        abort(403);
-    }
-    if (!safeHasTable('users')) {
-        abort(503);
-    }
+Route::post('/profile/{slug}/badges', [ProfileBadgeController::class, 'grant'])
+    ->middleware(['auth', 'throttle:10,1'])
+    ->name('profile.badges.grant');
 
-    $data = $request->validate([
-        'badge_key' => ['required', 'string', 'max:100'],
-        'name' => ['nullable', 'string', 'max:120'],
-        'description' => ['nullable', 'string', 'max:1000'],
-        'reason' => ['nullable', 'string', 'max:255'],
-    ]);
+Route::delete('/profile/{slug}/badges/{badgeId}', [ProfileBadgeController::class, 'revoke'])
+    ->middleware(['auth', 'throttle:10,1'])
+    ->name('profile.badges.revoke');
 
-    $user = User::where('slug', $slug)->firstOrFail();
-    $badgeKey = $data['badge_key'];
-    $catalogMap = collect($badgeCatalog)->keyBy('key');
-    $catalog = $catalogMap->get($badgeKey);
-    if (!$catalog) {
-        return response()->json(['message' => 'Unknown badge'], 422);
-    }
-
-    try {
-        $badge = $user->grantBadge($badgeKey, [
-            'name' => $data['name'] ?? null,
-            'description' => $data['description'] ?? null,
-            'reason' => $data['reason'] ?? null,
-            'issued_by' => $viewer,
-            'issued_at' => now(),
-            'catalog' => $catalog,
-            'link' => route('profile.show', $user->slug),
-        ], true);
-    } catch (\InvalidArgumentException $exception) {
-        return response()->json(['message' => 'Unknown badge'], 422);
-    } catch (\RuntimeException $exception) {
-        abort(503);
-    }
-
-    $badges = app(BadgePayloadService::class)->forUser($user->fresh(), $badgeCatalog);
-    $badgePayload = collect($badges)->firstWhere('id', $badge->id);
-
-    return response()->json([
-        'ok' => true,
-        'badge_id' => $badge->id,
-        'badge' => $badgePayload,
-        'badges' => $badges,
-    ]);
-})->middleware(['auth', 'throttle:10,1'])->name('profile.badges.grant');
-
-Route::delete('/profile/{slug}/badges/{badgeId}', function (Request $request, string $slug, int $badgeId) use ($badgeCatalog) {
-    $viewer = $request->user();
-    if (!$viewer || !$viewer->isAdmin()) {
-        abort(403);
-    }
-    if (!safeHasTable('user_badges')) {
-        abort(503);
-    }
-
-    $user = User::where('slug', $slug)->firstOrFail();
-    $deleted = $user->revokeBadge($badgeId);
-
-    if (!$deleted) {
-        return response()->json(['message' => 'Badge not found'], 404);
-    }
-
-    $badges = app(BadgePayloadService::class)->forUser($user->fresh(), $badgeCatalog);
-
-    return response()->json([
-        'ok' => true,
-        'badge_id' => $badgeId,
-        'badges' => $badges,
-    ]);
-})->middleware(['auth', 'throttle:10,1'])->name('profile.badges.revoke');
-
-Route::post('/profile/{slug}/follow', function (Request $request, string $slug) {
-    $viewer = $request->user();
-    if (!$viewer) {
-        if ($request->expectsJson()) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        return redirect()->route('login');
-    }
-    if (!safeHasTable('user_follows')) {
-        abort(503);
-    }
-    $user = User::where('slug', $slug)->firstOrFail();
-    if ($user->id === $viewer->id) {
-        if ($request->expectsJson()) {
-            return response()->json(['message' => 'Cannot follow yourself'], 400);
-        }
-        return redirect()->back();
-    }
-    if (safeHasColumn('users', 'connections_allow_follow') && !$user->connections_allow_follow) {
-        if ($request->expectsJson()) {
-            return response()->json(['message' => 'Follow disabled'], 403);
-        }
-        return redirect()->back();
-    }
-
-    $existing = DB::table('user_follows')
-        ->where('follower_id', $viewer->id)
-        ->where('following_id', $user->id)
-        ->exists();
-
-    if ($existing) {
-        DB::table('user_follows')
-            ->where('follower_id', $viewer->id)
-            ->where('following_id', $user->id)
-            ->delete();
-    } else {
-        DB::table('user_follows')->insert([
-            'follower_id' => $viewer->id,
-            'following_id' => $user->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-    }
-
-    if ($request->expectsJson()) {
-        $followersCount = DB::table('user_follows')->where('following_id', $user->id)->count();
-        $followingCount = DB::table('user_follows')->where('follower_id', $user->id)->count();
-        return response()->json([
-            'is_following' => !$existing,
-            'followers_count' => $followersCount,
-            'following_count' => $followingCount,
-        ]);
-    }
-
-    return redirect()->back();
-})->middleware(['auth', 'verified', 'throttle:profile-follow'])->name('profile.follow');
+Route::post('/profile/{slug}/follow', [ProfileFollowController::class, 'toggle'])
+    ->middleware(['auth', 'verified', 'throttle:profile-follow'])
+    ->name('profile.follow');
 
 Route::get('/showcase', function () use ($showcase) {
     return view('showcase', ['showcase' => $showcase, 'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload()]);
