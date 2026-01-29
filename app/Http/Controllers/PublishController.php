@@ -290,7 +290,7 @@ class PublishController extends Controller
         $post->slug = $slug;
         $post->body_markdown = $bodyMarkdown;
         $post->body_html = $bodyHtml;
-        $post->read_time = $readMinutes;
+        $post->read_time_minutes = $readMinutes;
         $post->status = $status;
         $post->nsfw = $nsfw;
         $post->tags = $tags;
