@@ -150,38 +150,6 @@ if (!function_exists('verifyCaptcha')) {
     }
 }
 
-if (!function_exists('supportStaffUsers')) {
-    function supportStaffUsers()
-    {
-        if (!safeHasTable('users')) {
-            return collect();
-        }
-        $roles = ['support', 'moderator', 'admin'];
-        $query = User::query()->whereIn('role', $roles);
-        if (safeHasColumn('users', 'is_banned')) {
-            $query->where('is_banned', false);
-        }
-        return $query->get();
-    }
-}
-
-if (!function_exists('notifySupportStaff')) {
-    function notifySupportStaff(string $type, string $text, ?string $link = null, ?int $excludeUserId = null): void
-    {
-        if (!safeHasTable('user_notifications')) {
-            return;
-        }
-
-        $staffUsers = supportStaffUsers();
-        foreach ($staffUsers as $staff) {
-            if ($excludeUserId && $staff->id === $excludeUserId) {
-                continue;
-            }
-            $staff->sendNotification($type, $text, $link);
-        }
-    }
-}
-
 $badgeCatalog = app(BadgeCatalogService::class)->all();
 
 if (!function_exists('isModeratorRole')) {

@@ -3,12 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\SupportTicket;
+use App\Services\SupportStaffService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class SupportTicketController extends Controller
 {
-    public function store(Request $request)
+    public function store(Request $request, SupportStaffService $supportStaff)
     {
         $user = $request->user();
         if (!$user) {
@@ -43,7 +44,7 @@ class SupportTicketController extends Controller
             : __('ui.support.ticket_toast_created_generic');
 
         if ($ticketId > 0) {
-            notifySupportStaff(
+            $supportStaff->notify(
                 __('ui.support.title'),
                 __('ui.support.notification_new_ticket', ['id' => $ticketId, 'subject' => $ticket->subject]),
                 route('support', ['tab' => 'tickets', 'ticket' => $ticketId]),
@@ -54,7 +55,7 @@ class SupportTicketController extends Controller
         return redirect()->route('support', ['tab' => 'tickets'])->with('toast', $toast);
     }
 
-    public function storeMessage(Request $request, SupportTicket $ticket)
+    public function storeMessage(Request $request, SupportTicket $ticket, SupportStaffService $supportStaff)
     {
         $user = $request->user();
         if (!$user) {
@@ -115,7 +116,7 @@ class SupportTicketController extends Controller
                 );
             }
         } else {
-            notifySupportStaff(
+            $supportStaff->notify(
                 __('ui.support.title'),
                 __('ui.support.notification_user_message', ['id' => $ticket->id, 'subject' => $ticket->subject]),
                 route('support', ['tab' => 'tickets', 'ticket' => $ticket->id]),
