@@ -10,6 +10,30 @@ Waasabi is a calm, reading-first forum for makers and students: long project wri
 
 ---
 
+<details>
+  <summary><strong>Screenshots</strong></summary>
+
+  ![Feed page](screenshots/Feed_page.png)
+  ![Feed page filters](screenshots/Feed_page_filters.png)
+  ![Feed page filters and user menu](screenshots/Feed_page_filters_user_menu.png)
+  ![Knowledge base](screenshots/Knowledge_base.png)
+  ![Knowledge base article](screenshots/Knowledge_base_knowledge_page.png)
+  ![Knowledge base ticket](screenshots/Knowledge_base_ticket_page.png)
+  ![Post page](screenshots/Post_page.png)
+  ![Post page discussion](screenshots/Post_page_discussion.png)
+  ![Post page text](screenshots/Post_page_post_text.png)
+  ![Post page review](screenshots/Post_page_review.png)
+  ![Profile page](screenshots/Profile_page.png)
+  ![Profile badge card](screenshots/Profile_page_badge_card.png)
+  ![Profile page with badges](screenshots/Profile_page_with_badges.png)
+  ![Questions page notifications](screenshots/Questions_page_notifications_menu.png)
+  ![Questions page settings](screenshots/Questions_page_settings.png)
+  ![Search](screenshots/Search.png)
+  ![Showcase](screenshots/Showcase_page.png)
+</details>
+
+---
+
 ## Status
 
 - Prototype
@@ -95,30 +119,6 @@ php artisan storage:link
 php artisan serve   # http://localhost:8000
 npm run dev         # Vite + HMR
 ```
-
----
-
-<details>
-  <summary><strong>Screenshots</strong></summary>
-
-  ![Feed page](screenshots/Feed_page.png)
-  ![Feed page filters](screenshots/Feed_page_filters.png)
-  ![Feed page filters and user menu](screenshots/Feed_page_filters_user_menu.png)
-  ![Knowledge base](screenshots/Knowledge_base.png)
-  ![Knowledge base article](screenshots/Knowledge_base_knowledge_page.png)
-  ![Knowledge base ticket](screenshots/Knowledge_base_ticket_page.png)
-  ![Post page](screenshots/Post_page.png)
-  ![Post page discussion](screenshots/Post_page_discussion.png)
-  ![Post page text](screenshots/Post_page_post_text.png)
-  ![Post page review](screenshots/Post_page_review.png)
-  ![Profile page](screenshots/Profile_page.png)
-  ![Profile badge card](screenshots/Profile_page_badge_card.png)
-  ![Profile page with badges](screenshots/Profile_page_with_badges.png)
-  ![Questions page notifications](screenshots/Questions_page_notifications_menu.png)
-  ![Questions page settings](screenshots/Questions_page_settings.png)
-  ![Search](screenshots/Search.png)
-  ![Showcase](screenshots/Showcase_page.png)
-</details>
 
 ---
 
