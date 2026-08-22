@@ -21,6 +21,8 @@ export const setupFeedFilters = () => {
     const tags = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-feed-tag]'));
     const emptyState = document.querySelector<HTMLElement>('[data-feed-empty]');
     const loader = document.querySelector<HTMLElement>('[data-feed-loader]');
+    const resetButton = document.querySelector<HTMLButtonElement>('[data-feed-reset]');
+    const status = document.querySelector<HTMLElement>('[data-feed-status]');
     if (!filters.length) {
         if (feedFiltersUpdatedHandler) {
             document.removeEventListener('feed:updated', feedFiltersUpdatedHandler);
@@ -102,7 +104,7 @@ export const setupFeedFilters = () => {
         return cardTags.some((tag) => synonyms.has(tag));
     };
 
-    const applyTagFilter = (activeTags: string[], excludedTags: string[]) => {
+    const applyTagFilter = (activeTags: string[]) => {
         const cards = getItems();
         let visibleCount = 0;
 
@@ -111,10 +113,7 @@ export const setupFeedFilters = () => {
             let show = true;
 
             if (activeTags.length) {
-                show = show && activeTags.every((tag) => hasTagMatch(cardTags, tag));
-            }
-            if (excludedTags.length) {
-                show = show && !excludedTags.some((tag) => hasTagMatch(cardTags, tag));
+                show = activeTags.every((tag) => hasTagMatch(cardTags, tag));
             }
 
             card.style.display = show ? '' : 'none';
@@ -127,9 +126,12 @@ export const setupFeedFilters = () => {
         if (emptyState) {
             emptyState.hidden = visibleCount > 0 || isLoading();
         }
+        if (status) {
+            status.textContent = (status.dataset.resultLabel ?? ':count').replace(':count', String(visibleCount));
+        }
     };
 
-    const updateUrl = (filterName: string, activeTags: string[], excludedTags: string[]) => {
+    const updateUrl = (filterName: string, activeTags: string[]) => {
         const url = new URL(window.location.href);
         url.searchParams.set('filter', filterName);
         if (activeTags.length) {
@@ -137,11 +139,7 @@ export const setupFeedFilters = () => {
         } else {
             url.searchParams.delete('tags');
         }
-        if (excludedTags.length) {
-            url.searchParams.set('exclude', excludedTags.join(','));
-        } else {
-            url.searchParams.delete('exclude');
-        }
+        url.searchParams.delete('exclude');
         window.history.replaceState({}, '', url.toString());
     };
 
@@ -151,47 +149,44 @@ export const setupFeedFilters = () => {
             .map((tag) => slugify(tag.dataset.feedTag ?? ''))
             .filter(Boolean);
 
-    const getExcludedTags = () =>
-        tags
-            .filter((tag) => tag.classList.contains('is-excluded'))
-            .map((tag) => slugify(tag.dataset.feedTag ?? ''))
-            .filter(Boolean);
-
     const setActiveFilter = (name: string) => {
         filters.forEach((btn) => {
-            btn.classList.toggle('is-active', btn.dataset.feedFilter === name);
+            const active = btn.dataset.feedFilter === name;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
+    };
+
+    const updateResetButton = () => {
+        if (!resetButton) {
+            return;
+        }
+        const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
+        resetButton.hidden = activeFilter === 'all' && getActiveTags().length === 0;
     };
 
     const setActiveFromUrl = () => {
         const url = new URL(window.location.href);
         const filterName = url.searchParams.get('filter') ?? 'all';
         const tagParam = url.searchParams.get('tags') ?? '';
-        const excludeParam = url.searchParams.get('exclude') ?? '';
         const urlTags = tagParam
             .split(',')
             .map((tag) => slugify(tag))
             .filter(Boolean);
-        const urlExcluded = excludeParam
-            .split(',')
-            .map((tag) => slugify(tag))
-            .filter(Boolean);
-        const filteredTags = urlTags.filter((tag) => !urlExcluded.includes(tag));
-
-        filters.forEach((btn) => {
-            btn.classList.toggle('is-active', btn.dataset.feedFilter === filterName);
-        });
+        url.searchParams.delete('exclude');
+        window.history.replaceState({}, '', url.toString());
+        setActiveFilter(filterName);
 
         tags.forEach((btn) => {
             const tagName = slugify(btn.dataset.feedTag ?? '');
-            btn.classList.toggle('is-active', filteredTags.includes(tagName));
-            btn.classList.toggle('is-excluded', urlExcluded.includes(tagName));
-            if (btn.classList.contains('is-excluded')) {
-                btn.classList.remove('is-active');
-            }
+            const active = urlTags.includes(tagName);
+            btn.classList.toggle('is-active', active);
+            btn.classList.remove('is-excluded');
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
 
-        applyTagFilter(filteredTags, urlExcluded);
+        applyTagFilter(urlTags);
+        updateResetButton();
     };
 
     filters.forEach((filter) => {
@@ -204,7 +199,6 @@ export const setupFeedFilters = () => {
             // Optimistic active state so the UI responds immediately.
             setActiveFilter(name);
             const activeTags = getActiveTags();
-            const excludedTags = getExcludedTags();
             const url = new URL(window.location.href);
             url.searchParams.set('filter', name);
             if (activeTags.length) {
@@ -212,11 +206,8 @@ export const setupFeedFilters = () => {
             } else {
                 url.searchParams.delete('tags');
             }
-            if (excludedTags.length) {
-                url.searchParams.set('exclude', excludedTags.join(','));
-            } else {
-                url.searchParams.delete('exclude');
-            }
+            url.searchParams.delete('exclude');
+            updateResetButton();
             void navigateTo(url.toString());
         });
     });
@@ -228,30 +219,31 @@ export const setupFeedFilters = () => {
         tag.dataset.feedTagBound = '1';
         tag.addEventListener('click', () => {
             tag.classList.toggle('is-active');
-            if (tag.classList.contains('is-active')) {
-                tag.classList.remove('is-excluded');
-            }
+            tag.classList.remove('is-excluded');
+            tag.setAttribute('aria-pressed', tag.classList.contains('is-active') ? 'true' : 'false');
             const activeTags = getActiveTags();
-            const excludedTags = getExcludedTags();
             const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
-            applyTagFilter(activeTags, excludedTags);
-            updateUrl(activeFilter, activeTags, excludedTags);
-            void navigateTo(window.location.href);
-        });
-        tag.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            tag.classList.toggle('is-excluded');
-            if (tag.classList.contains('is-excluded')) {
-                tag.classList.remove('is-active');
-            }
-            const activeTags = getActiveTags();
-            const excludedTags = getExcludedTags();
-            const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
-            applyTagFilter(activeTags, excludedTags);
-            updateUrl(activeFilter, activeTags, excludedTags);
+            applyTagFilter(activeTags);
+            updateUrl(activeFilter, activeTags);
+            updateResetButton();
             void navigateTo(window.location.href);
         });
     });
+
+    if (resetButton && resetButton.dataset.feedResetBound !== '1') {
+        resetButton.dataset.feedResetBound = '1';
+        resetButton.addEventListener('click', () => {
+            setActiveFilter('all');
+            tags.forEach((tag) => {
+                tag.classList.remove('is-active', 'is-excluded');
+                tag.setAttribute('aria-pressed', 'false');
+            });
+            applyTagFilter([]);
+            updateUrl('all', []);
+            updateResetButton();
+            void navigateTo(window.location.href);
+        });
+    }
 
     setActiveFromUrl();
 
@@ -260,8 +252,8 @@ export const setupFeedFilters = () => {
     }
     feedFiltersUpdatedHandler = () => {
         const activeTags = getActiveTags();
-        const excludedTags = getExcludedTags();
-        applyTagFilter(activeTags, excludedTags);
+        applyTagFilter(activeTags);
+        updateResetButton();
     };
     document.addEventListener('feed:updated', feedFiltersUpdatedHandler);
 };
@@ -270,6 +262,7 @@ export const setupFeedTabs = () => {
     const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-feed-tab]'));
     const emptyState = document.querySelector<HTMLElement>('[data-feed-empty]');
     const loader = document.querySelector<HTMLElement>('[data-feed-loader]');
+    const status = document.querySelector<HTMLElement>('[data-feed-status]');
     if (!tabs.length) {
         if (feedTabsUpdatedHandler) {
             document.removeEventListener('feed:updated', feedTabsUpdatedHandler);
@@ -294,7 +287,9 @@ export const setupFeedTabs = () => {
         const tab = typesByTab[name] ? name : 'projects';
         const allowed = typesByTab[tab] ?? ['projects'];
         tabs.forEach((btn) => {
-            btn.classList.toggle('is-active', btn.dataset.feedTab === tab);
+            const active = btn.dataset.feedTab === tab;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
 
         let visibleCount = 0;
@@ -309,6 +304,9 @@ export const setupFeedTabs = () => {
 
         if (emptyState) {
             emptyState.hidden = visibleCount > 0 || isLoading();
+        }
+        if (status) {
+            status.textContent = (status.dataset.resultLabel ?? ':count').replace(':count', String(visibleCount));
         }
 
         const url = new URL(window.location.href);

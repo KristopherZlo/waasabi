@@ -16,19 +16,19 @@
     @endphp
     <section class="feed-header">
         <div class="feed-title">{{ __('ui.feed.all_streams') }}</div>
-        <div class="tabs feed-tabs">
+        <div class="tabs feed-tabs" role="group" aria-label="{{ __('ui.feed.streams_label') }}">
             @if ($isCollaborationStream)
                 <a class="tab feed-tab" href="{{ route('feed', ['stream' => 'projects']) }}">{{ __('ui.feed.tab_projects') }}</a>
                 <a class="tab feed-tab" href="{{ route('feed', ['stream' => 'questions']) }}">{{ __('ui.feed.tab_questions') }}</a>
                 <a class="tab feed-tab is-active" href="{{ route('feed', ['stream' => 'collaboration']) }}" aria-current="page">{{ __('ui.feed.tab_collaboration') }}</a>
             @else
-                <button type="button" class="tab feed-tab {{ $activeStream === 'projects' ? 'is-active' : '' }}" data-feed-tab="projects">{{ __('ui.feed.tab_projects') }}</button>
-                <button type="button" class="tab feed-tab {{ $activeStream === 'questions' ? 'is-active' : '' }}" data-feed-tab="questions">{{ __('ui.feed.tab_questions') }}</button>
+                <button type="button" class="tab feed-tab {{ $activeStream === 'projects' ? 'is-active' : '' }}" data-feed-tab="projects" aria-pressed="{{ $activeStream === 'projects' ? 'true' : 'false' }}">{{ __('ui.feed.tab_projects') }}</button>
+                <button type="button" class="tab feed-tab {{ $activeStream === 'questions' ? 'is-active' : '' }}" data-feed-tab="questions" aria-pressed="{{ $activeStream === 'questions' ? 'true' : 'false' }}">{{ __('ui.feed.tab_questions') }}</button>
                 <a class="tab feed-tab" href="{{ route('feed', ['stream' => 'collaboration']) }}">{{ __('ui.feed.tab_collaboration') }}</a>
             @endif
         </div>
         @unless ($isCollaborationStream)
-            <div class="feed-tags">
+            <div class="feed-tags" role="group" aria-label="{{ __('ui.feed.tags_label') }}">
                 @foreach ($feed_tags as $tag)
                     @php
                         $tagLabel = is_array($tag) ? ($tag['label'] ?? '') : (string) $tag;
@@ -36,7 +36,7 @@
                         $tagCount = is_array($tag) ? ($tag['count'] ?? null) : null;
                     @endphp
                     @if ($tagLabel !== '')
-                        <button type="button" class="feed-tag" data-feed-tag="{{ $tagSlug }}">
+                        <button type="button" class="feed-tag" data-feed-tag="{{ $tagSlug }}" aria-pressed="false">
                             <span>{{ $tagLabel }}</span>
                             @if ($tagCount !== null)
                                 <span class="feed-tag__count">{{ $tagCount }}</span>
@@ -45,12 +45,16 @@
                     @endif
                 @endforeach
             </div>
-            <div class="feed-filters">
-                <button type="button" class="feed-filter is-active" data-feed-filter="all">{{ __('ui.feed.filter_all') }}</button>
-                <button type="button" class="feed-filter" data-feed-filter="best">{{ __('ui.feed.filter_best') }}</button>
-                <button type="button" class="feed-filter" data-feed-filter="fresh">{{ __('ui.feed.filter_fresh') }}</button>
-                <button type="button" class="feed-filter" data-feed-filter="reading">{{ __('ui.feed.filter_reading') }}</button>
+            <div class="feed-filter-bar">
+                <div class="feed-filters" role="group" aria-label="{{ __('ui.feed.sort_label') }}">
+                    <button type="button" class="feed-filter is-active" data-feed-filter="all" aria-pressed="true">{{ __('ui.feed.filter_all') }}</button>
+                    <button type="button" class="feed-filter" data-feed-filter="best" aria-pressed="false">{{ __('ui.feed.filter_best') }}</button>
+                    <button type="button" class="feed-filter" data-feed-filter="fresh" aria-pressed="false">{{ __('ui.feed.filter_fresh') }}</button>
+                    <button type="button" class="feed-filter" data-feed-filter="reading" aria-pressed="false">{{ __('ui.feed.filter_reading') }}</button>
+                </div>
+                <button type="button" class="feed-filter-reset" data-feed-reset hidden>{{ __('ui.feed.filter_reset') }}</button>
             </div>
+            <div class="feed-filter-status" data-feed-status data-result-label="{{ __('ui.feed.results_count') }}" role="status" aria-live="polite"></div>
         @endunless
     </section>
 
