@@ -5131,6 +5131,14 @@ body[data-feed-view='compact'] textarea {
     align-items: flex-start;
 }
 
+body[data-page='project'][data-project-tab]:not([data-project-tab='article']) .reading-layout {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-page='project'][data-project-tab]:not([data-project-tab='article']) .toc {
+    display: none;
+}
+
 .reading-main {
     display: grid;
     gap: 12px;

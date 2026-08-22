@@ -1055,6 +1055,7 @@ return [
         'publishing_subtitle' => 'Muotoillaan Markdown ja ladataan media.',
     ],
     'project' => [
+        'tabs_label' => 'Projektin osiot',
         'team_title' => 'Projektitiimi',
         'open_roles' => 'Näytä yhteistyö',
         'partner_project' => 'Kumppaniprojekti',

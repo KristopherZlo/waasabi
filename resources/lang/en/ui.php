@@ -1055,6 +1055,7 @@ return [
         'publishing_subtitle' => 'We are formatting your Markdown and uploading media.',
     ],
     'project' => [
+        'tabs_label' => 'Project sections',
         'team_title' => 'Project team',
         'open_roles' => 'View collaborations',
         'partner_project' => 'Partner project',

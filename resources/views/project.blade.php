@@ -407,24 +407,24 @@
         </aside>
 
         <div class="reading-main">
-            <div class="tabs" data-tabs>
-                <button class="tab is-active" type="button" data-tab="article">
+            <div class="tabs" data-tabs role="tablist" aria-label="{{ __('ui.project.tabs_label') }}">
+                <button class="tab is-active" id="project-tab-article" type="button" data-tab="article" role="tab" aria-selected="true" aria-controls="project-panel-article">
                     <i data-lucide="book-open" class="icon"></i>
                     {{ __('ui.project.tab_article') }}
                 </button>
-                <button class="tab" type="button" data-tab="comments">
+                <button class="tab" id="project-tab-comments" type="button" data-tab="comments" role="tab" aria-selected="false" aria-controls="project-panel-comments" tabindex="-1">
                     <i data-lucide="messages-square" class="icon"></i>
                     {{ __('ui.project.tab_comments') }}
                     <span class="tab__count">{{ $commentsTotal }}</span>
                 </button>
-                <button class="tab" type="button" data-tab="review">
+                <button class="tab" id="project-tab-review" type="button" data-tab="review" role="tab" aria-selected="false" aria-controls="project-panel-review" tabindex="-1">
                     <i data-lucide="clipboard-check" class="icon"></i>
                     {{ __('ui.project.tab_review') }}
                     <span class="tab__count">{{ count($project['reviews'] ?? []) }}</span>
                 </button>
             </div>
 
-            <div class="tab-panel is-active" data-tab-panel="article">
+            <div class="tab-panel is-active" id="project-panel-article" data-tab-panel="article" role="tabpanel" aria-labelledby="project-tab-article">
                 <article class="reading-article reading-article--rich" data-reading-article data-project-slug="{{ $project['slug'] }}">
                     @if (!empty($project['body_html']))
                         {!! $project['body_html'] !!}
@@ -460,7 +460,7 @@
                 </article>
             </div>
 
-            <div class="tab-panel discussion-panel" data-tab-panel="comments">
+            <div class="tab-panel discussion-panel" id="project-panel-comments" data-tab-panel="comments" role="tabpanel" aria-labelledby="project-tab-comments" hidden>
                 <div class="comment-toolbar">
                     <div class="tabs comment-sort">
                         <button type="button" class="tab is-active" data-comment-sort="new">{{ __('ui.project.comments_new') }}</button>
@@ -512,7 +512,7 @@
                 @endif
             </div>
 
-            <div class="tab-panel review-panel" data-tab-panel="review">
+            <div class="tab-panel review-panel" id="project-panel-review" data-tab-panel="review" role="tabpanel" aria-labelledby="project-tab-review" hidden>
                 <div class="section-title">{{ __('ui.project.review_title') }}</div>
                 <div class="comments review-list" data-review-list data-project-slug="{{ $project['slug'] }}">
                     @forelse ($project['reviews'] ?? [] as $review)
