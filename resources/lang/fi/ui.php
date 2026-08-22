@@ -8,6 +8,8 @@ return [
         'skip_to_content' => 'Siirry sisältöön',
     ],
     'nav' => [
+        'primary' => 'Päänavigaatio',
+        'mobile' => 'Mobiilinavigaatio',
         'feed' => 'Syöte',
         'read_later' => 'Lue myöhemmin',
         'publish' => 'Julkaise',

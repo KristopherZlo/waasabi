@@ -49,6 +49,11 @@
                     </div>
                     <div class="brand">{{ __('ui.app.name') }}</div>
                 </a>
+                <nav class="desktop-nav" aria-label="{{ __('ui.nav.primary') }}">
+                    <a href="{{ route('feed') }}" @if (request()->routeIs('feed')) aria-current="page" @endif>{{ __('ui.nav.feed') }}</a>
+                    <a href="{{ route('showcase') }}" @if (request()->routeIs('showcase')) aria-current="page" @endif>{{ __('ui.nav.showcase') }}</a>
+                    <a href="{{ route('collaboration') }}" @if (request()->routeIs('collaboration*')) aria-current="page" @endif>{{ __('ui.feed.tab_collaboration') }}</a>
+                </nav>
             </div>
             @if (!empty($topbar_promo))
                 <a class="topbar-promo" href="{{ route('promos.click', $topbar_promo['id']) }}" target="_blank" rel="noreferrer noopener">{{ $topbar_promo['label'] }}</a>
@@ -101,7 +106,7 @@
                         <a class="notifications-menu__footer" href="{{ route('notifications') }}">{{ __('ui.notifications.dropdown_all') }}</a>
                     </div>
                 </div>
-                <a class="icon-btn" href="{{ route('settings') }}" aria-label="{{ __('ui.topbar.settings') }}"><i data-lucide="sliders-horizontal" class="icon"></i></a>
+                <a class="icon-btn top-settings" href="{{ route('settings') }}" aria-label="{{ __('ui.topbar.settings') }}"><i data-lucide="sliders-horizontal" class="icon"></i></a>
                 @can('moderate')
                     <button class="ghost-btn" type="button" data-admin-toggle>
                         <i data-lucide="edit-3" class="icon"></i>

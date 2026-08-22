@@ -8768,8 +8768,146 @@ select:focus {
 }
 
 .nav {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
-    backdrop-filter: blur(10px);
+    display: none;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+.desktop-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 14px;
+}
+
+.desktop-nav a {
+    min-height: 40px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.desktop-nav a:hover,
+.desktop-nav a[aria-current='page'] {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.top-actions .icon-btn {
+    width: 40px;
+    height: 40px;
+}
+
+.user-menu__trigger {
+    min-height: 40px;
+}
+
+@media (max-width: 1040px) {
+    .desktop-nav {
+        display: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .icon-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .icon-btn--sm {
+        width: 36px;
+        height: 36px;
+    }
+
+    .topbar__inner {
+        min-height: 56px;
+        padding-inline: 12px;
+        gap: 8px;
+    }
+
+    .top-actions {
+        gap: 2px;
+    }
+
+    .topbar-promo,
+    .top-actions .read-later,
+    .top-actions .top-settings,
+    .top-actions > .primary-cta,
+    .top-actions > .ghost-btn,
+    .top-actions > [data-admin-toggle] {
+        display: none;
+    }
+
+    .top-actions .icon-btn,
+    .user-menu__trigger {
+        width: 44px;
+        height: 44px;
+        min-height: 44px;
+    }
+
+    .user-menu__trigger {
+        justify-content: center;
+        padding: 7px;
+    }
+
+    .user-menu__trigger > .icon {
+        display: none;
+    }
+
+    .nav {
+        position: fixed;
+        inset: auto 0 0;
+        bottom: 0 !important;
+        transform: none;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        gap: 0;
+        padding: 0 0 env(safe-area-inset-bottom);
+        border: 0;
+        border-top: 1px solid var(--border);
+        border-radius: 0;
+        background: var(--nav-bg);
+        z-index: 20;
+    }
+
+    .nav a {
+        min-width: 0;
+        min-height: 62px;
+        padding: 7px 4px;
+        border-radius: 0;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.15;
+        text-align: center;
+    }
+
+    .nav a span {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .nav a.is-active {
+        background: var(--surface-2);
+        color: var(--text);
+        box-shadow: inset 0 2px var(--accent);
+    }
+
+    .nav .icon {
+        width: 20px;
+        height: 20px;
+    }
+
 }
 
 .site-footer {
@@ -8780,6 +8918,12 @@ select:focus {
 
 .footer-grid {
     gap: 20px 32px;
+}
+
+@media (max-width: 767px) {
+    .site-footer {
+        padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    }
 }
 
 .sidebar {

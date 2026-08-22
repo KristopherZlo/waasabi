@@ -8,6 +8,8 @@ return [
         'skip_to_content' => 'Skip to content',
     ],
     'nav' => [
+        'primary' => 'Primary navigation',
+        'mobile' => 'Mobile navigation',
         'feed' => 'Feed',
         'read_later' => 'Read later',
         'publish' => 'Publish',
