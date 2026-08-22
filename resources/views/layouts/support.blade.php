@@ -4,16 +4,26 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Waasabi Support')</title>
+    @php
+        $metaTitle = trim($__env->yieldContent('title', config('app.name').' Support'));
+        $metaDescription = trim($__env->yieldContent('description', __('ui.app.description')));
+    @endphp
+    <title>{{ $metaTitle }}</title>
+    <meta name="description" content="{{ $metaDescription }}">
+    <meta name="robots" content="@yield('robots', 'index, follow')">
+    <link rel="canonical" href="{{ url()->current() }}">
+    <meta property="og:title" content="{{ $metaTitle }}">
+    <meta property="og:description" content="{{ $metaDescription }}">
+    <meta property="og:url" content="{{ url()->current() }}">
     @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
-        @vite(['resources/js/site-loader.ts', 'resources/css/app.css', 'resources/js/app.ts'])
+        @vite(['resources/css/app.css', 'resources/js/app.ts'])
     @endif
     <script nonce="{{ $csp_nonce ?? '' }}">
         window.APP_I18N = @json(trans('ui.js'));
-        window.APP_SEARCH_INDEX = @json($searchIndex ?? []);
     </script>
 </head>
 <body class="app-shell" data-page="@yield('page', 'support')" data-app-url="{{ url('/') }}" data-locale="{{ app()->getLocale() }}" data-placeholder="{{ asset('images/placeholder.svg') }}" data-auth-state="{{ Auth::check() && !(Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-banned="{{ Auth::check() && (Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-no-spa="1" @if (session('toast')) data-toast-message="{{ session('toast') }}" @endif>
+    <a class="skip-link" href="#main-content">{{ __('ui.app.skip_to_content') }}</a>
     @php
         $supportTab = (string) request('tab', '');
         $supportTabs = ['home', 'tickets', 'new'];
@@ -30,7 +40,7 @@
                 </span>
                 <span class="support-brand__text">
                     <span class="support-brand__name">{{ __('ui.app.name') }}</span>
-                    <span class="support-brand__context">support</span>
+                    <span class="support-brand__context">{{ __('ui.support.title') }}</span>
                 </span>
             </a>
             <div class="support-topbar__actions">
@@ -179,7 +189,7 @@
         </div>
     </header>
 
-    <main class="page">
+    <main class="page" id="main-content" tabindex="-1">
         <div class="layout layout--single">
             <div class="content">
                 @yield('content')
@@ -204,14 +214,14 @@
                     <a href="{{ route('profile') }}" class="footer-link">{{ __('ui.nav.profile') }}</a>
                 </div>
                 <div class="footer-col">
-                    <div class="footer-title">Legal</div>
-                    <a href="{{ route('legal.terms') }}" class="footer-link">Terms of Service</a>
-                    <a href="{{ route('legal.privacy') }}" class="footer-link">Privacy Policy</a>
-                    <a href="{{ route('legal.cookies') }}" class="footer-link">Cookie Policy</a>
-                    <a href="{{ route('legal.guidelines') }}" class="footer-link">Community Guidelines</a>
-                    <a href="{{ route('legal.notice') }}" class="footer-link">Notice &amp; Action</a>
-                    <a href="{{ route('legal.legal-notice') }}" class="footer-link">Legal Notice</a>
-                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">Contact</a>
+                    <div class="footer-title">{{ __('ui.footer.legal') }}</div>
+                    <a href="{{ route('legal.terms') }}" class="footer-link">{{ __('ui.footer.terms') }}</a>
+                    <a href="{{ route('legal.privacy') }}" class="footer-link">{{ __('ui.footer.privacy') }}</a>
+                    <a href="{{ route('legal.cookies') }}" class="footer-link">{{ __('ui.footer.cookies') }}</a>
+                    <a href="{{ route('legal.guidelines') }}" class="footer-link">{{ __('ui.footer.guidelines') }}</a>
+                    <a href="{{ route('legal.notice') }}" class="footer-link">{{ __('ui.footer.notice') }}</a>
+                    <a href="{{ route('legal.legal-notice') }}" class="footer-link">{{ __('ui.footer.legal_notice') }}</a>
+                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">{{ __('ui.footer.contact') }}</a>
                 </div>
                 <div class="footer-col">
                     <div class="footer-title">{{ __('ui.footer.services') }}</div>
@@ -232,13 +242,10 @@
                 @endphp
                 <div class="footer-copy">{{ __('ui.footer.copyright', ['year' => $footerYearRange]) }}</div>
                 <div class="footer-links">
-                    <a href="{{ route('legal.terms') }}" class="footer-link">Terms</a>
-                    <a href="{{ route('legal.privacy') }}" class="footer-link">Privacy</a>
-                    <a href="{{ route('legal.cookies') }}" class="footer-link">Cookies</a>
-                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">Contact</a>
-                </div>
-                <div class="footer-social">
-                    <a class="social-chip" href="https://github.com" target="_blank" rel="noreferrer noopener">{{ __('ui.footer.github') }}</a>
+                    <a href="{{ route('legal.terms') }}" class="footer-link">{{ __('ui.footer.terms') }}</a>
+                    <a href="{{ route('legal.privacy') }}" class="footer-link">{{ __('ui.footer.privacy') }}</a>
+                    <a href="{{ route('legal.cookies') }}" class="footer-link">{{ __('ui.footer.cookies') }}</a>
+                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">{{ __('ui.footer.contact') }}</a>
                 </div>
             </div>
         </div>

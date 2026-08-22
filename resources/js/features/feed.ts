@@ -236,6 +236,7 @@ export const setupFeedFilters = () => {
             const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
             applyTagFilter(activeTags, excludedTags);
             updateUrl(activeFilter, activeTags, excludedTags);
+            void navigateTo(window.location.href);
         });
         tag.addEventListener('contextmenu', (event) => {
             event.preventDefault();
@@ -248,6 +249,7 @@ export const setupFeedFilters = () => {
             const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
             applyTagFilter(activeTags, excludedTags);
             updateUrl(activeFilter, activeTags, excludedTags);
+            void navigateTo(window.location.href);
         });
     });
 
@@ -279,27 +281,7 @@ export const setupFeedTabs = () => {
     const typesByTab: Record<string, string[]> = {
         projects: ['projects', 'qa'],
         questions: ['questions'],
-        collaboration: ['projects'],
     };
-
-    const slugify = (value: string) =>
-        value
-            .toLowerCase()
-            .trim()
-            .normalize('NFKD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-
-    const collaborationSlug = 'collaboration';
-    const getCardTags = (card: HTMLElement) =>
-        (card.dataset.tags ?? '')
-            .split(',')
-            .map((tag) => slugify(tag))
-            .filter(Boolean);
-    const isCollaborationCard = (card: HTMLElement) => getCardTags(card).includes(collaborationSlug);
-
-    const collaborationBanner = document.querySelector<HTMLElement>('[data-feed-collaboration]');
 
     const getItems = () => Array.from(document.querySelectorAll<HTMLElement>('[data-feed-type]'));
     const isLoading = () => (loader ? !loader.hidden : false);
@@ -318,10 +300,7 @@ export const setupFeedTabs = () => {
         let visibleCount = 0;
         items.forEach((item) => {
             const type = item.dataset.feedType ?? 'projects';
-            const isCollaboration = isCollaborationCard(item);
-            const shouldShow = tab === 'collaboration'
-                ? isCollaboration
-                : allowed.includes(type) && !isCollaboration;
+            const shouldShow = allowed.includes(type);
             item.hidden = !shouldShow;
             if (shouldShow && isItemVisible(item)) {
                 visibleCount += 1;
@@ -336,9 +315,6 @@ export const setupFeedTabs = () => {
         url.searchParams.set('stream', tab);
         window.history.replaceState({}, '', url.toString());
 
-        if (collaborationBanner) {
-            collaborationBanner.hidden = tab !== 'collaboration';
-        }
     };
 
     const url = new URL(window.location.href);
@@ -474,9 +450,6 @@ export const setupInfiniteFeed = () => {
 
     const getActiveStream = () => {
         const active = document.querySelector<HTMLElement>('[data-feed-tab].is-active')?.dataset.feedTab ?? 'projects';
-        if (active === 'collaboration') {
-            return 'projects';
-        }
         return streams.includes(active) ? active : null;
     };
 
@@ -672,6 +645,13 @@ export const setupInfiniteFeed = () => {
         url.searchParams.set('offset', String(state.offset));
         url.searchParams.set('limit', String(pageSize));
         url.searchParams.set('filter', getActiveFilter());
+        const pageUrl = new URL(window.location.href);
+        for (const key of ['tags', 'exclude']) {
+            const value = pageUrl.searchParams.get(key);
+            if (value) {
+                url.searchParams.set(key, value);
+            }
+        }
         try {
             const response = await fetch(url.toString(), {
                 headers: {
@@ -712,7 +692,7 @@ export const setupInfiniteFeed = () => {
         void fetchItems(stream);
     };
 
-    if ('IntersectionObserver' in window) {
+    if (typeof IntersectionObserver !== 'undefined') {
         sentinelObserver = new IntersectionObserver(
             (entries) => {
                 const [entry] = entries;

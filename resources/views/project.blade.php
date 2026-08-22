@@ -1,6 +1,8 @@
 @extends('layouts.app')
 
 @section('title', $project['title'])
+@section('description', $project['subtitle'] ?: \Illuminate\Support\Str::limit(strip_tags($project['body_markdown'] ?? ''), 155))
+@section('image', url($project['cover'] ?? '/images/cover.png'))
 @section('page', 'project')
 
 @section('content')
@@ -59,6 +61,8 @@
         $isNsfw = !empty($project['nsfw']);
         $moderationStatus = strtolower((string) ($project['moderation_status'] ?? 'approved'));
         $isHidden = !empty($project['is_hidden']);
+        $canManageProject = Auth::check() && !empty($project_model) && Auth::user()->can('update', $project_model);
+        $isProjectOwner = Auth::check() && !empty($project_model) && Auth::id() === $project_model->user_id;
     @endphp
 
     <section class="article-hero" data-moderation-scope data-moderation-status="{{ $moderationStatus }}" data-moderation-type="post">
@@ -94,6 +98,12 @@
                 @foreach ($projectTags as $tag)
                     <span class="chip chip--tag">{{ $tag }}</span>
                 @endforeach
+                @if (!empty($project['category_label']))
+                    <span class="chip chip--tag">{{ $project['category_label'] }}</span>
+                @endif
+                @if (($project['visibility'] ?? 'public') !== 'public')
+                    <span class="chip">{{ ucfirst($project['visibility']) }}</span>
+                @endif
             </div>
         </div>
         <div class="article-actions">
@@ -119,8 +129,8 @@
                             || ($currentSlug !== '' && $currentSlug === $authorSlug)
                         );
                     $isAdmin = $currentUser?->isAdmin() ?? false;
-                    $canEdit = $currentUser && ($isAuthorPost || $isAdmin);
-                    $canDelete = $canEdit;
+                    $canEdit = $currentUser && ($project_model ? $currentUser->can('update', $project_model) : ($isAuthorPost || $isAdmin));
+                    $canDelete = $currentUser && ($project_model ? $currentUser->can('delete', $project_model) : ($isAuthorPost || $isAdmin));
                 @endphp
                 <div class="action-menu" data-action-menu-container>
                     <button class="icon-btn action-menu__trigger" type="button" aria-label="{{ __('ui.report.title') }}" aria-haspopup="menu" aria-expanded="false" data-action-menu-toggle>
@@ -202,6 +212,27 @@
         </div>
     </section>
 
+    @if (!empty($project_invitation))
+        <section class="card project-invitation" aria-label="{{ __('ui.project.invitation_title') }}">
+            <div>
+                <strong>{{ __('ui.project.invitation_title') }}</strong>
+                <span class="helper">{{ __('ui.project.invitation_text', ['role' => $project_invitation->role]) }}</span>
+            </div>
+            <div class="project-invitation__actions">
+                <form method="POST" action="{{ route('project-members.accept', $project_invitation) }}">
+                    @csrf
+                    @method('PATCH')
+                    <button class="cta-btn cta-btn--compact" type="submit">{{ __('ui.project.invitation_accept') }}</button>
+                </form>
+                <form method="POST" action="{{ route('project-members.decline', $project_invitation) }}">
+                    @csrf
+                    @method('PATCH')
+                    <button class="ghost-btn ghost-btn--compact" type="submit">{{ __('ui.project.invitation_decline') }}</button>
+                </form>
+            </div>
+        </section>
+    @endif
+
     <div class="reading-banner" data-reading-banner hidden>
         <div class="reading-banner__text">{{ __('ui.project.continue_prompt') }}</div>
         <div class="reading-banner__actions">
@@ -233,6 +264,138 @@
         </div>
     @endif
 
+    @if (($project_members ?? collect())->isNotEmpty() || ($project_collaboration_requests ?? collect())->isNotEmpty() || ($project_partners ?? collect())->isNotEmpty())
+        <section class="card project-team" aria-labelledby="project-team-title">
+            <div class="project-team__header">
+                <h2 id="project-team-title">{{ __('ui.project.team_title') }}</h2>
+                @if (($project_collaboration_requests ?? collect())->isNotEmpty())
+                    <a class="ghost-btn ghost-btn--compact" href="{{ route('feed', ['stream' => 'collaboration', 'q' => $project['title']]) }}">
+                        {{ __('ui.project.open_roles') }}
+                    </a>
+                @endif
+            </div>
+            @if (($project_members ?? collect())->isNotEmpty())
+                <div class="project-team__members">
+                    @foreach ($project_members as $membership)
+                        <a class="project-team__member" href="{{ route('profile.show', $membership->user->slug) }}">
+                            <img class="avatar" src="{{ $membership->user->avatar_url ?? $membership->user->avatar ?? asset('images/avatar-default.svg') }}" alt="">
+                            <span>
+                                <strong>{{ $membership->user->name }}</strong>
+                                <span>{{ $collaboration_roles[$membership->role] ?? $membership->role }}</span>
+                            </span>
+                        </a>
+                        @if ($isProjectOwner || Auth::id() === $membership->user_id)
+                            <form method="POST" action="{{ route('project-members.destroy', [$project_model, $membership]) }}">
+                                @csrf
+                                @method('DELETE')
+                                <button class="icon-btn icon-btn--sm" type="submit" aria-label="{{ Auth::id() === $membership->user_id ? __('ui.project.leave_team') : __('ui.project.remove_member') }}">
+                                    <i data-lucide="user-minus" class="icon"></i>
+                                </button>
+                            </form>
+                        @endif
+                    @endforeach
+                </div>
+            @endif
+            @if (($project_collaboration_requests ?? collect())->isNotEmpty())
+                <div class="project-team__roles">
+                    @foreach ($project_collaboration_requests as $openRequest)
+                        <a href="{{ route('collaboration.show', $openRequest) }}">
+                            {{ $collaboration_roles[$openRequest->role] ?? $openRequest->role }}
+                            <span>{{ $openRequest->title }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            @endif
+            @if (($project_partners ?? collect())->isNotEmpty())
+                <div class="project-team__roles">
+                    @foreach ($project_partners as $partnerProject)
+                        <a href="{{ route('project', $partnerProject->slug) }}">
+                            {{ __('ui.project.partner_project') }}
+                            <span>{{ $partnerProject->title }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            @endif
+        </section>
+    @endif
+
+    @if (!empty($project['external_url']) || !empty($project['repository_url']) || !empty($project['attachments']))
+        <section class="card project-artifacts" aria-labelledby="project-artifacts-title">
+            <h2 id="project-artifacts-title">{{ __('ui.project.artifacts_title') }}</h2>
+            <div class="project-artifacts__links">
+                @if (!empty($project['external_url']))
+                    <a class="ghost-btn ghost-btn--compact" href="{{ $project['external_url'] }}" target="_blank" rel="noopener noreferrer">
+                        <i data-lucide="external-link" class="icon"></i>{{ __('ui.project.open_project_link') }}
+                    </a>
+                @endif
+                @if (!empty($project['repository_url']))
+                    <a class="ghost-btn ghost-btn--compact" href="{{ $project['repository_url'] }}" target="_blank" rel="noopener noreferrer">
+                        <i data-lucide="code" class="icon"></i>{{ __('ui.project.open_repository') }}
+                    </a>
+                @endif
+                @if (!empty($project['license_label']))
+                    <span class="helper">{{ __('ui.project.license', ['license' => $project['license_label']]) }}</span>
+                @endif
+            </div>
+            @foreach (($project['attachments'] ?? []) as $attachment)
+                <div class="project-attachment">
+                    @if ($attachment['kind'] === 'audio')
+                        <strong>{{ $attachment['name'] }}</strong>
+                        <audio controls preload="metadata" src="{{ $attachment['url'] }}"></audio>
+                    @elseif ($attachment['kind'] === 'video')
+                        <strong>{{ $attachment['name'] }}</strong>
+                        <video controls preload="metadata" src="{{ $attachment['url'] }}"></video>
+                    @else
+                        <a href="{{ $attachment['url'] }}" target="_blank" rel="noopener noreferrer">
+                            <i data-lucide="paperclip" class="icon"></i>
+                            {{ $attachment['name'] }}
+                        </a>
+                    @endif
+                </div>
+            @endforeach
+        </section>
+    @endif
+
+    @if (!empty($project['updates']) || $canManageProject)
+        <section class="card project-updates" aria-labelledby="project-updates-title">
+            <h2 id="project-updates-title">{{ __('ui.project.updates_title') }}</h2>
+            @foreach (($project['updates'] ?? []) as $update)
+                <article class="project-update">
+                    <div class="project-update__header">
+                        <div>
+                            <h3>{{ $update['title'] }}</h3>
+                            <span class="helper">{{ $update['author'] }} · {{ $update['time'] }}</span>
+                        </div>
+                        @if ($isProjectOwner || Auth::id() === ($update['user_id'] ?? null))
+                            <form method="POST" action="{{ route('projects.updates.destroy', [$project['slug'], $update['id']]) }}">
+                                @csrf
+                                @method('DELETE')
+                                <button class="icon-btn icon-btn--sm" type="submit" aria-label="{{ __('ui.project.delete_update') }}">
+                                    <i data-lucide="trash-2" class="icon"></i>
+                                </button>
+                            </form>
+                        @endif
+                    </div>
+                    <p>{{ $update['body'] }}</p>
+                </article>
+            @endforeach
+            @if ($canManageProject)
+                <form class="project-update-form" method="POST" action="{{ route('projects.updates.store', $project['slug']) }}">
+                    @csrf
+                    <label>
+                        <span class="label-text">{{ __('ui.project.update_title_label') }}</span>
+                        <input class="input" type="text" name="title" maxlength="120" required>
+                    </label>
+                    <label>
+                        <span class="label-text">{{ __('ui.project.update_body_label') }}</span>
+                        <textarea class="input" name="body" rows="4" minlength="20" maxlength="3000" required></textarea>
+                    </label>
+                    <button class="ghost-btn ghost-btn--accent" type="submit">{{ __('ui.project.post_update') }}</button>
+                </form>
+            @endif
+        </section>
+    @endif
+
     <div class="reading-progress">
         <div class="reading-progress__bar" data-reading-progress></div>
     </div>
@@ -245,9 +408,20 @@
 
         <div class="reading-main">
             <div class="tabs" data-tabs>
-                <button class="tab is-active" type="button" data-tab="article">{{ __('ui.project.tab_article') }}</button>
-                <button class="tab" type="button" data-tab="comments">{{ __('ui.project.tab_comments') }}</button>
-                <button class="tab" type="button" data-tab="review">{{ __('ui.project.tab_review') }}</button>
+                <button class="tab is-active" type="button" data-tab="article">
+                    <i data-lucide="book-open" class="icon"></i>
+                    {{ __('ui.project.tab_article') }}
+                </button>
+                <button class="tab" type="button" data-tab="comments">
+                    <i data-lucide="messages-square" class="icon"></i>
+                    {{ __('ui.project.tab_comments') }}
+                    <span class="tab__count">{{ $commentsTotal }}</span>
+                </button>
+                <button class="tab" type="button" data-tab="review">
+                    <i data-lucide="clipboard-check" class="icon"></i>
+                    {{ __('ui.project.tab_review') }}
+                    <span class="tab__count">{{ count($project['reviews'] ?? []) }}</span>
+                </button>
             </div>
 
             <div class="tab-panel is-active" data-tab-panel="article">
@@ -470,6 +644,11 @@
                                     <div class="review-label">{{ __('ui.project.review_how') }}</div>
                                     <div class="review-text">{{ $review['how'] ?? '' }}</div>
                                 </div>
+                                @if ($isReviewOwner)
+                                    <div class="comment-actions">
+                                        @include('partials.interaction-owner-actions', ['type' => 'review', 'id' => $review['id'] ?? null, 'values' => ['improve' => $review['improve'] ?? '', 'why' => $review['why'] ?? '', 'how' => $review['how'] ?? '']])
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     @empty
@@ -534,4 +713,31 @@
             </div>
         </div>
     </div>
+
+    @if (!empty($related_projects))
+        <section class="related-projects" aria-labelledby="related-projects-title">
+            <h2 class="related-projects__title" id="related-projects-title">{{ __('ui.project.related_title') }}</h2>
+            <div class="related-projects__grid">
+                @foreach ($related_projects as $relatedProject)
+                    @php
+                        $relatedCoverPath = $relatedProject['cover'] ?? 'images/logo-black.svg';
+                        $relatedCoverUrl = \Illuminate\Support\Str::startsWith($relatedCoverPath, ['http://', 'https://'])
+                            ? $relatedCoverPath
+                            : asset(ltrim($relatedCoverPath, '/'));
+                        $relatedAuthor = $relatedProject['author']['name'] ?? __('ui.project.anonymous');
+                    @endphp
+                    <a class="related-project" href="{{ route('project', $relatedProject['slug']) }}">
+                        <img class="related-project__cover" src="{{ $relatedCoverUrl }}" alt="" loading="lazy" data-fallback="{{ asset('images/logo-black.svg') }}">
+                        <span class="related-project__body">
+                            <span class="related-project__meta">{{ $relatedAuthor }} &middot; {{ $relatedProject['read_time'] ?? '' }}</span>
+                            <span class="related-project__name">{{ $relatedProject['title'] }}</span>
+                            @if (!empty($relatedProject['subtitle']))
+                                <span class="related-project__summary">{{ $relatedProject['subtitle'] }}</span>
+                            @endif
+                        </span>
+                    </a>
+                @endforeach
+            </div>
+        </section>
+    @endif
 @endsection
