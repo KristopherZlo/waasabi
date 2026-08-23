@@ -5264,6 +5264,11 @@ body[data-page='project'][data-project-tab]:not([data-project-tab='article']) .t
     gap: 24px;
     flex-wrap: wrap;
     border-bottom: 1px solid var(--border);
+    scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+    display: none;
 }
 
 .tabs + .tab-panel {
