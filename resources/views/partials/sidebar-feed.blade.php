@@ -24,7 +24,10 @@
         @forelse ($readingNow as $entry)
             <a class="sidebar-item" href="{{ route('project', $entry['slug']) }}">
                 <span>{{ $entry['title'] }}</span>
-                <span>{{ __('ui.sidebar.readers_count', ['count' => $entry['readers'] ?? 0]) }}</span>
+                <span class="sidebar-item__reading" aria-label="{{ __('ui.sidebar.readers_count', ['count' => $entry['readers'] ?? 0]) }}">
+                    <i data-lucide="book-open" class="icon" aria-hidden="true"></i>
+                    <span>{{ $entry['readers'] ?? 0 }}</span>
+                </span>
             </a>
         @empty
             <div class="sidebar-item muted">{{ __('ui.sidebar.reading_empty') }}</div>

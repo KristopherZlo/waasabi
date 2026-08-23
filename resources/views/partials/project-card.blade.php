@@ -1,10 +1,5 @@
 @php
     $projectTags = $project['tags'] ?? [];
-    $tagSlugs = collect($projectTags)
-        ->map(fn ($tag) => \Illuminate\Support\Str::slug((string) $tag))
-        ->filter()
-        ->values();
-    $isCollaboration = $tagSlugs->contains('collaboration');
     $visibleTags = array_slice($projectTags, 0, 5);
     $extraTags = max(count($projectTags) - count($visibleTags), 0);
     $previewSource = (string) ($project['body_html'] ?? $project['body_markdown'] ?? '');
@@ -25,7 +20,8 @@
     if ($previewText === '') {
         $previewText = $project['subtitle'] ?? $project['context'] ?? '';
     }
-    $previewText = $previewText !== '' ? \Illuminate\Support\Str::limit($previewText, 600) : '';
+    $previewSummary = $previewText !== '' ? \Illuminate\Support\Str::limit($previewText, 260) : '';
+    $previewExpandable = \Illuminate\Support\Str::length($previewText) > 260;
     $commentCount = $project['comments_count'] ?? count($project['comments'] ?? []);
     $authorName = $project['author']['name'] ?? __('ui.project.anonymous');
     $avatarPath = $project['author']['avatar'] ?? 'images/avatar-default.svg';
@@ -180,6 +176,11 @@
                             <i data-lucide="eye" class="icon"></i>
                         </button>
                     @endif
+                    @if ($reportCount > 0)
+                        <button type="button" class="icon-btn icon-btn--sm" data-admin-dismiss data-admin-url="{{ route('moderation.reports.dismiss', ['type' => 'post', 'id' => $project['id']]) }}" aria-label="{{ __('ui.admin.dismiss_report') }}" title="{{ __('ui.admin.dismiss_report') }}">
+                            <i data-lucide="shield-check" class="icon"></i>
+                        </button>
+                    @endif
                     @if ($moderationNsfwPending)
                         <button type="button" class="icon-btn icon-btn--sm icon-btn--danger icon-btn--label" data-admin-nsfw data-admin-type="post" data-admin-id="{{ $project['id'] }}" data-admin-url="{{ route('moderation.posts.nsfw', $project['id']) }}" aria-label="{{ __('ui.moderation.nsfw') }}" title="{{ __('ui.moderation.nsfw') }}">
                             NSFW
@@ -194,11 +195,6 @@
             @endif
         @endif
     @endcan
-    @if ($isCollaboration)
-        <div class="post-badges">
-            <span class="badge badge--collaboration">{{ __('ui.feed.collaboration_badge') }}</span>
-        </div>
-    @endif
     <h3 class="post-title"><a href="{{ route('project', $project['slug']) }}">{{ $project['title'] }}</a></h3>
     @if ($hasCarousel)
         <div class="post-cover post-carousel {{ $isNsfw ? 'is-nsfw' : '' }}" data-carousel data-nsfw-cover aria-label="{{ __('ui.js.carousel_label') }}">
@@ -221,14 +217,26 @@
             @endif
         </div>
     @else
-        <div class="post-cover {{ $isNsfw ? 'is-nsfw' : '' }}" data-nsfw-cover>
+        <div class="post-cover {{ $isNsfw ? 'is-nsfw' : '' }}" data-nsfw-cover @if (!$isCoverPlaceholder) style="--cover-bg: url('{{ $coverUrl }}');" @endif>
             <img class="{{ $isCoverPlaceholder ? 'is-placeholder' : '' }}" src="{{ $coverUrl }}" alt="{{ $project['title'] }}" data-fallback="{{ asset('images/logo-black.svg') }}" draggable="false">
             @if ($isNsfw)
                 <button type="button" class="nsfw-reveal" data-nsfw-reveal>{{ __('ui.project.nsfw_reveal') }}</button>
             @endif
         </div>
     @endif
-    @if (!empty($previewText))
+    @if ($previewExpandable)
+        <details class="post-excerpt">
+            <summary class="post-excerpt__summary">
+                <span class="post-excerpt__preview">{{ $previewSummary }}</span>
+                <span class="post-excerpt__toggle">
+                    <span class="post-excerpt__more">{{ __('ui.card.show_text') }}</span>
+                    <span class="post-excerpt__less">{{ __('ui.card.hide_text') }}</span>
+                    <i data-lucide="chevron-down" class="icon" aria-hidden="true"></i>
+                </span>
+            </summary>
+            <p class="post-excerpt__body">{{ $previewText }}</p>
+        </details>
+    @elseif (!empty($previewText))
         <p class="post-context">{{ $previewText }}</p>
     @endif
     <div class="post-tags">
@@ -240,22 +248,18 @@
                 <span class="chip chip--moderation chip--{{ $moderationStatus }}">{{ __('ui.moderation.status_' . $moderationStatus) }}</span>
             @endif
         @endcan
-    @foreach ($visibleTags as $tag)
-        @php
-            $tagSlug = \Illuminate\Support\Str::slug((string) $tag);
-            $tagClass = $tagSlug === 'collaboration' ? 'chip--collaboration' : '';
-        @endphp
-        @continue($tagSlug === 'collaboration')
-        <span class="chip chip--tag {{ $tagClass }}">{{ $tag }}</span>
-    @endforeach
+        @foreach ($visibleTags as $tag)
+            <span class="chip chip--tag">{{ $tag }}</span>
+        @endforeach
         @if ($extraTags > 0)
             <span class="chip chip--count">+{{ $extraTags }}</span>
         @endif
     </div>
     <div class="post-actions">
         <div class="action-icons">
-            <button type="button" class="icon-action {{ !empty($project['is_upvoted']) ? 'is-active' : '' }}" data-action="upvote" data-project-slug="{{ $project['slug'] }}" data-upvoted="{{ !empty($project['is_upvoted']) ? '1' : '0' }}" aria-label="{{ __('ui.project.upvote') }}">
+            <button type="button" class="icon-action {{ !empty($project['is_upvoted']) ? 'is-active' : '' }}" data-action="upvote" data-project-slug="{{ $project['slug'] }}" data-upvoted="{{ !empty($project['is_upvoted']) ? '1' : '0' }}" data-base-count="{{ $project['score'] ?? 0 }}" aria-label="{{ __('ui.project.upvote') }}">
                 <i data-lucide="arrow-up" class="icon"></i>
+                <span class="action-count">{{ $project['score'] ?? 0 }}</span>
             </button>
             <a class="icon-action" href="{{ route('project', $project['slug']) }}?tab=comments" aria-label="{{ __('ui.project.tab_comments') }}">
                 <i data-lucide="message-circle" class="icon"></i>

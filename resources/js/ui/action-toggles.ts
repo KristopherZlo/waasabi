@@ -34,7 +34,9 @@ const updateSaveButton = (button: HTMLButtonElement, saved: boolean) => {
     button.dataset.saved = saved ? '1' : '0';
     const label = button.querySelector<HTMLElement>('.action-label');
     if (label) {
-        label.textContent = saved ? t('saved', 'Saved') : t('save', 'Save');
+        label.textContent = saved
+            ? button.dataset.savedLabel ?? t('saved', 'Saved')
+            : t('save', 'Save');
     }
 };
 
