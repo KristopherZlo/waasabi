@@ -1,7 +1,10 @@
 @php
-    $topProjects = $top_projects ?? [];
-    $readingNow = $reading_now ?? [];
-    $subscriptionsList = $subscriptions ?? [];
+    $sidebarData = isset($top_projects, $reading_now, $subscriptions)
+        ? []
+        : app(\App\Services\FeedViewService::class)->buildSidebarData(Auth::user());
+    $topProjects = $top_projects ?? $sidebarData['top_projects'] ?? [];
+    $readingNow = $reading_now ?? $sidebarData['reading_now'] ?? [];
+    $subscriptionsList = $subscriptions ?? $sidebarData['subscriptions'] ?? [];
 @endphp
 
 <div class="sidebar-card">

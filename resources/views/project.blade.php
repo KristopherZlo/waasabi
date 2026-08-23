@@ -741,3 +741,7 @@
         </section>
     @endif
 @endsection
+
+@section('sidebar')
+    @include('partials.sidebar-feed')
+@endsection

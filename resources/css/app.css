@@ -9411,7 +9411,22 @@ body[data-page='verify-email'] .content > .section {
 body[data-page='publish'],
 body[data-page='edit'] {
     --content-width: 100%;
-    --content-max: 1320px;
+    --content-max: 1180px;
+}
+
+body[data-page='publish'] .layout--single,
+body[data-page='edit'] .layout--single {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-page='publish'] .content,
+body[data-page='edit'] .content,
+body[data-page='publish'] .editor-shell,
+body[data-page='edit'] .editor-shell {
+    min-width: 0;
+    width: 100%;
+    margin-inline: auto;
 }
 
 body[data-page='publish'] .content > .section,
@@ -9432,6 +9447,12 @@ body[data-page='edit'] .content > .section {
 .editor-grid {
     grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
     gap: 24px;
+}
+
+.editor-grid > *,
+.editor-panel--editor,
+.editor-surface {
+    min-width: 0;
 }
 
 .editor-meta {
@@ -9804,8 +9825,8 @@ body[data-page='admin'] {
 
     .editor-meta {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0 20px;
+        grid-template-columns: 1fr;
+        gap: 0;
     }
 }
 

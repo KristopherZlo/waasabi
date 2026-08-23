@@ -230,3 +230,7 @@
         </div>
     </section>
 @endsection
+
+@section('sidebar')
+    @include('partials.sidebar-feed')
+@endsection
