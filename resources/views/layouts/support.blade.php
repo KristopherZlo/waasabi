@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="{{ app()->getLocale() }}" data-theme="light">
+<html lang="{{ app()->getLocale() }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @include('partials.theme-preference')
     @php
         $metaTitle = trim($__env->yieldContent('title', config('app.name').' Support'));
         $metaDescription = trim($__env->yieldContent('description', __('ui.app.description')));
@@ -197,7 +198,7 @@
         </div>
     </main>
 
-    <footer class="site-footer site-footer--light site-footer--compact">
+    <footer class="site-footer site-footer--compact">
         <div class="site-footer__inner">
             <div class="footer-grid">
                 <div class="footer-col footer-col--account">

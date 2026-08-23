@@ -6889,38 +6889,6 @@ body[data-page^='legal-'] {
 }
 
 /* Support hub */
-.app-shell[data-page='support'],
-.app-shell[data-page='support-ticket'],
-.app-shell[data-page='support-document'] {
-    --bg: #ebebeb;
-    --surface: #ffffff;
-    --surface-2: #f9f9f9;
-    --surface-3: #e7e7e7;
-    --text: #0d0d0d;
-    --muted: #5d5d5d;
-    --border: #dbdbdb;
-    --accent: #2563eb;
-    --accent-strong: #1d4ed8;
-    --primary-cta-text: #ffffff;
-    --success: #16a34a;
-    --topbar-bg: #ffffff;
-    --topbar-shadow: none;
-    --nav-bg: #ffffff;
-    --nav-shadow: none;
-    --footer-bg: #f9f9f9;
-    --footer-border: #dbdbdb;
-    --scrim: rgba(13, 13, 13, 0.18);
-    --scrim-strong: rgba(13, 13, 13, 0.24);
-    --rail-bg: #ffffff;
-    --rail-border: #e7e7e7;
-    --rail-gradient: linear-gradient(90deg, rgba(13, 13, 13, 0.08), rgba(13, 13, 13, 0));
-    --media-frame-bg: #f9f9f9;
-    --logo-filter: none;
-    --logo-opacity: 1;
-    --support-banner-from: #dbeafe;
-    --support-banner-mid: #bfdbfe;
-    --support-banner-to: #93c5fd;
-}
 
 .top-support-btn {
     gap: 6px;
@@ -9595,6 +9563,29 @@ body[data-page='admin'] {
     border-bottom: 1px solid var(--border);
     border-radius: 0;
     background: transparent;
+    box-shadow: none;
+    color: var(--text);
+}
+
+.support-banner__summary {
+    color: var(--muted);
+}
+
+.support-banner__search {
+    border-color: var(--border);
+    background: var(--surface);
+}
+
+.support-banner__search .icon {
+    color: var(--muted);
+}
+
+.support-banner__search .support-search__input {
+    color: var(--text);
+}
+
+.support-banner__search .support-search__input::placeholder {
+    color: var(--muted);
 }
 
 .support-banner__inner,
