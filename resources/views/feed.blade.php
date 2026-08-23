@@ -48,11 +48,11 @@
             <div class="feed-filter-bar">
                 <div class="feed-filters" role="group" aria-label="{{ __('ui.feed.sort_label') }}">
                     <button type="button" class="feed-filter is-active" data-feed-filter="all" aria-pressed="true" aria-label="{{ __('ui.feed.filter_all') }}" data-tooltip="{{ __('ui.feed.filter_all') }}">
-                        <i data-lucide="layout-list" class="icon" aria-hidden="true"></i>
+                        <i data-lucide="list" class="icon" aria-hidden="true"></i>
                         <span class="sr-only">{{ __('ui.feed.filter_all') }}</span>
                     </button>
                     <button type="button" class="feed-filter" data-feed-filter="best" aria-pressed="false" aria-label="{{ __('ui.feed.filter_best') }}" data-tooltip="{{ __('ui.feed.filter_best') }}">
-                        <i data-lucide="flame" class="icon" aria-hidden="true"></i>
+                        <i data-lucide="chart-no-axes-combined" class="icon" aria-hidden="true"></i>
                         <span class="sr-only">{{ __('ui.feed.filter_best') }}</span>
                     </button>
                     <button type="button" class="feed-filter" data-feed-filter="fresh" aria-pressed="false" aria-label="{{ __('ui.feed.filter_fresh') }}" data-tooltip="{{ __('ui.feed.filter_fresh') }}">
