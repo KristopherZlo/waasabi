@@ -7,7 +7,7 @@
 @if (Auth::check() && !(Auth::user()?->is_banned ?? false))
     <nav class="nav" aria-label="{{ __('ui.nav.mobile') }}">
         <a href="{{ route('feed') }}" class="{{ request()->routeIs('feed') ? 'is-active' : '' }}" @if (request()->routeIs('feed')) aria-current="page" @endif><i data-lucide="home" class="icon"></i><span>{{ __('ui.nav.feed') }}</span></a>
-        <a href="{{ route('showcase') }}" class="{{ request()->routeIs('showcase') ? 'is-active' : '' }}" @if (request()->routeIs('showcase')) aria-current="page" @endif><i data-lucide="layers" class="icon"></i><span>{{ __('ui.nav.showcase') }}</span></a>
+        <a href="{{ route('collaboration') }}" class="{{ request()->routeIs('collaboration*') ? 'is-active' : '' }}" @if (request()->routeIs('collaboration*')) aria-current="page" @endif><i data-lucide="users" class="icon"></i><span>{{ __('ui.feed.tab_collaboration') }}</span></a>
         <a href="{{ route('publish') }}" class="{{ request()->routeIs('publish') ? 'is-active' : '' }}" @if (request()->routeIs('publish')) aria-current="page" @endif><i data-lucide="plus-circle" class="icon"></i><span>{{ __('ui.nav.publish') }}</span></a>
         <a href="{{ route('read-later') }}" class="{{ request()->routeIs('read-later') ? 'is-active' : '' }}" @if (request()->routeIs('read-later')) aria-current="page" @endif><i data-lucide="bookmark" class="icon"></i><span>{{ __('ui.nav.read_later') }}</span></a>
         <a href="{{ $profileRoute }}" class="{{ request()->routeIs('profile*') ? 'is-active' : '' }}" @if (request()->routeIs('profile*')) aria-current="page" @endif><i data-lucide="user" class="icon"></i><span>{{ __('ui.nav.profile') }}</span></a>
@@ -15,7 +15,7 @@
 @else
     <nav class="nav" aria-label="{{ __('ui.nav.mobile') }}">
         <a href="{{ route('feed') }}" class="{{ request()->routeIs('feed') ? 'is-active' : '' }}" @if (request()->routeIs('feed')) aria-current="page" @endif><i data-lucide="home" class="icon"></i><span>{{ __('ui.nav.feed') }}</span></a>
-        <a href="{{ route('showcase') }}" class="{{ request()->routeIs('showcase') ? 'is-active' : '' }}" @if (request()->routeIs('showcase')) aria-current="page" @endif><i data-lucide="layers" class="icon"></i><span>{{ __('ui.nav.showcase') }}</span></a>
+        <a href="{{ route('collaboration') }}" class="{{ request()->routeIs('collaboration*') ? 'is-active' : '' }}" @if (request()->routeIs('collaboration*')) aria-current="page" @endif><i data-lucide="users" class="icon"></i><span>{{ __('ui.feed.tab_collaboration') }}</span></a>
         <a href="{{ route('login') }}" class="{{ request()->routeIs('login') ? 'is-active' : '' }}"><i data-lucide="log-in" class="icon"></i><span>{{ __('ui.nav.login') }}</span></a>
         <a href="{{ route('register') }}" class="{{ request()->routeIs('register') ? 'is-active' : '' }}"><i data-lucide="user-plus" class="icon"></i><span>{{ __('ui.nav.register') }}</span></a>
     </nav>

@@ -24,6 +24,8 @@
     $publishedMinutes = (int) ($question['published_minutes'] ?? 0);
     $published = $question['time']
         ?? ($publishedMinutes ? now()->subMinutes($publishedMinutes)->diffForHumans() : __('ui.project.today'));
+    $publishedAt = now()->subMinutes($publishedMinutes);
+    $publishedDate = $publishedAt->translatedFormat('j M Y');
     $score = (int) ($question['score'] ?? 0);
     $replies = (int) ($question['replies'] ?? count($question['answers'] ?? []));
     $body = (string) ($question['body_html'] ?? '');
@@ -54,7 +56,7 @@
         <a class="post-author" href="{{ route('profile.show', $authorSlug) }}">{{ $authorName }}</a>
         <span class="badge badge--{{ $authorRoleKey }}">{{ $authorRoleLabel }}</span>
         <span class="dot">&bull;</span>
-        <span>{{ $published }}</span>
+        <time datetime="{{ $publishedAt->toDateString() }}" title="{{ $published }}">{{ $publishedDate }} · {{ $published }}</time>
         @if ($showEdited)
             <span class="dot">&bull;</span>
             <span class="post-edited">{{ __('ui.project.edited', ['time' => $editedAt, 'user' => $editedByName]) }}</span>

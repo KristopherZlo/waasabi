@@ -47,10 +47,22 @@
             </div>
             <div class="feed-filter-bar">
                 <div class="feed-filters" role="group" aria-label="{{ __('ui.feed.sort_label') }}">
-                    <button type="button" class="feed-filter is-active" data-feed-filter="all" aria-pressed="true">{{ __('ui.feed.filter_all') }}</button>
-                    <button type="button" class="feed-filter" data-feed-filter="best" aria-pressed="false">{{ __('ui.feed.filter_best') }}</button>
-                    <button type="button" class="feed-filter" data-feed-filter="fresh" aria-pressed="false">{{ __('ui.feed.filter_fresh') }}</button>
-                    <button type="button" class="feed-filter" data-feed-filter="reading" aria-pressed="false">{{ __('ui.feed.filter_reading') }}</button>
+                    <button type="button" class="feed-filter is-active" data-feed-filter="all" aria-pressed="true" aria-label="{{ __('ui.feed.filter_all') }}" data-tooltip="{{ __('ui.feed.filter_all') }}">
+                        <i data-lucide="layout-list" class="icon" aria-hidden="true"></i>
+                        <span class="sr-only">{{ __('ui.feed.filter_all') }}</span>
+                    </button>
+                    <button type="button" class="feed-filter" data-feed-filter="best" aria-pressed="false" aria-label="{{ __('ui.feed.filter_best') }}" data-tooltip="{{ __('ui.feed.filter_best') }}">
+                        <i data-lucide="flame" class="icon" aria-hidden="true"></i>
+                        <span class="sr-only">{{ __('ui.feed.filter_best') }}</span>
+                    </button>
+                    <button type="button" class="feed-filter" data-feed-filter="fresh" aria-pressed="false" aria-label="{{ __('ui.feed.filter_fresh') }}" data-tooltip="{{ __('ui.feed.filter_fresh') }}">
+                        <i data-lucide="clock-3" class="icon" aria-hidden="true"></i>
+                        <span class="sr-only">{{ __('ui.feed.filter_fresh') }}</span>
+                    </button>
+                    <button type="button" class="feed-filter" data-feed-filter="reading" aria-pressed="false" aria-label="{{ __('ui.feed.filter_reading') }}" data-tooltip="{{ __('ui.feed.filter_reading') }}">
+                        <i data-lucide="book-open" class="icon" aria-hidden="true"></i>
+                        <span class="sr-only">{{ __('ui.feed.filter_reading') }}</span>
+                    </button>
                 </div>
                 <button type="button" class="feed-filter-reset" data-feed-reset hidden>{{ __('ui.feed.filter_reset') }}</button>
             </div>

@@ -104,7 +104,7 @@ export const setupFeedFilters = () => {
         return cardTags.some((tag) => synonyms.has(tag));
     };
 
-    const applyTagFilter = (activeTags: string[]) => {
+    const applyTagFilter = (activeTags: string[], excludedTags: string[]) => {
         const cards = getItems();
         let visibleCount = 0;
 
@@ -114,6 +114,9 @@ export const setupFeedFilters = () => {
 
             if (activeTags.length) {
                 show = activeTags.every((tag) => hasTagMatch(cardTags, tag));
+            }
+            if (excludedTags.length) {
+                show = show && !excludedTags.some((tag) => hasTagMatch(cardTags, tag));
             }
 
             card.style.display = show ? '' : 'none';
@@ -131,7 +134,7 @@ export const setupFeedFilters = () => {
         }
     };
 
-    const updateUrl = (filterName: string, activeTags: string[]) => {
+    const updateUrl = (filterName: string, activeTags: string[], excludedTags: string[]) => {
         const url = new URL(window.location.href);
         url.searchParams.set('filter', filterName);
         if (activeTags.length) {
@@ -139,13 +142,23 @@ export const setupFeedFilters = () => {
         } else {
             url.searchParams.delete('tags');
         }
-        url.searchParams.delete('exclude');
+        if (excludedTags.length) {
+            url.searchParams.set('exclude', excludedTags.join(','));
+        } else {
+            url.searchParams.delete('exclude');
+        }
         window.history.replaceState({}, '', url.toString());
     };
 
     const getActiveTags = () =>
         tags
             .filter((tag) => tag.classList.contains('is-active'))
+            .map((tag) => slugify(tag.dataset.feedTag ?? ''))
+            .filter(Boolean);
+
+    const getExcludedTags = () =>
+        tags
+            .filter((tag) => tag.classList.contains('is-excluded'))
             .map((tag) => slugify(tag.dataset.feedTag ?? ''))
             .filter(Boolean);
 
@@ -162,30 +175,35 @@ export const setupFeedFilters = () => {
             return;
         }
         const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
-        resetButton.hidden = activeFilter === 'all' && getActiveTags().length === 0;
+        resetButton.hidden = activeFilter === 'all' && getActiveTags().length === 0 && getExcludedTags().length === 0;
     };
 
     const setActiveFromUrl = () => {
         const url = new URL(window.location.href);
         const filterName = url.searchParams.get('filter') ?? 'all';
         const tagParam = url.searchParams.get('tags') ?? '';
+        const excludeParam = url.searchParams.get('exclude') ?? '';
         const urlTags = tagParam
             .split(',')
             .map((tag) => slugify(tag))
             .filter(Boolean);
-        url.searchParams.delete('exclude');
-        window.history.replaceState({}, '', url.toString());
+        const urlExcluded = excludeParam
+            .split(',')
+            .map((tag) => slugify(tag))
+            .filter(Boolean);
+        const activeTags = urlTags.filter((tag) => !urlExcluded.includes(tag));
         setActiveFilter(filterName);
 
         tags.forEach((btn) => {
             const tagName = slugify(btn.dataset.feedTag ?? '');
-            const active = urlTags.includes(tagName);
+            const active = activeTags.includes(tagName);
+            const excluded = urlExcluded.includes(tagName);
             btn.classList.toggle('is-active', active);
-            btn.classList.remove('is-excluded');
-            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            btn.classList.toggle('is-excluded', excluded);
+            btn.setAttribute('aria-pressed', active ? 'true' : excluded ? 'mixed' : 'false');
         });
 
-        applyTagFilter(urlTags);
+        applyTagFilter(activeTags, urlExcluded);
         updateResetButton();
     };
 
@@ -199,6 +217,7 @@ export const setupFeedFilters = () => {
             // Optimistic active state so the UI responds immediately.
             setActiveFilter(name);
             const activeTags = getActiveTags();
+            const excludedTags = getExcludedTags();
             const url = new URL(window.location.href);
             url.searchParams.set('filter', name);
             if (activeTags.length) {
@@ -206,7 +225,11 @@ export const setupFeedFilters = () => {
             } else {
                 url.searchParams.delete('tags');
             }
-            url.searchParams.delete('exclude');
+            if (excludedTags.length) {
+                url.searchParams.set('exclude', excludedTags.join(','));
+            } else {
+                url.searchParams.delete('exclude');
+            }
             updateResetButton();
             void navigateTo(url.toString());
         });
@@ -218,13 +241,16 @@ export const setupFeedFilters = () => {
         }
         tag.dataset.feedTagBound = '1';
         tag.addEventListener('click', () => {
-            tag.classList.toggle('is-active');
-            tag.classList.remove('is-excluded');
-            tag.setAttribute('aria-pressed', tag.classList.contains('is-active') ? 'true' : 'false');
+            const wasActive = tag.classList.contains('is-active');
+            const wasExcluded = tag.classList.contains('is-excluded');
+            tag.classList.toggle('is-active', !wasActive && !wasExcluded);
+            tag.classList.toggle('is-excluded', wasActive);
+            tag.setAttribute('aria-pressed', wasActive ? 'mixed' : wasExcluded ? 'false' : 'true');
             const activeTags = getActiveTags();
+            const excludedTags = getExcludedTags();
             const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
-            applyTagFilter(activeTags);
-            updateUrl(activeFilter, activeTags);
+            applyTagFilter(activeTags, excludedTags);
+            updateUrl(activeFilter, activeTags, excludedTags);
             updateResetButton();
             void navigateTo(window.location.href);
         });
@@ -238,8 +264,8 @@ export const setupFeedFilters = () => {
                 tag.classList.remove('is-active', 'is-excluded');
                 tag.setAttribute('aria-pressed', 'false');
             });
-            applyTagFilter([]);
-            updateUrl('all', []);
+            applyTagFilter([], []);
+            updateUrl('all', [], []);
             updateResetButton();
             void navigateTo(window.location.href);
         });
@@ -252,7 +278,8 @@ export const setupFeedFilters = () => {
     }
     feedFiltersUpdatedHandler = () => {
         const activeTags = getActiveTags();
-        applyTagFilter(activeTags);
+        const excludedTags = getExcludedTags();
+        applyTagFilter(activeTags, excludedTags);
         updateResetButton();
     };
     document.addEventListener('feed:updated', feedFiltersUpdatedHandler);

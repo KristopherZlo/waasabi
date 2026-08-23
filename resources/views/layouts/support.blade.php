@@ -210,7 +210,6 @@
                     <div class="footer-title">{{ __('ui.footer.sections') }}</div>
                     <a href="{{ route('feed') }}" class="footer-link">{{ __('ui.nav.feed') }}</a>
                     <a href="{{ route('feed', ['stream' => 'questions']) }}" class="footer-link">{{ __('ui.feed.tab_questions') }}</a>
-                    <a href="{{ route('showcase') }}" class="footer-link">{{ __('ui.nav.showcase') }}</a>
                     <a href="{{ route('read-later') }}" class="footer-link">{{ __('ui.nav.read_later') }}</a>
                     <a href="{{ route('profile') }}" class="footer-link">{{ __('ui.nav.profile') }}</a>
                 </div>
@@ -228,7 +227,7 @@
                     <div class="footer-title">{{ __('ui.footer.services') }}</div>
                     <a href="{{ route('publish') }}" class="footer-link">{{ __('ui.publish.title') }}</a>
                     <a href="{{ route('read-later') }}" class="footer-link">{{ __('ui.read_later.title') }}</a>
-                    <a href="{{ route('showcase') }}" class="footer-link">{{ __('ui.showcase.title') }}</a>
+                    <a href="{{ route('collaboration') }}" class="footer-link">{{ __('ui.feed.tab_collaboration') }}</a>
                     <a href="{{ route('notifications') }}" class="footer-link">{{ __('ui.notifications.title') }}</a>
                     <a href="{{ route('support') }}" class="footer-link">{{ __('ui.support.title') }}</a>
                 </div>

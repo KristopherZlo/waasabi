@@ -65,6 +65,8 @@
     $authorRoleKey = in_array($authorRoleKey, $roleKeys, true) ? $authorRoleKey : 'user';
     $authorRoleLabel = __('ui.roles.' . $authorRoleKey);
     $published = $project['published'] ?? __('ui.project.today');
+    $publishedAt = now()->subMinutes((int) ($project['published_minutes'] ?? 0));
+    $publishedDate = $publishedAt->translatedFormat('j M Y');
     $readTimeValue = $project['read_time'] ?? null;
     $readTimeLabel = $readTimeValue ? __('ui.project.read_time', ['time' => $readTimeValue]) : '-';
     $reportCount = (int) ($project['report_count'] ?? 0);
@@ -94,7 +96,7 @@
         <a class="post-author" href="{{ route('profile.show', $authorSlug) }}">{{ $authorName }}</a>
         <span class="badge badge--{{ $authorRoleKey }}">{{ $authorRoleLabel }}</span>
         <span class="dot">&bull;</span>
-        <span>{{ $published }}</span>
+        <time datetime="{{ $publishedAt->toDateString() }}" title="{{ $published }}">{{ $publishedDate }} · {{ $published }}</time>
         @if ($showEdited)
             <span class="dot">&bull;</span>
             <span class="post-edited">{{ __('ui.project.edited', ['time' => $editedAt, 'user' => $editedByName]) }}</span>
