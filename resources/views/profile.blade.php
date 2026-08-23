@@ -118,7 +118,6 @@
             </div>
             @if (!empty($badges))
                 <div class="profile-badges">
-                    <div class="profile-badges__title">{{ __('ui.profile.badges') }}</div>
                     <div class="profile-badges__list">
                         @foreach ($badges as $badge)
                         @php
@@ -182,42 +181,28 @@
         </div>
     </section>
 
-    @if ($canManageBadges)
-        <section class="section profile-badge-admin">
-            <div class="section-title">{{ __('ui.badges.grant_title') }}</div>
-            <form class="badge-form" method="POST" action="{{ route('profile.badges.grant', $profileSlug) }}">
-                @csrf
-                <label>
-                    {{ __('ui.badges.grant_title') }}
-                    <select class="input" name="badge_key" required>
-                        @foreach (($badge_catalog ?? []) as $catalogBadge)
-                            <option value="{{ $catalogBadge['key'] }}">{{ $catalogBadge['name'] }}</option>
-                        @endforeach
-                    </select>
-                </label>
-                <label>
-                    {{ __('ui.badges.reason') }}
-                    <input class="input" type="text" name="reason" maxlength="255" placeholder="{{ __('ui.badges.reason_placeholder') }}">
-                </label>
-                <button class="submit-btn" type="submit">{{ __('ui.badges.grant_cta') }}</button>
-            </form>
+    @include('partials.profile-modals')
 
-            @if (!empty($badges))
-                <div class="badge-revoke-list">
-                    @foreach ($badges as $badge)
-                        <form method="POST" action="{{ route('profile.badges.revoke', [$profileSlug, $badge['id']]) }}">
-                            @csrf
-                            @method('DELETE')
-                            <span>{{ $badge['label'] }}</span>
-                            <button class="ghost-btn ghost-btn--danger" type="submit">{{ __('ui.badges.revoke_title') }}</button>
-                        </form>
-                    @endforeach
-                </div>
-            @endif
-        </section>
-    @endif
-    <section class="section profile-section">
-        <div class="section-title">{{ __('ui.profile.projects') }}</div>
+    <div class="profile-content">
+        <div class="tabs profile-tabs" data-tabs role="tablist" aria-label="{{ __('ui.profile.title') }}">
+            <button type="button" class="tab is-active" data-tab="projects" role="tab" aria-selected="true">
+                <i data-lucide="folder" class="icon" aria-hidden="true"></i>
+                <span>{{ __('ui.profile.projects') }}</span>
+                <span class="tab__count">{{ count($projects) }}</span>
+            </button>
+            <button type="button" class="tab" data-tab="questions" role="tab" aria-selected="false" tabindex="-1">
+                <i data-lucide="circle-help" class="icon" aria-hidden="true"></i>
+                <span>{{ __('ui.profile.questions') }}</span>
+                <span class="tab__count">{{ count($questions) }}</span>
+            </button>
+            <button type="button" class="tab" data-tab="comments" role="tab" aria-selected="false" tabindex="-1">
+                <i data-lucide="message-circle" class="icon" aria-hidden="true"></i>
+                <span>{{ __('ui.profile.comments') }}</span>
+                <span class="tab__count">{{ count($comments) }}</span>
+            </button>
+        </div>
+
+    <section class="section profile-section tab-panel is-active" data-tab-panel="projects">
         <div class="list">
             @forelse ($projects as $project)
                 @include('partials.project-card', ['project' => $project])
@@ -232,8 +217,7 @@
         </div>
     </section>
 
-    <section class="section profile-section">
-        <div class="section-title">{{ __('ui.profile.questions') }}</div>
+    <section class="section profile-section tab-panel" data-tab-panel="questions" hidden>
         <div class="list">
             @forelse ($questions as $question)
                 <div class="list-item">
@@ -250,8 +234,7 @@
         </div>
     </section>
 
-    <section class="section profile-section">
-        <div class="section-title">{{ __('ui.profile.comments') }}</div>
+    <section class="section profile-section tab-panel" data-tab-panel="comments" hidden>
         <div class="list">
             @forelse ($comments as $comment)
                 <div class="list-item">
@@ -293,4 +276,5 @@
             @endforelse
         </div>
     </section>
+    </div>
 @endsection

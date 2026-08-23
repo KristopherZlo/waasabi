@@ -9211,9 +9211,10 @@ body[data-page='profile'] .profile-banner::after {
 }
 
 body[data-page='profile'] .profile-header {
+    width: 100%;
     margin-top: 18px;
     align-items: flex-start;
-    justify-content: flex-start;
+    justify-content: space-between;
 }
 
 body[data-page='profile'] .profile-header h1 {
@@ -9223,13 +9224,14 @@ body[data-page='profile'] .profile-header h1 {
 }
 
 body[data-page='profile'] .profile-badges {
-    justify-items: start;
+    justify-items: end;
+    margin-left: auto;
     padding-top: 3px;
-    text-align: left;
+    text-align: right;
 }
 
 body[data-page='profile'] .profile-badges__list {
-    justify-content: flex-start;
+    justify-content: flex-end;
     padding: 0;
     border: 0;
     border-radius: 0;
@@ -9238,6 +9240,11 @@ body[data-page='profile'] .profile-badges__list {
 
 body[data-page='profile'] .profile-badge {
     box-shadow: none;
+}
+
+body[data-page='profile'] .profile-badge img {
+    width: 30px;
+    height: 30px;
 }
 
 body[data-page='profile'] .profile-badge:hover,
@@ -9251,8 +9258,22 @@ body[data-page='profile'] .profile-badge:focus-visible {
     outline-offset: 2px;
 }
 
-body[data-page='profile'] .profile-section {
+body[data-page='profile'] .profile-content {
     margin-top: 24px;
+}
+
+body[data-page='profile'] .profile-tabs {
+    gap: 24px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+}
+
+body[data-page='profile'] .profile-tabs .tab {
+    flex: 0 0 auto;
+}
+
+body[data-page='profile'] .profile-section {
+    margin-top: 18px;
 }
 
 body[data-page='profile'] .profile-empty {
