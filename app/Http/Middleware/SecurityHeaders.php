@@ -52,6 +52,7 @@ class SecurityHeaders
             ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
             (array) config('waasabi.security.csp_extra_style_src', []),
         );
+        $fontSrc = ["'self'", 'data:', 'https://fonts.gstatic.com'];
         $connectSrc = array_merge(
             ["'self'", 'https://challenges.cloudflare.com'],
             (array) config('waasabi.security.csp_extra_connect_src', []),
@@ -67,6 +68,7 @@ class SecurityHeaders
             $connectSrc = array_merge($connectSrc, $devHttp, $devWs);
             $scriptSrc = array_merge($scriptSrc, $devHttp, ["'unsafe-eval'"]);
             $styleSrc = array_merge($styleSrc, $devHttp);
+            $fontSrc = array_merge($fontSrc, $devHttp);
         }
 
         $directives = [
@@ -74,7 +76,7 @@ class SecurityHeaders
             'script-src ' . implode(' ', array_unique($scriptSrc)),
             'style-src ' . implode(' ', array_unique($styleSrc)),
             "img-src 'self' data: https:",
-            "font-src 'self' data: https://fonts.gstatic.com",
+            'font-src ' . implode(' ', $fontSrc),
             'connect-src ' . implode(' ', array_unique($connectSrc)),
             'frame-src ' . implode(' ', array_unique($frameSrc)),
             "form-action 'self'",
