@@ -9223,12 +9223,28 @@ body[data-page='profile'] .profile-banner::after {
 
 body[data-page='profile'] .profile-header {
     margin-top: 18px;
+    align-items: flex-start;
+    justify-content: flex-start;
 }
 
 body[data-page='profile'] .profile-header h1 {
     margin: 0;
-    font-size: clamp(28px, 3vw, 38px);
+    font-size: clamp(26px, 3vw, 32px);
     letter-spacing: -0.025em;
+}
+
+body[data-page='profile'] .profile-badges {
+    justify-items: start;
+    padding-top: 3px;
+    text-align: left;
+}
+
+body[data-page='profile'] .profile-badges__list {
+    justify-content: flex-start;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 body[data-page='profile'] .profile-badge {
@@ -9238,6 +9254,39 @@ body[data-page='profile'] .profile-badge {
 body[data-page='profile'] .profile-badge:hover,
 body[data-page='profile'] .profile-badge:focus-visible {
     transform: none;
+}
+
+body[data-page='profile'] .profile-badge:focus-visible {
+    border-radius: var(--radius-sm);
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+body[data-page='profile'] .profile-section {
+    margin-top: 24px;
+}
+
+body[data-page='profile'] .profile-empty {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 72px;
+    padding: 14px 16px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+}
+
+body[data-page='profile'] .profile-empty p {
+    margin: 0;
+}
+
+@media (max-width: 640px) {
+    body[data-page='profile'] .profile-empty {
+        align-items: flex-start;
+        flex-direction: column;
+    }
 }
 
 body[data-page='profile-settings'] .settings-shell {

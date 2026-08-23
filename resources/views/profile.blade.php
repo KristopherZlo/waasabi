@@ -118,6 +118,7 @@
             </div>
             @if (!empty($badges))
                 <div class="profile-badges">
+                    <div class="profile-badges__title">{{ __('ui.profile.badges') }}</div>
                     <div class="profile-badges__list">
                         @foreach ($badges as $badge)
                         @php
@@ -158,9 +159,6 @@
                 <span class="badge badge--banned">{{ __('ui.admin.banned') }}</span>
             @endif
             <span class="badge badge--{{ $roleKey }}">{{ __('ui.roles.' . $roleKey) }}</span>
-            @if (!empty($profile_user['id']))
-                <span class="chip chip--comment">{{ __('ui.profile.id_label') }} {{ $profile_user['id'] }}</span>
-            @endif
             @if ($canShowCounts)
                 <span class="chip chip--comment">{{ __('ui.profile.followers') }}: <span data-followers-count>{{ $followers_count }}</span></span>
                 <span class="chip chip--comment">{{ __('ui.profile.following') }}: <span data-following-count>{{ $following_count }}</span></span>
@@ -218,18 +216,23 @@
             @endif
         </section>
     @endif
-    <section class="section" style="margin-top: 24px;">
+    <section class="section profile-section">
         <div class="section-title">{{ __('ui.profile.projects') }}</div>
         <div class="list">
             @forelse ($projects as $project)
                 @include('partials.project-card', ['project' => $project])
             @empty
-                <div class="list-item">{{ __('ui.profile.no_posts') }}</div>
+                <div class="profile-empty">
+                    <p>{{ $is_owner ? __('ui.profile.no_posts_owner') : __('ui.profile.no_posts') }}</p>
+                    @if ($is_owner && !$isBanned)
+                        <a class="ghost-btn" href="{{ route('publish') }}">{{ __('ui.profile.publish_project') }}</a>
+                    @endif
+                </div>
             @endforelse
         </div>
     </section>
 
-    <section class="section" style="margin-top: 24px;">
+    <section class="section profile-section">
         <div class="section-title">{{ __('ui.profile.questions') }}</div>
         <div class="list">
             @forelse ($questions as $question)
@@ -237,12 +240,17 @@
                     <a href="{{ route('questions.show', $question['slug']) }}">{{ $question['title'] }}</a>
                 </div>
             @empty
-                <div class="list-item">{{ __('ui.profile.no_questions') }}</div>
+                <div class="profile-empty">
+                    <p>{{ $is_owner ? __('ui.profile.no_questions_owner') : __('ui.profile.no_questions') }}</p>
+                    @if ($is_owner && !$isBanned)
+                        <a class="ghost-btn" href="{{ route('publish') }}">{{ __('ui.profile.ask_question') }}</a>
+                    @endif
+                </div>
             @endforelse
         </div>
     </section>
 
-    <section class="section" style="margin-top: 24px;">
+    <section class="section profile-section">
         <div class="section-title">{{ __('ui.profile.comments') }}</div>
         <div class="list">
             @forelse ($comments as $comment)
@@ -279,7 +287,9 @@
                     <p class="comment-body">{{ $comment['body'] }}</p>
                 </div>
             @empty
-                <div class="list-item">{{ __('ui.profile.no_comments') }}</div>
+                <div class="profile-empty">
+                    <p>{{ __('ui.profile.no_comments') }}</p>
+                </div>
             @endforelse
         </div>
     </section>
