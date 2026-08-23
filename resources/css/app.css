@@ -5168,31 +5168,29 @@ body[data-page='project'][data-project-tab]:not([data-project-tab='article']) .t
 }
 
 .reading-main > .tabs {
-    position: sticky;
-    top: var(--topbar-height);
-    z-index: 4;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0;
-    min-height: 54px;
+    position: static;
+    display: flex;
+    gap: 24px;
+    min-height: 0;
     padding: 0;
     flex-wrap: nowrap;
-    overflow: hidden;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+    overflow-x: auto;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
 }
 
 .reading-main > .tabs .tab {
-    width: 100%;
-    min-width: 0;
-    min-height: 52px;
-    justify-content: center;
-    padding: 10px 16px;
-    border-right: 1px solid var(--border);
-    font-size: 14px;
-    font-weight: 700;
+    width: auto;
+    min-width: max-content;
+    min-height: 42px;
+    justify-content: flex-start;
+    padding: 10px 2px 11px;
+    border-right: 0;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .reading-main > .tabs .tab:last-child {
@@ -5201,19 +5199,19 @@ body[data-page='project'][data-project-tab]:not([data-project-tab='article']) .t
 
 .reading-main > .tabs .tab:hover,
 .reading-main > .tabs .tab.is-active {
-    background: var(--surface-2);
+    background: transparent;
     color: var(--text);
 }
 
 .reading-main > .tabs .tab.is-active::after {
-    left: 12px;
-    right: 12px;
-    bottom: 0;
+    left: 0;
+    right: 0;
+    bottom: -1px;
 }
 
 .reading-main > .tabs .icon {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
     flex: 0 0 auto;
 }
 

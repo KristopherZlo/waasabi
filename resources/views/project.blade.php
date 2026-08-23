@@ -466,7 +466,6 @@
                         <button type="button" class="tab is-active" data-comment-sort="new">{{ __('ui.project.comments_new') }}</button>
                         <button type="button" class="tab" data-comment-sort="best">{{ __('ui.project.comments_best') }}</button>
                     </div>
-                    <div class="helper">{{ __('ui.project.comments_best_hint') }}</div>
                 </div>
                 <div class="comments" data-comment-list data-threaded="true" data-project-slug="{{ $project['slug'] }}" data-comments-endpoint="{{ route('project.comments.chunk', $project['slug']) }}" data-comments-offset="{{ $commentsShown }}" data-comments-total="{{ $commentsTotal }}" data-comments-limit="15">
                     @forelse ($comments as $comment)
