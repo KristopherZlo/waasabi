@@ -200,12 +200,28 @@
         <div class="search-spotlight__panel" role="dialog" aria-modal="true" aria-label="{{ __('ui.topbar.search') }}">
             <div class="search-spotlight__input">
                 <i data-lucide="search" class="icon"></i>
-                <input type="search" data-search-input aria-label="{{ __('ui.topbar.search') }}" autocomplete="off">
+                <input
+                    type="search"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-controls="spotlight-search-results"
+                    aria-expanded="false"
+                    data-search-input
+                    aria-label="{{ __('ui.topbar.search') }}"
+                    autocomplete="off"
+                >
                 <button class="icon-btn" type="button" aria-label="{{ __('ui.settings.close') }}" data-search-close>
                     <i data-lucide="x" class="icon"></i>
                 </button>
             </div>
-            <div class="search-spotlight__results" data-search-results hidden></div>
+            <div
+                class="search-spotlight__results"
+                id="spotlight-search-results"
+                role="listbox"
+                aria-live="polite"
+                data-search-results
+                hidden
+            ></div>
         </div>
         <button class="search-spotlight__backdrop" type="button" aria-label="{{ __('ui.settings.close') }}" data-search-close></button>
     </div>
