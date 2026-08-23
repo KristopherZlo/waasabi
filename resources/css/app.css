@@ -9619,12 +9619,27 @@ body[data-page='admin'] {
 
 .support-banner,
 .support-hero {
-    padding: 0 0 24px;
-    border: 0;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
     box-shadow: none;
+    color: var(--text);
+}
+
+.support-breadcrumbs {
+    color: var(--muted);
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.support-breadcrumbs__sep {
+    color: var(--muted);
+}
+
+.support-breadcrumbs__back {
+    border-color: var(--border);
+    background: var(--surface-2);
     color: var(--text);
 }
 
@@ -9681,37 +9696,41 @@ body[data-page='admin'] {
 .support-kb__list,
 .support-ticket-list,
 .support-knowledge__list {
-    gap: 0;
-    border-top: 1px solid var(--border);
+    gap: 12px;
+    border-top: 0;
 }
 
 .support-kb__section,
-.support-kb__legal,
 .support-ticket-link,
 .support-knowledge__item {
-    border: 0;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
     box-shadow: none;
 }
 
+.support-kb__legal {
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+}
+
 .support-kb__summary {
-    padding: 18px 0;
+    padding: 18px;
 }
 
 .support-kb__items {
-    gap: 0;
-    padding: 0 0 10px 18px;
+    gap: 8px;
+    padding: 0 18px 18px;
 }
 
 .support-kb__item,
 .support-kb__legal-item {
-    padding: 14px 0;
-    border: 0;
-    border-top: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
 }
 
 .support-kb__item:hover,
@@ -9739,12 +9758,12 @@ body[data-page='admin'] {
 }
 
 .support-ticket-link {
-    padding: 16px 0;
+    padding: 16px;
 }
 
 .support-ticket-link:hover,
 .support-ticket-link.is-active {
-    padding-inline: 12px;
+    padding-inline: 16px;
 }
 
 .support-ticket-link__tag,
@@ -9767,13 +9786,25 @@ body[data-page='admin'] {
 }
 
 .support-doc__nav {
-    border-radius: 0;
-    background: transparent;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
 }
 
 .support-doc__content .legal-content {
+    padding: 24px;
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
+    background: var(--surface);
     box-shadow: none;
+}
+
+@media (max-width: 680px) {
+    .support-banner,
+    .support-hero {
+        padding: 20px;
+    }
 }
 
 .action-menu__panel,

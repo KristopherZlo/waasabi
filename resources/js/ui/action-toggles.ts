@@ -166,7 +166,7 @@ export const bindActionToggles = (root: ParentNode = document) => {
     }
     const isAuthed = document.body.dataset.authState === '1';
     let savedList = getReadLaterList();
-    let upvoteList = getUpvoteList();
+    let upvoteList = isAuthed ? getUpvoteList() : [];
 
     const requestAction = async (action: string, slug: string) => {
         const token = resolveCsrfToken();
