@@ -47,10 +47,11 @@
     $isHidden = !empty($question['is_hidden']);
     $moderationNsfwPending = !empty($question['moderation_nsfw_pending']);
 @endphp
-<article class="card post-card question-card" data-feed-card data-feed-type="questions" data-feed-key="question:{{ $question['slug'] }}" data-project-slug="{{ $question['slug'] }}" data-score="{{ $score }}" data-published="{{ $publishedMinutes }}" data-read-min="0" data-tags="{{ collect($questionTags)->map(fn ($tag) => \Illuminate\Support\Str::slug($tag))->join(',') }}" data-moderation-scope data-moderation-status="{{ $moderationStatus }}" data-moderation-type="post">
+<article class="card post-card post-card--jump question-card" data-feed-card data-feed-type="questions" data-feed-key="question:{{ $question['slug'] }}" data-project-slug="{{ $question['slug'] }}" data-score="{{ $score }}" data-published="{{ $publishedMinutes }}" data-read-min="0" data-tags="{{ collect($questionTags)->map(fn ($tag) => \Illuminate\Support\Str::slug($tag))->join(',') }}" data-moderation-scope data-moderation-status="{{ $moderationStatus }}" data-moderation-type="post">
     <button class="post-jump" type="button" data-post-jump aria-label="{{ __('ui.card.jump_next') }}">
         <i data-lucide="arrow-down" class="icon"></i>
     </button>
+    <div class="post-card__content">
     <div class="post-meta">
         <img class="avatar" src="{{ $avatarUrl }}" alt="{{ $authorName }}" @if ($avatarIsDefault) data-avatar-auto="1" data-avatar-name="{{ $authorName }}" @endif>
         <a class="post-author" href="{{ route('profile.show', $authorSlug) }}">{{ $authorName }}</a>
@@ -213,4 +214,5 @@
     </div>
     <div class="read-mark" data-read-progress-label hidden>{{ __('ui.card.read_mark') }}</div>
     <div class="read-progress" data-read-progress hidden></div>
+    </div>
 </article>

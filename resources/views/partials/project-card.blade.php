@@ -87,10 +87,11 @@
     $showHide = $moderationStatus !== 'hidden';
     $showRestore = $moderationStatus !== 'approved';
 @endphp
-<article class="card post-card" data-feed-card data-feed-type="projects" data-feed-key="project:{{ $project['slug'] }}" data-project-slug="{{ $project['slug'] }}" data-post-id="{{ $project['id'] ?? '' }}" data-score="{{ $project['score'] ?? 0 }}" data-published="{{ $project['published_minutes'] ?? 0 }}" data-read-min="{{ $project['read_time_minutes'] ?? 0 }}" data-tags="{{ collect($projectTags)->map(fn ($tag) => \Illuminate\Support\Str::slug($tag))->join(',') }}" data-moderation-scope data-moderation-status="{{ $moderationStatus }}" data-moderation-type="post">
+<article class="card post-card post-card--jump" data-feed-card data-feed-type="projects" data-feed-key="project:{{ $project['slug'] }}" data-project-slug="{{ $project['slug'] }}" data-post-id="{{ $project['id'] ?? '' }}" data-score="{{ $project['score'] ?? 0 }}" data-published="{{ $project['published_minutes'] ?? 0 }}" data-read-min="{{ $project['read_time_minutes'] ?? 0 }}" data-tags="{{ collect($projectTags)->map(fn ($tag) => \Illuminate\Support\Str::slug($tag))->join(',') }}" data-moderation-scope data-moderation-status="{{ $moderationStatus }}" data-moderation-type="post">
     <button class="post-jump" type="button" data-post-jump aria-label="{{ __('ui.card.jump_next') }}">
         <i data-lucide="arrow-down" class="icon"></i>
     </button>
+    <div class="post-card__content">
     <div class="post-meta">
         <img class="avatar" src="{{ $avatarUrl }}" alt="{{ $authorName }}" @if ($avatarIsDefault) data-avatar-auto="1" data-avatar-name="{{ $authorName }}" @endif>
         <a class="post-author" href="{{ route('profile.show', $authorSlug) }}">{{ $authorName }}</a>
@@ -275,4 +276,5 @@
     </div>
     <div class="read-mark" data-read-progress-label hidden>{{ __('ui.card.read_mark') }}</div>
     <div class="read-progress" data-read-progress hidden></div>
+    </div>
 </article>
