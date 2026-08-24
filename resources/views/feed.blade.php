@@ -62,7 +62,7 @@
                 </div>
                 <button type="button" class="feed-filter-reset" data-feed-reset hidden>{{ __('ui.feed.filter_reset') }}</button>
             </div>
-            <div class="feed-filter-status" data-feed-status data-result-label="{{ __('ui.feed.results_count') }}" role="status" aria-live="polite"></div>
+            <div class="feed-filter-status sr-only" data-feed-status data-result-label="{{ __('ui.feed.results_count') }}" role="status" aria-live="polite"></div>
         @endunless
     </section>
 

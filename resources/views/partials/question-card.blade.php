@@ -34,8 +34,8 @@
     }
     $preview = html_entity_decode(strip_tags($body), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $preview = trim((string) preg_replace('/\s+/', ' ', $preview));
-    $previewSummary = $preview !== '' ? \Illuminate\Support\Str::limit($preview, 260) : '';
-    $previewExpandable = \Illuminate\Support\Str::length($preview) > 260;
+    $previewSummary = $preview !== '' ? \Illuminate\Support\Str::limit($preview, 650) : '';
+    $previewExpandable = \Illuminate\Support\Str::length($preview) > 650;
     $reportCount = (int) ($question['report_count'] ?? 0);
     $reportPoints = (int) ($question['report_points'] ?? $reportCount);
     $edited = !empty($question['edited']);
