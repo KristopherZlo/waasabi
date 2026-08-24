@@ -8965,18 +8965,6 @@ select:focus {
     background: transparent;
 }
 
-.feed-filter {
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    justify-content: center;
-}
-
-.feed-filter .icon {
-    width: 17px;
-    height: 17px;
-}
-
 .feed-tag.is-excluded {
     border-color: rgba(242, 75, 63, 0.55);
     background: rgba(242, 75, 63, 0.1);
