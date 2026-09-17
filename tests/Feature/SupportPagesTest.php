@@ -54,6 +54,7 @@ class SupportPagesTest extends TestCase
     {
         $this->get('/definitely-missing')->assertNotFound()
             ->assertSee('static-shell', false)
-            ->assertDontSee('data-not-found-game', false);
+            ->assertSee('data-not-found-game', false)
+            ->assertSee('type="module"', false);
     }
 }

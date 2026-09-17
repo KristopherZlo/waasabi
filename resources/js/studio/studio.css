@@ -94,10 +94,51 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 0; 
 .footer-grid p { max-width: 420px; color: var(--muted); }
 .footer-grid a, .footer-bottom { color: var(--muted); font-size: 13px; }
 .footer-bottom { margin-top: 30px; padding-top: 16px; display: flex; justify-content: space-between; border-top: 1px solid var(--border); }
-.not-found-page { min-height: 55vh; display: grid; place-content: center; justify-items: start; }
-.not-found-code { color: var(--accent); font-size: clamp(72px, 14vw, 150px); font-weight: 700; line-height: .85; letter-spacing: -.08em; }
-.not-found-page h1 { margin: 24px 0 8px; }
-.not-found-page p { max-width: 480px; color: var(--muted); }
+body[data-page='not-found'] .static-page { width: 100%; padding: 0; }
+.not-found-page { position: relative; height: clamp(620px, 72vh, 760px); overflow: hidden; background: #0f1115; color: #f1f3f5; isolation: isolate; }
+.not-found-page__body { position: absolute; z-index: 4; top: clamp(104px, 18vh, 146px); left: 50%; width: min(520px, calc(100% - 48px)); transform: translateX(-50%); text-align: center; pointer-events: none; }
+.not-found-page h1 { margin: 0; color: #c8cbd0; font-size: clamp(19px, 2vw, 28px); font-weight: 500; text-transform: uppercase; }
+.not-found-page__body > p, .not-found-page__body > .text-link { display: none; }
+.not-found-game__stage, .not-found-game__sky { position: absolute; inset: 0; width: 100%; height: 100%; }
+.not-found-game__stage { z-index: 2; overflow: hidden; touch-action: none; outline: 0; cursor: crosshair; }
+.not-found-game__sky { z-index: 0; pointer-events: none; }
+.not-found-game__score { position: absolute; z-index: 1; top: clamp(215px, 27vh, 240px); left: 50%; display: flex; align-items: center; justify-content: center; gap: clamp(1px, .4vw, 7px); color: #f1f3f5; font-size: clamp(150px, 17vw, 258px); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.09em; line-height: .8; transform: translateX(-50%); pointer-events: none; }
+.not-found-game__score span { display: block; will-change: transform; }
+.not-found-game__score span:nth-child(1) { animation: not-found-digit-one 7.2s ease-in-out infinite alternate; }
+.not-found-game__score span:nth-child(2) { animation: not-found-digit-two 8.6s ease-in-out -2.4s infinite alternate; }
+.not-found-game__score span:nth-child(3) { animation: not-found-digit-three 6.8s ease-in-out -4.1s infinite alternate; }
+.not-found-game__orbit-position, .not-found-game__planet-position, .not-found-game__catcher-position, .not-found-game__star { position: absolute; top: 0; left: 0; will-change: transform; }
+.not-found-game__orbit-position { transition: opacity .3s ease; }
+.not-found-game__orbit { width: 100%; height: 100%; border-radius: 50%; clip-path: inset(0 0 50% 0); }
+.not-found-game__planet-position { transform-origin: center; }
+.not-found-game__planet-effect, .not-found-game__planet { width: 100%; height: 100%; }
+.not-found-game__planet-effect { position: relative; overflow: hidden; border-radius: 50%; transform-origin: center; }
+.not-found-game__planet-effect::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: #ff3028; mix-blend-mode: color; opacity: 0; pointer-events: none; }
+.not-found-game__planet { filter: drop-shadow(0 12px 18px rgba(0, 0, 0, .32)); }
+.not-found-game__catcher-position { z-index: 3; width: clamp(66px, 5vw, 86px); height: clamp(66px, 5vw, 86px); transform-origin: center; }
+.not-found-game__catcher-effect, .not-found-game__catcher { width: 100%; height: 100%; }
+.not-found-game__catcher-effect { transform-origin: 50% 80%; }
+.not-found-game__catcher { filter: drop-shadow(0 5px 5px rgba(0, 0, 0, .34)); }
+.not-found-game__star { z-index: 3; width: clamp(19px, 2.5vw, 29px); height: clamp(19px, 2.5vw, 29px); pointer-events: none; }
+.not-found-game__planet-position.is-hit .not-found-game__planet-effect { animation: not-found-planet-hit 560ms ease-out; }
+.not-found-game__planet-position.is-hit .not-found-game__planet-effect::after { animation: not-found-planet-shader 560ms ease-out; }
+.not-found-game__catcher-position.is-catching .not-found-game__catcher-effect { animation: not-found-catcher-catch 340ms ease-out; }
+.not-found-page.is-lost .not-found-game__planet-effect { animation: not-found-planet-lost 700ms cubic-bezier(.55, 0, .9, .55) forwards; }
+.not-found-page.is-lost .not-found-game__catcher-position { transition: transform 2.8s cubic-bezier(.4, 0, 1, 1); transform: translate(50vw, -220px) translate(-50%, -50%) rotate(600deg) !important; }
+.not-found-page.is-lost .not-found-game__orbit-position { opacity: 0; }
+.not-found-page.is-won .not-found-game__planet-effect, .not-found-page.is-won .not-found-game__orbit { animation: not-found-planet-win 1.6s cubic-bezier(.2, .75, .25, 1) forwards; }
+.not-found-page.is-won .not-found-game__catcher-position { transition: transform 2.8s cubic-bezier(.35, 0, .75, 1); transform: translate(50vw, -220px) translate(-50%, -50%) rotate(720deg) scale(.35) !important; }
+.not-found-game__retry { position: absolute; z-index: 5; left: 50%; top: 68%; min-width: 112px; min-height: 42px; padding: 9px 18px; border: 1px solid rgba(255, 255, 255, .25); border-radius: 8px; background: transparent; color: #f1f3f5; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; transform: translateX(-50%); }
+.not-found-game__retry:hover { background: rgba(255, 255, 255, .08); }
+.not-found-game__retry span { margin-right: 8px; font-size: 18px; line-height: 0; vertical-align: -1px; }
+@keyframes not-found-digit-one { from { transform: translate(-9px, -2px) rotate(-1.2deg); } to { transform: translate(7px, 6px) rotate(.8deg); } }
+@keyframes not-found-digit-two { from { transform: translate(6px, 5px) rotate(.7deg); } to { transform: translate(-6px, -5px) rotate(-.5deg); } }
+@keyframes not-found-digit-three { from { transform: translate(-5px, 4px) rotate(-.6deg); } to { transform: translate(10px, -4px) rotate(1deg); } }
+@keyframes not-found-catcher-catch { 0%, 100% { transform: translateY(0) scale(1); } 38% { transform: translateY(8px) scale(1.07, .76); } 68% { transform: translateY(-2px) scale(.98, 1.04); } }
+@keyframes not-found-planet-hit { 0%, 100% { transform: translateY(0) scale(1); } 26% { transform: translateY(14px) scale(1.04, .94); } 56% { transform: translateY(-3px) scale(.99, 1.02); } }
+@keyframes not-found-planet-shader { 0%, 100% { opacity: 0; } 20% { opacity: .72; } 62% { opacity: .18; } }
+@keyframes not-found-planet-lost { 0% { transform: scale(1); opacity: 1; } 24% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
+@keyframes not-found-planet-win { to { transform: scale(.58); } }
 
 /* Knowledge base and support use the same tokens and controls as Studio. */
 .support-tab-panel { display: none; }
@@ -829,4 +870,19 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
     .account-facts { grid-template-columns: 1fr; }
     .profile-work-actions { align-items: stretch; flex-direction: column; }
 }
+@media (max-width: 640px), (max-height: 620px) {
+    .not-found-page { height: max(520px, calc(100dvh - 64px)); }
+    .not-found-page__body { top: 56px; }
+    .not-found-game__score { top: 155px; }
+}
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms!important; transition-duration: .01ms!important; } }
+@media (prefers-reduced-motion: reduce) {
+    .not-found-game__score span:nth-child(1) { animation-duration: 7.2s!important; animation-iteration-count: infinite!important; }
+    .not-found-game__score span:nth-child(2) { animation-duration: 8.6s!important; animation-iteration-count: infinite!important; }
+    .not-found-game__score span:nth-child(3) { animation-duration: 6.8s!important; animation-iteration-count: infinite!important; }
+    .not-found-game__planet-position.is-hit .not-found-game__planet-effect, .not-found-game__planet-position.is-hit .not-found-game__planet-effect::after { animation-duration: 560ms!important; animation-iteration-count: 1!important; }
+    .not-found-page.is-lost .not-found-game__planet-effect { animation-duration: 700ms!important; animation-iteration-count: 1!important; }
+    .not-found-game__catcher-position.is-catching .not-found-game__catcher-effect { animation-duration: 340ms!important; animation-iteration-count: 1!important; }
+    .not-found-page.is-won .not-found-game__planet-effect, .not-found-page.is-won .not-found-game__orbit { animation-duration: 1.6s!important; animation-iteration-count: 1!important; }
+    .not-found-page.is-lost .not-found-game__catcher-position, .not-found-page.is-won .not-found-game__catcher-position { transition-duration: 2.8s!important; }
+}
