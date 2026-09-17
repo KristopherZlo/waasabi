@@ -1,133 +1,76 @@
-<p align="center">
-  <img src="public/images/cover-gradient.svg" alt="Waasabi header" width="100%">
-</p>
+﻿# waasabi
 
-# Waasabi
+Творческое сообщество на основе The Hub: показывать работы, вести дневник проекта и находить людей для небольших совместных задач.
 
-**Forum hub for project writeups, Q&A, and focused reviews**
+## Открыть локально
 
-Waasabi is a calm, reading-first forum for makers and students: long project writeups and practical questions in one feed. It is built for thoughtful feedback and sustained reading rather than fast, noisy threads.
+Адрес: **http://127.0.0.1:8081**. Если сервер остановлен, запустите из PowerShell:
 
----
+```powershell
+cd E:\xampp\htdocs\waasabi
+.\start.ps1
+```
 
-## Status
+Вход администратора хранится в `.local-access.txt`. Файл локальный, не входит в Git. У сайта своя база `database/waasabi.sqlite`, собственные загрузки и ключ приложения. Исходный `the-hub` для работы не нужен.
 
-- Prototype
-- Demo/production: not published yet
-- If database tables are missing, demo content is loaded from `routes/web.php`
+Локальные примеры записаны в базу отдельным `WaasabiDemoSeeder`; приложение не подставляет фиктивные данные при ошибках базы. В интерфейсе нет служебного баннера и тестовых пометок. Для поиска нажмите кнопку в верхней панели или `Ctrl/Cmd+K`.
 
----
+## Что работает
 
-## Implemented
+- Страница автора: описание, аватар, обложка, навыки, ссылка на портфолио/контакт, закреплённая работа, готовность помочь, список своих заявок и проектов с участием.
+- Творческие публикации: визуальный редактор Tiptap, изображения, форматирование, предпросмотр, локальное восстановление текста, серверные черновики, галерея и файлы.
+- Отдельная работа и долгоживущий проект — разные режимы. Работу можно продолжить как проект без смены адреса и потери обсуждения.
+- Страница проекта: описание, обсуждение, отзывы, команда, отдельные записи дневника с изображениями, редактированием и постоянными ссылками.
+- Подписки на авторов и проекты, уведомления об опубликованных работах и обновлениях, лента подписок и фильтр работ без ответа.
+- Короткая заявка на помощь: роль, размер участия и задача; проект привязывается по желанию. Отклик можно отправить без сопроводительного текста.
+- Принятие нескольких участников, добровольный выход, повторный отклик. Права редактировать проект владелец выдаёт отдельно.
+- Каталог людей, готовых помочь, с поиском по имени, навыкам и описанию.
+- Модерация: быстрая очередь на `/admin`, полный набор жалоб, массовых действий, ролей, блокировок и аудита на `/admin/tools`, отдельная проверка обновлений проекта.
 
-- Two content types: projects (long-form) and questions
-- Markdown editor (Tiptap), covers and albums, project status (in-progress / paused / done)
-- Comment threads + structured project reviews (improve / why / how)
-- Feed with filters (fresh / best / reading) and infinite loading
-- Tags, showcases, and a reading-now block
-- Search across posts, tags, and authors
-- Saves, upvotes, reading progress, follows
-- Profiles, badges, privacy/notification settings
-- Notifications with read/unread state
-- Support portal and basic moderation tools
+Логотип и генератор закарючек сохранены из The Hub. Базовый интерфейс — английский; прежний финский перевод сохранён, новые строки используют английский fallback.
 
-## Experimental
+## Технологии
 
-- Weighted reporting with auto-hide thresholds
-- Text moderation heuristics (low-quality detection)
-- Optional image scanning via AWS Rekognition
+Laravel 12, Inertia 3, React 19, TypeScript, Tiptap 3 и Vite. Blade остаётся для корневого документа и отдельных операционных страниц. Локальная база — SQLite. Это один серверный проект: Node нужен для сборки ресурсов, отдельный frontend-сервер не нужен. При росте нагрузки база может быть перенесена на MySQL/PostgreSQL с проверкой миграций.
 
-## Planned
+## Чистая установка
 
-- Move large route closures into controllers/services
-- Seed demo content via seeders
-- Add feature tests for core routes and JSON actions
+Нужны PHP 8.2+ с PDO SQLite и GD, Composer 2 и Node.js 20.19+ или 22.12+.
 
----
-
-## Technical overview
-
-### Backend
-- PHP 8.2, Laravel 12
-- Blade templates + routes in `routes/web.php` (closures + controllers)
-- Eloquent ORM + Query Builder
-- Sessions, email verification, access policies
-- Queues and cache (database by default, Redis optional)
-
-### Frontend
-- Vite, TypeScript, Tailwind CSS 4
-- Tiptap editor + Markdown <-> HTML (marked/turndown)
-- Progressive navigation: replace `<main>` and re-hydrate (custom)
-
-### Data and entities
-Primary tables:
-`users`, `posts`, `post_comments`, `post_reviews`, `post_upvotes`, `post_saves`, `user_follows`,
-`reading_progress`, `content_reports`, `moderation_logs`, `user_notifications`, `support_tickets`,
-`topbar_promos`.
-
-### Security and anti-spam
-- CSRF protection and server-side validation
-- Rate limiting per action (see `config/waasabi.php`)
-- Honeypot + Cloudflare Turnstile (optional)
-- Moderation and audit logs
-
-### Localization
-- English and Finnish (`resources/lang/en`, `resources/lang/fi`)
-
----
-
-## Quick start (local)
-
-```bash
-git clone https://github.com/KristopherZlo/waasabi
-cd waasabi
-
-cp .env.example .env
-# Configure DB_* in .env
-
+```powershell
 composer install
-npm install
-
+npm ci
+Copy-Item .env.example .env
+New-Item database/waasabi.sqlite -ItemType File
 php artisan key:generate
 php artisan migrate
 php artisan storage:link
-
-php artisan serve   # http://localhost:8000
-npm run dev         # Vite + HMR
+npm run build
+php artisan admin:create owner@example.com
+php artisan serve --host=127.0.0.1 --port=8081
 ```
 
----
+Примеры, только по желанию и только локально: `php artisan db:seed --class=WaasabiDemoSeeder`.
 
-<details>
-  <summary><strong>Screenshots</strong></summary>
+## Проверки
 
-  ![Feed page](screenshots/Feed_page.png)
-  ![Feed page filters](screenshots/Feed_page_filters.png)
-  ![Feed page filters and user menu](screenshots/Feed_page_filters_user_menu.png)
-  ![Knowledge base](screenshots/Knowledge_base.png)
-  ![Knowledge base article](screenshots/Knowledge_base_knowledge_page.png)
-  ![Knowledge base ticket](screenshots/Knowledge_base_ticket_page.png)
-  ![Post page](screenshots/Post_page.png)
-  ![Post page discussion](screenshots/Post_page_discussion.png)
-  ![Post page text](screenshots/Post_page_post_text.png)
-  ![Post page review](screenshots/Post_page_review.png)
-  ![Profile page](screenshots/Profile_page.png)
-  ![Profile badge card](screenshots/Profile_page_badge_card.png)
-  ![Profile page with badges](screenshots/Profile_page_with_badges.png)
-  ![Questions page notifications](screenshots/Questions_page_notifications_menu.png)
-  ![Questions page settings](screenshots/Questions_page_settings.png)
-  ![Search](screenshots/Search.png)
-  ![Showcase](screenshots/Showcase_page.png)
-</details>
+```powershell
+php artisan test
+php vendor/bin/pint --test
+npm test
+npm run build
+npm audit
+composer audit
+```
 
----
+Проверка Spotlight в локальном Chrome при запущенном сайте: `node --experimental-websocket tests/Frontend/spotlight.mjs`. Проверяет сочетания клавиш, выбор результата, состояния поиска и мобильную ширину.
 
-## License
+PHP-тесты используют отдельную временную базу. Новые сценарии проверяются в `tests/Feature/StudioTest.php` и `tests/Feature/WaasabiTest.php`.
 
-Closed-source; terms are in `LICENSE`.
+## Перед публичным запуском
 
----
+Сейчас сайт запущен локально. Почта записывается в `storage/logs/laravel.log`: там находятся ссылки подтверждения регистрации и сброса пароля. Для посетителей нужны настоящая почтовая доставка, HTTPS, резервные копии базы и загрузок, scheduler и настройка модерации изображений. Локально сканер изображений отключён, публикация разрешена; `.env.example` предусматривает ручную проверку при недоступности сканера. Демонстрационные данные не переносите в рабочую базу.
 
-## Author
+Настройка Apache: DocumentRoot должен указывать на `E:/xampp/htdocs/waasabi/public`, а не на корень проекта. `start.ps1` уже запускает правильную точку входа. Подробности: [развёртывание](docs/DEPLOYMENT.md), [что изменилось](docs/WAASABI.md), [архитектура](docs/ARCHITECTURE.md).
 
-KristopherZlo.
+Лицензия унаследована от исходного проекта: [LICENSE](LICENSE).

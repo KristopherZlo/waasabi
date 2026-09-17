@@ -11,7 +11,7 @@ class SecurityHeaders
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -33,8 +33,8 @@ class SecurityHeaders
             $headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         }
 
-        $csp = $this->buildCsp($nonce, $request);
-        $cspHeader = (bool) config('waasabi.security.csp_report_only', false)
+        $csp = $this->buildCsp($nonce);
+        $cspHeader = (bool) config('hub.security.csp_report_only', false)
             ? 'Content-Security-Policy-Report-Only'
             : 'Content-Security-Policy';
         $headers->set($cspHeader, $csp);
@@ -42,24 +42,24 @@ class SecurityHeaders
         return $response;
     }
 
-    private function buildCsp(string $nonce, Request $request): string
+    private function buildCsp(string $nonce): string
     {
         $scriptSrc = array_merge(
             ["'self'", "'nonce-{$nonce}'", 'https://challenges.cloudflare.com'],
-            (array) config('waasabi.security.csp_extra_script_src', []),
+            (array) config('hub.security.csp_extra_script_src', []),
         );
         $styleSrc = array_merge(
-            ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-            (array) config('waasabi.security.csp_extra_style_src', []),
+            ["'self'", "'unsafe-inline'"],
+            (array) config('hub.security.csp_extra_style_src', []),
         );
-        $fontSrc = ["'self'", 'data:', 'https://fonts.gstatic.com'];
+        $fontSrc = ["'self'", 'data:'];
         $connectSrc = array_merge(
             ["'self'", 'https://challenges.cloudflare.com'],
-            (array) config('waasabi.security.csp_extra_connect_src', []),
+            (array) config('hub.security.csp_extra_connect_src', []),
         );
         $frameSrc = array_merge(
             ["'self'", 'https://challenges.cloudflare.com'],
-            (array) config('waasabi.security.csp_extra_frame_src', []),
+            (array) config('hub.security.csp_extra_frame_src', []),
         );
 
         if (app()->environment('local')) {
@@ -73,12 +73,12 @@ class SecurityHeaders
 
         $directives = [
             "default-src 'self'",
-            'script-src ' . implode(' ', array_unique($scriptSrc)),
-            'style-src ' . implode(' ', array_unique($styleSrc)),
+            'script-src '.implode(' ', array_unique($scriptSrc)),
+            'style-src '.implode(' ', array_unique($styleSrc)),
             "img-src 'self' data: https:",
-            'font-src ' . implode(' ', $fontSrc),
-            'connect-src ' . implode(' ', array_unique($connectSrc)),
-            'frame-src ' . implode(' ', array_unique($frameSrc)),
+            'font-src '.implode(' ', $fontSrc),
+            'connect-src '.implode(' ', array_unique($connectSrc)),
+            'frame-src '.implode(' ', array_unique($frameSrc)),
             "form-action 'self'",
             "object-src 'none'",
             "base-uri 'self'",

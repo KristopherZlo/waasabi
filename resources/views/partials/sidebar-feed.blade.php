@@ -7,6 +7,10 @@
     $subscriptionsList = $subscriptions ?? $sidebarData['subscriptions'] ?? [];
 @endphp
 
+<div class="sidebar-card community-invite">
+    <a href="{{ route('people') }}"><i data-lucide="users" class="icon"></i> {{ __('waasabi.people') }} →</a>
+    <p>{{ __('waasabi.apply_hint') }}</p>
+</div>
 <div class="sidebar-card">
     <div class="sidebar-title">{{ __('ui.sidebar.top_projects') }}</div>
     <div class="sidebar-list">

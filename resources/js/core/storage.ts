@@ -11,7 +11,11 @@ const parseJson = <T>(value: string | null, fallback: T) => {
     }
 };
 
-const publishDraftKey = 'draft:publish';
+const publishDraftKey = (key?: string) => {
+    const form = document.querySelector<HTMLFormElement>('[data-publish-form]');
+    const draftId = key ?? form?.dataset.draftKey ?? form?.querySelector<HTMLInputElement>('[name=post_id]')?.value ?? '';
+    return `waasabi:draft:${document.body.dataset.userId ?? 'guest'}:${draftId || 'new'}`;
+};
 const settingsKey = 'pageSettings';
 const readLaterKey = 'readLater';
 const upvoteKey = 'upvotes';
@@ -24,10 +28,25 @@ const defaultSettings: PageSettings = {
 
 const readingKey = (slug: string) => `reading:${slug}`;
 
-export const getPublishDraft = () => parseJson<PublishDraft | null>(localStorage.getItem(publishDraftKey), null);
+export const getPublishDraft = () => {
+    try {
+        return parseJson<PublishDraft | null>(localStorage.getItem(publishDraftKey()), null);
+    } catch {
+        return null;
+    }
+};
+
+export const recoverPublishDraft = (form: HTMLFormElement | null) => {
+    const draft = getPublishDraft();
+    return form?.dataset.restoreDraft === '1' && draft && draft.updatedAt >= Number(form.dataset.savedAt ?? 0) ? draft : null;
+};
 
 const setPublishDraft = (draft: PublishDraft) => {
-    localStorage.setItem(publishDraftKey, JSON.stringify(draft));
+    try {
+        localStorage.setItem(publishDraftKey(), JSON.stringify(draft));
+    } catch {
+        // Storage can be disabled or full; the server form remains usable.
+    }
 };
 
 export const updatePublishDraft = (partial: Partial<PublishDraft>) => {
@@ -44,8 +63,12 @@ export const updatePublishDraft = (partial: Partial<PublishDraft>) => {
     setPublishDraft(next);
 };
 
-export const clearPublishDraft = () => {
-    localStorage.removeItem(publishDraftKey);
+export const clearPublishDraft = (key?: string) => {
+    try {
+        localStorage.removeItem(publishDraftKey(key));
+    } catch {
+        // No stored draft to clear when storage is unavailable.
+    }
 };
 
 export const getSettings = () => parseJson<PageSettings>(localStorage.getItem(settingsKey), defaultSettings);

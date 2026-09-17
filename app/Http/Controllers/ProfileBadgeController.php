@@ -8,26 +8,18 @@ use App\Services\BadgeCatalogService;
 use App\Services\BadgePayloadService;
 use Illuminate\Http\JsonResponse;
 use InvalidArgumentException;
-use RuntimeException;
 
 class ProfileBadgeController extends Controller
 {
     public function grant(ProfileBadgeGrantRequest $request, string $slug, BadgeCatalogService $catalogService, BadgePayloadService $payloadService): JsonResponse
     {
         $viewer = $request->user();
-        if (!$viewer || !$viewer->isAdmin()) {
-            abort(403);
-        }
-        if (!safeHasTable('users')) {
-            abort(503);
-        }
-
         $data = $request->validated();
         $badgeKey = $data['badge_key'];
 
         $catalog = $catalogService->find($badgeKey);
-        if (!$catalog) {
-            return response()->json(['message' => 'Unknown badge'], 422);
+        if (! $catalog) {
+            return response()->json(['message' => __('ui.errors.unknown_badge')], 422);
         }
 
         $user = User::where('slug', $slug)->firstOrFail();
@@ -43,9 +35,7 @@ class ProfileBadgeController extends Controller
                 'link' => route('profile.show', $user->slug),
             ], true);
         } catch (InvalidArgumentException $exception) {
-            return response()->json(['message' => 'Unknown badge'], 422);
-        } catch (RuntimeException $exception) {
-            abort(503);
+            return response()->json(['message' => __('ui.errors.unknown_badge')], 422);
         }
 
         $badgeCatalog = $catalogService->all();
@@ -60,21 +50,13 @@ class ProfileBadgeController extends Controller
         ]);
     }
 
-    public function revoke(\Illuminate\Http\Request $request, string $slug, int $badgeId, BadgeCatalogService $catalogService, BadgePayloadService $payloadService): JsonResponse
+    public function revoke(string $slug, int $badgeId, BadgeCatalogService $catalogService, BadgePayloadService $payloadService): JsonResponse
     {
-        $viewer = $request->user();
-        if (!$viewer || !$viewer->isAdmin()) {
-            abort(403);
-        }
-        if (!safeHasTable('user_badges')) {
-            abort(503);
-        }
-
         $user = User::where('slug', $slug)->firstOrFail();
         $deleted = $user->revokeBadge($badgeId);
 
-        if (!$deleted) {
-            return response()->json(['message' => 'Badge not found'], 404);
+        if (! $deleted) {
+            return response()->json(['message' => __('ui.errors.badge_not_found')], 404);
         }
 
         $badgeCatalog = $catalogService->all();

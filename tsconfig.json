@@ -6,12 +6,14 @@
         "moduleResolution": "Bundler",
         "allowSyntheticDefaultImports": true,
         "strict": true,
+        "jsx": "react-jsx",
+        "skipLibCheck": true,
         "isolatedModules": true,
         "noEmit": true,
         "resolveJsonModule": true,
         "lib": ["ES2020", "DOM", "DOM.Iterable"],
         "types": ["vite/client"]
     },
-    "include": ["resources/js/**/*.ts", "resources/js/**/*.d.ts"],
+    "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "resources/js/**/*.d.ts"],
     "exclude": ["node_modules"]
 }

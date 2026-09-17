@@ -58,21 +58,6 @@
                     <span class="chip chip--moderation chip--{{ $commentModerationStatus }}">{{ __('ui.moderation.status_' . $commentModerationStatus) }}</span>
                 @endif
             @endcan
-            @if (Auth::check() && !(Auth::user()?->is_banned ?? false))
-                @if (!$isCommentOwner)
-                    <div class="action-menu action-menu--inline" data-action-menu-container>
-                        <button class="icon-btn icon-btn--sm action-menu__trigger" type="button" aria-label="{{ __('ui.report.title') }}" aria-haspopup="menu" aria-expanded="false" data-action-menu-toggle>
-                            <i data-lucide="more-horizontal" class="icon"></i>
-                        </button>
-                        <div class="action-menu__panel" role="menu" data-action-menu hidden>
-                            <button type="button" class="action-menu__item action-menu__item--danger" data-report-open data-report-type="comment" data-report-id="{{ $comment['id'] ?? $commentIndex ?? 0 }}" data-report-url="{{ url()->current() }}">
-                                <i data-lucide="flag" class="icon"></i>
-                                <span>{{ __('ui.report.title') }}</span>
-                            </button>
-                        </div>
-                    </div>
-                @endif
-            @endif
             @can('moderate')
                 @if (!empty($comment['id']))
                     @php
@@ -123,6 +108,14 @@
             <button type="button" class="comment-action" data-comment-share aria-label="{{ __('ui.project.share') }}">
                 <i data-lucide="share-2" class="icon"></i>
             </button>
+            @if (Auth::check() && !(Auth::user()?->is_banned ?? false) && !$isCommentOwner)
+                <button type="button" class="comment-action" data-report-open data-report-type="comment" data-report-id="{{ $comment['id'] ?? $commentIndex ?? 0 }}" data-report-url="{{ url()->current() }}" aria-label="{{ __('ui.report.title') }}">
+                    <i data-lucide="flag" class="icon"></i>
+                </button>
+            @endif
+            @if ($isCommentOwner)
+                @include('partials.interaction-owner-actions', ['type' => 'comment', 'id' => $comment['id'] ?? null, 'values' => ['body' => $comment['text'] ?? '', 'section' => $comment['section'] ?? '']])
+            @endif
         </div>
         @if (!empty($commentReplies))
             <div class="comment-replies" data-comment-replies>
@@ -180,21 +173,6 @@
                                         <span class="chip chip--moderation chip--{{ $replyModerationStatus }}">{{ __('ui.moderation.status_' . $replyModerationStatus) }}</span>
                                     @endif
                                 @endcan
-                                @if (Auth::check() && !(Auth::user()?->is_banned ?? false))
-                                    @if (!$isReplyOwner)
-                                        <div class="action-menu action-menu--inline" data-action-menu-container>
-                                            <button class="icon-btn icon-btn--sm action-menu__trigger" type="button" aria-label="{{ __('ui.report.title') }}" aria-haspopup="menu" aria-expanded="false" data-action-menu-toggle>
-                                                <i data-lucide="more-horizontal" class="icon"></i>
-                                            </button>
-                                            <div class="action-menu__panel" role="menu" data-action-menu hidden>
-                                                <button type="button" class="action-menu__item action-menu__item--danger" data-report-open data-report-type="comment" data-report-id="{{ $reply['id'] ?? $replyAnchor }}" data-report-url="{{ url()->current() }}">
-                                                    <i data-lucide="flag" class="icon"></i>
-                                                    <span>{{ __('ui.report.title') }}</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    @endif
-                                @endif
                                 @can('moderate')
                                     @if (!empty($reply['id']))
                                         @php
@@ -245,6 +223,14 @@
                                 <button type="button" class="comment-action" data-comment-share aria-label="{{ __('ui.project.share') }}">
                                     <i data-lucide="share-2" class="icon"></i>
                                 </button>
+                                @if (Auth::check() && !(Auth::user()?->is_banned ?? false) && !$isReplyOwner)
+                                    <button type="button" class="comment-action" data-report-open data-report-type="comment" data-report-id="{{ $reply['id'] ?? $replyAnchor }}" data-report-url="{{ url()->current() }}" aria-label="{{ __('ui.report.title') }}">
+                                        <i data-lucide="flag" class="icon"></i>
+                                    </button>
+                                @endif
+                                @if ($isReplyOwner)
+                                    @include('partials.interaction-owner-actions', ['type' => 'comment', 'id' => $reply['id'] ?? null, 'values' => ['body' => $reply['text'] ?? '', 'section' => '']])
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -253,4 +239,3 @@
         @endif
     </div>
 </div>
-

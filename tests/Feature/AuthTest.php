@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -15,7 +17,7 @@ class AuthTest extends TestCase
     {
         $response = $this->post('/register', [
             'name' => 'Alex Tester',
-            'email' => 'alex@example.com',
+            'email' => ' Alex@Example.COM ',
             'password' => 'Z9!qT1xP#9Lm',
             'password_confirmation' => 'Z9!qT1xP#9Lm',
             'accept_legal' => '1',
@@ -23,7 +25,10 @@ class AuthTest extends TestCase
 
         $response->assertRedirect(route('verification.notice'));
         $this->assertAuthenticated();
-        $this->assertDatabaseHas('users', ['email' => 'alex@example.com']);
+        $this->assertDatabaseHas('users', [
+            'email' => 'alex@example.com',
+            'role' => 'user',
+        ]);
     }
 
     public function test_login_with_valid_credentials(): void
@@ -33,12 +38,24 @@ class AuthTest extends TestCase
         ]);
 
         $response = $this->post('/login', [
-            'email' => $user->email,
+            'email' => '  '.strtoupper($user->email).'  ',
             'password' => 'secret123',
         ]);
 
         $response->assertRedirect(route('feed'));
         $this->assertAuthenticatedAs($user);
+        $this->assertDatabaseMissing('user_notifications', ['user_id' => $user->id]);
+    }
+
+    public function test_password_reset_normalizes_the_email(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create(['email' => 'reset@example.com']);
+
+        $this->post(route('password.email'), ['email' => ' RESET@EXAMPLE.COM '])
+            ->assertSessionHas('status');
+
+        Notification::assertSentTo($user, ResetPassword::class);
     }
 
     public function test_login_rejects_invalid_credentials(): void

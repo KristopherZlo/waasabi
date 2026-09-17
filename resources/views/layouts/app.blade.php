@@ -35,11 +35,8 @@
         window.APP_I18N = @json(trans('ui.js'));
     </script>
 </head>
-<body class="app-shell" data-page="@yield('page', 'feed')" data-app-url="{{ url('/') }}" data-locale="{{ app()->getLocale() }}" data-placeholder="{{ asset('images/placeholder.svg') }}" data-auth-state="{{ Auth::check() && !(Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-banned="{{ Auth::check() && (Auth::user()?->is_banned ?? false) ? '1' : '0' }}" @if (session('toast')) data-toast-message="{{ session('toast') }}" @endif>
+<body data-user-id="{{ Auth::id() ?? 'guest' }}" class="app-shell" data-page="@yield('page', 'feed')" data-app-url="{{ url('/') }}" data-locale="{{ app()->getLocale() }}" data-placeholder="{{ asset('images/placeholder.svg') }}" data-auth-state="{{ Auth::check() && !(Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-banned="{{ Auth::check() && (Auth::user()?->is_banned ?? false) ? '1' : '0' }}" @if (session('toast')) data-toast-message="{{ session('toast') }}" @endif>
     <a class="skip-link" href="#main-content">{{ __('ui.app.skip_to_content') }}</a>
-    <div class="bg-orb"></div>
-    <div class="bg-orb bg-orb--two"></div>
-    <div class="bg-noise"></div>
 
     <header class="topbar">
         <div class="topbar__inner">
@@ -55,6 +52,7 @@
                 <a class="topbar-promo" href="{{ route('promos.click', $topbar_promo['id']) }}" target="_blank" rel="noreferrer noopener">{{ $topbar_promo['label'] }}</a>
             @endif
             <div class="top-actions">
+                <a class="community-people-link" href="{{ route('people') }}">{{ __('waasabi.people') }}</a>
                 <button class="icon-btn" type="button" aria-label="{{ __('ui.topbar.search') }}" data-search-open><i data-lucide="search" class="icon"></i></button>
                 <div class="read-later">
                     <button class="icon-btn read-later__trigger" type="button" aria-label="{{ __('ui.topbar.read_later') }}" aria-haspopup="menu" aria-expanded="false" data-read-later-toggle>

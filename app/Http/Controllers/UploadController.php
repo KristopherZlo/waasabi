@@ -1,20 +1,22 @@
-﻿<?php
+<?php
 
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UploadImageRequest;
+use App\Services\ContentModerationService;
 use App\Services\ImageUploadService;
+use App\Services\UploadAssetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\UploadedFile;
 use RuntimeException;
 
 class UploadController extends Controller
 {
-    public function storeImage(UploadImageRequest $request, ImageUploadService $uploadService): JsonResponse
+    public function storeImage(UploadImageRequest $request, ImageUploadService $uploadService, UploadAssetService $assets, ContentModerationService $moderation): JsonResponse
     {
         $file = $request->file('image');
-        if (!$file instanceof UploadedFile) {
-            return response()->json(['message' => 'Invalid upload'], 422);
+        if (! $file instanceof UploadedFile) {
+            return response()->json(['message' => __('ui.errors.invalid_upload')], 422);
         }
 
         try {
@@ -29,7 +31,8 @@ class UploadController extends Controller
             return response()->json(['message' => $exception->getMessage()], 422);
         }
 
-        maybeFlagImageForModeration($result['path'], $request->user(), 'editor');
+        $moderation->moderateUploadedImage($result['path'], $request->user(), 'editor');
+        $assets->recordEditorUpload($request->user(), $result);
 
         return response()->json([
             'url' => asset($result['path']),

@@ -1,6 +1,8 @@
 *.log
 .DS_Store
 .env
+.local-access.txt
+/database/*.sqlite*
 .env.backup
 .env.production
 .phpactor.json
@@ -46,6 +48,12 @@ pip-delete-this-directory.txt
 /public/avatars/
 /storage/*.key
 /storage/pail
+/storage/framework/testing/
+/storage/app/qa-final/
+/storage/framework/*.png
+/storage/framework/browser-qa/
+/storage/framework/chrome-qa*/
+/storage/test-output.txt
 /storage/route-split/
 /vendor
 Homestead.json
@@ -65,9 +73,6 @@ AGENTS.md
 .llm/
 .openai/
 .windsurf/
-*.md
-!README.md
-/docs/**
 composer.phar
 *.key
 *.pem
@@ -89,3 +94,4 @@ secrets/
 **/*.secret.*
 .env.*
 !.env.example
+!.env.testing

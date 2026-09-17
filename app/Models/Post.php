@@ -15,32 +15,43 @@ class Post extends Model
         'user_id',
         'edited_by',
         'type',
+        'is_project',
+        'feedback_mode',
+        'activity_at',
+        'category',
+        'media_type',
+        'license',
         'slug',
         'title',
         'subtitle',
         'body_markdown',
         'body_html',
         'media_url',
+        'external_url',
+        'repository_url',
         'cover_url',
         'album_urls',
         'status',
+        'visibility',
+        'published_at',
         'nsfw',
         'is_hidden',
         'moderation_status',
         'hidden_at',
         'hidden_by',
         'tags',
-        'coauthor_user_ids',
         'read_time_minutes',
     ];
 
     protected $casts = [
+        'is_project' => 'boolean',
+        'activity_at' => 'datetime',
         'tags' => 'array',
         'album_urls' => 'array',
-        'coauthor_user_ids' => 'array',
         'nsfw' => 'boolean',
         'is_hidden' => 'boolean',
         'hidden_at' => 'datetime',
+        'published_at' => 'datetime',
     ];
 
     public function user()
@@ -50,17 +61,42 @@ class Post extends Model
 
     public function comments(): HasMany
     {
-        return $this->hasMany(PostComment::class, 'post_slug', 'slug');
+        return $this->hasMany(PostComment::class);
     }
 
     public function reviews(): HasMany
     {
-        return $this->hasMany(PostReview::class, 'post_slug', 'slug');
+        return $this->hasMany(PostReview::class);
+    }
+
+    public function collaborationRequests(): HasMany
+    {
+        return $this->hasMany(CollaborationRequest::class);
+    }
+
+    public function members(): HasMany
+    {
+        return $this->hasMany(ProjectMember::class);
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(PostAttachment::class);
+    }
+
+    public function updates(): HasMany
+    {
+        return $this->hasMany(ProjectUpdate::class);
     }
 
     public function upvoters(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'post_upvotes', 'post_id', 'user_id')->withTimestamps();
+    }
+
+    public function followers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'project_follows')->withTimestamps();
     }
 
     public function savers(): BelongsToMany

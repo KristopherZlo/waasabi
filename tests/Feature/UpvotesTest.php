@@ -36,7 +36,7 @@ class UpvotesTest extends TestCase
             'type' => 'post',
         ]);
 
-        $response = $this->actingAs($voter)->postJson('/posts/' . $post->slug . '/upvote');
+        $response = $this->actingAs($voter)->postJson('/posts/'.$post->slug.'/upvote');
         $response->assertOk()->assertJson(['upvoted' => true, 'count' => 1]);
 
         $this->assertDatabaseHas('post_upvotes', [
@@ -44,7 +44,7 @@ class UpvotesTest extends TestCase
             'post_id' => $post->id,
         ]);
 
-        $response = $this->actingAs($voter)->postJson('/posts/' . $post->slug . '/upvote');
+        $response = $this->actingAs($voter)->postJson('/posts/'.$post->slug.'/upvote');
         $response->assertOk()->assertJson(['upvoted' => false, 'count' => 0]);
 
         $this->assertDatabaseMissing('post_upvotes', [

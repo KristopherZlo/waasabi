@@ -119,6 +119,9 @@
             <button type="button" class="comment-action" data-comment-share aria-label="{{ __('ui.project.share') }}">
                 <i data-lucide="share-2" class="icon"></i>
             </button>
+            @if ($isAnswerOwner)
+                @include('partials.interaction-owner-actions', ['type' => 'comment', 'id' => $answer['id'] ?? null, 'values' => ['body' => $answer['text'] ?? '', 'section' => $answer['section'] ?? '']])
+            @endif
         </div>
         @if (!empty($answerReplies))
             <div class="comment-replies" data-comment-replies>
@@ -238,6 +241,9 @@
                                 <button type="button" class="comment-action" data-comment-share aria-label="{{ __('ui.project.share') }}">
                                     <i data-lucide="share-2" class="icon"></i>
                                 </button>
+                                @if ($isReplyOwner)
+                                    @include('partials.interaction-owner-actions', ['type' => 'comment', 'id' => $reply['id'] ?? null, 'values' => ['body' => $reply['text'] ?? '', 'section' => '']])
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -246,4 +252,3 @@
         @endif
     </div>
 </div>
-

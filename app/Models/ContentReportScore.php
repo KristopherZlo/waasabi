@@ -30,4 +30,3 @@ class ContentReportScore extends Model
         'meta' => 'array',
     ];
 }
-

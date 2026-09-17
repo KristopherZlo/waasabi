@@ -34,7 +34,11 @@ class ContentImageService
             } else {
                 $normalized = ltrim($normalized, '/');
             }
-            if (!Str::startsWith($normalized, 'storage/')) {
+            if (
+                ! Str::startsWith($normalized, 'storage/uploads/editor/')
+                || str_contains($normalized, '..')
+                || str_contains($normalized, '\\')
+            ) {
                 continue;
             }
             $paths[] = $normalized;

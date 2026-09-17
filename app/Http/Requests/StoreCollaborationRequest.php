@@ -2,57 +2,44 @@
 
 namespace App\Http\Requests;
 
+use App\Services\CollaborationService;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
 class StoreCollaborationRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        $user = $this->user();
-        if (!$user) {
-            return false;
-        }
-
-        if (safeHasColumn('users', 'is_banned') && ($user->is_banned ?? false)) {
-            return false;
-        }
-
-        return true;
+        return $this->user()?->can('publish') === true;
     }
 
     public function rules(): array
     {
+        $collaboration = app(CollaborationService::class);
+
         return [
+            'post_id' => ['nullable', 'integer', Rule::exists('posts', 'id')->where('type', 'post')],
             'title' => ['required', 'string', 'max:120'],
-            'role' => ['required', 'string', 'max:40'],
-            'availability' => ['required', 'string', 'max:30'],
-            'format' => ['required', 'string', 'max:30'],
-            'skills' => ['nullable', 'string', 'max:180'],
-            'summary' => ['required', 'string', 'min:40', 'max:1200'],
-            'contact' => ['nullable', 'string', 'max:160'],
+            'role' => ['required', Rule::in(array_keys($collaboration->roleOptions()))],
+            'availability' => ['required', Rule::in(array_keys($collaboration->availabilityOptions()))],
+            'format' => ['required', Rule::in(array_keys($collaboration->formatOptions()))],
+            'skills' => ['nullable', 'string', 'max:400'],
+            'summary' => ['required', 'string', 'min:2', 'max:2000'],
+            'expires_in_days' => ['nullable', 'integer', 'min:7', 'max:180'],
             'website' => ['nullable', 'string', 'max:40'],
         ];
     }
 
-    public function messages(): array
+    protected function prepareForValidation(): void
     {
-        return [
-            'summary.min' => __('validation.min.string', ['attribute' => 'summary', 'min' => 40]),
-        ];
-    }
-
-    public function validated($key = null, $default = null)
-    {
-        $data = parent::validated();
-
-        $data['title'] = trim((string) ($data['title'] ?? ''));
-        $data['role'] = trim((string) ($data['role'] ?? ''));
-        $data['availability'] = trim((string) ($data['availability'] ?? ''));
-        $data['format'] = trim((string) ($data['format'] ?? ''));
-        $data['skills'] = trim((string) ($data['skills'] ?? ''));
-        $data['summary'] = trim(strip_tags((string) ($data['summary'] ?? '')));
-        $data['contact'] = trim(strip_tags((string) ($data['contact'] ?? '')));
-        $data['website'] = trim((string) ($data['website'] ?? ''));
-
-        return $data;
+        $role = $this->input('role');
+        $roleLabel = is_string($role) ? (app(CollaborationService::class)->roleOptions()[$role] ?? 'collaborator') : 'collaborator';
+        $this->merge([
+            'title' => trim(strip_tags((string) $this->input('title'))) ?: __('waasabi.help_title', ['role' => $roleLabel]),
+            'availability' => $this->input('availability') ?: 'one-time',
+            'format' => $this->input('format') ?: 'remote',
+            'skills' => trim(strip_tags((string) $this->input('skills'))),
+            'summary' => trim(strip_tags((string) $this->input('summary'))),
+        ]);
     }
 }

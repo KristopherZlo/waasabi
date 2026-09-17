@@ -33,4 +33,3 @@ class UserReportProfile extends Model
         return $this->belongsTo(User::class);
     }
 }
-

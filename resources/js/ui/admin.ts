@@ -5,6 +5,68 @@ import { submitReport } from './report';
 import { requestModerationReason, resolveModerationReasonTitle } from './moderation-reason';
 
 let adminToggleBound = false;
+let adminSearchShortcutBound = false;
+
+export const setupAdminInterface = () => {
+    if (document.body.dataset.page !== 'admin') {
+        return;
+    }
+
+    if (!adminSearchShortcutBound) {
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) {
+                return;
+            }
+            const target = event.target as HTMLElement | null;
+            if (target?.matches('input, textarea, select, [contenteditable="true"]')) {
+                return;
+            }
+            const search = document.querySelector<HTMLInputElement>('[data-admin-search-input]');
+            if (!search) {
+                return;
+            }
+            event.preventDefault();
+            search.focus();
+            search.select();
+        });
+        adminSearchShortcutBound = true;
+    }
+
+    document.querySelectorAll<HTMLFormElement>('[data-admin-bulk]').forEach((form) => {
+        if (form.dataset.adminBulkBound === '1' || !form.id) {
+            return;
+        }
+        form.dataset.adminBulkBound = '1';
+        const rows = Array.from(
+            document.querySelectorAll<HTMLInputElement>(`input[data-admin-row-select][form="${form.id}"]`),
+        );
+        const selectAll = document.querySelector<HTMLInputElement>(`[data-admin-select-all="${form.id}"]`);
+        const count = form.querySelector<HTMLElement>('[data-admin-selected-count]');
+        const availableRows = rows.filter((row) => !row.disabled);
+
+        const update = () => {
+            const selected = availableRows.filter((row) => row.checked).length;
+            form.hidden = selected === 0;
+            if (count) {
+                count.textContent = String(selected);
+            }
+            if (selectAll) {
+                selectAll.checked = availableRows.length > 0 && selected === availableRows.length;
+                selectAll.indeterminate = selected > 0 && selected < availableRows.length;
+            }
+            rows.forEach((row) => row.closest('.admin-row')?.classList.toggle('is-selected', row.checked));
+        };
+
+        rows.forEach((row) => row.addEventListener('change', update));
+        selectAll?.addEventListener('change', () => {
+            availableRows.forEach((row) => {
+                row.checked = selectAll.checked;
+            });
+            update();
+        });
+        update();
+    });
+};
 
 export const setupAdminModeToggle = () => {
     const button = document.querySelector<HTMLButtonElement>('[data-admin-toggle]');
@@ -40,7 +102,7 @@ export const setupAdminControls = () => {
     const flagButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-admin-flag]'));
     const moderationButtons = Array.from(
         document.querySelectorAll<HTMLButtonElement>(
-            '[data-admin-queue], [data-admin-hide], [data-admin-restore], [data-admin-nsfw]',
+            '[data-admin-queue], [data-admin-hide], [data-admin-restore], [data-admin-nsfw], [data-admin-dismiss]',
         ),
     );
     if (!deleteButtons.length && !flagButtons.length && !moderationButtons.length) {
@@ -160,6 +222,8 @@ export const setupAdminControls = () => {
             ? 'queue'
             : button.hasAttribute('data-admin-hide')
               ? 'hide'
+              : button.hasAttribute('data-admin-dismiss')
+                ? 'dismiss'
               : button.hasAttribute('data-admin-nsfw')
                 ? 'nsfw'
                 : 'restore';
@@ -217,6 +281,10 @@ export const setupAdminControls = () => {
                     return;
                 }
                 const data = (await response.json()) as { status?: string };
+                if (action === 'dismiss') {
+                    window.location.reload();
+                    return;
+                }
                 const nextStatus = typeof data.status === 'string' ? data.status.toLowerCase() : '';
                 updateModerationScope(button, nextStatus);
                 if (action === 'nsfw') {
@@ -257,10 +325,10 @@ export const setupAdminControls = () => {
                 return;
             }
             const payload = {
-                content_type: button.dataset.reportType ?? 'content',
+                content_type: button.dataset.reportType ?? 'post',
                 content_id: button.dataset.reportId ?? null,
                 content_url: button.dataset.reportUrl ?? window.location.href,
-                reason: 'admin_flag',
+                reason: 'other',
                 details: 'Flagged by admin',
             };
             const ok = await submitReport(payload);

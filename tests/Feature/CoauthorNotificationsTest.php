@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Post;
+use App\Models\ProjectMember;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
@@ -45,7 +47,7 @@ class CoauthorNotificationsTest extends TestCase
             'status' => 'done',
             'tags' => 'test, coauthor',
             'body' => $body,
-            'coauthors' => '@' . $coauthor->slug,
+            'coauthors' => '@'.$coauthor->slug,
         ]);
 
         $response->assertRedirect();
@@ -53,5 +55,13 @@ class CoauthorNotificationsTest extends TestCase
         $this->assertDatabaseHas('user_notifications', [
             'user_id' => $coauthor->id,
         ]);
+        $post = Post::where('title', 'Coauthored post')->firstOrFail();
+        $membership = ProjectMember::where('post_id', $post->id)->where('user_id', $coauthor->id)->firstOrFail();
+        $this->assertSame('invited', $membership->status);
+        $this->assertFalse($coauthor->can('update', $post));
+
+        $this->actingAs($coauthor)->patch(route('project-members.accept', $membership))->assertRedirect();
+        $this->assertSame('active', $membership->fresh()->status);
+        $this->assertTrue($coauthor->can('update', $post));
     }
 }

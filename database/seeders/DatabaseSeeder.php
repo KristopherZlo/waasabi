@@ -5,6 +5,8 @@ namespace Database\Seeders;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\PostReview;
+use App\Models\ProjectMember;
+use App\Models\ProjectUpdate;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +20,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $password = Hash::make('password');
+        $password = Hash::make(Str::random(40));
         $usedSlugs = [];
 
         $makeSlug = static function (string $name) use (&$usedSlugs): string {
@@ -29,10 +31,11 @@ class DatabaseSeeder extends Seeder
             $slug = $base;
             $counter = 2;
             while (in_array($slug, $usedSlugs, true) || User::where('slug', $slug)->exists()) {
-                $slug = $base . '-' . $counter;
+                $slug = $base.'-'.$counter;
                 $counter += 1;
             }
             $usedSlugs[] = $slug;
+
             return $slug;
         };
 
@@ -47,84 +50,170 @@ class DatabaseSeeder extends Seeder
             $counter = 2;
 
             while (in_array($slug, $usedPostSlugs, true) || Post::where('slug', $slug)->exists()) {
-                $slug = $base . '-' . $counter;
+                $slug = $base.'-'.$counter;
                 $counter += 1;
             }
 
             $usedPostSlugs[] = $slug;
+
             return $slug;
         };
 
         $seedUsers = [
-            'admin' => [
-            'name' => 'Morgana O',
-            'email' => 'admin@thehub.test',
-            'role' => 'admin',
-            'avatar' => '/images/avatar-default.svg',
-            'bio' => 'Community ops and moderation. Keeps the hub safe and focused.',
-        ],
-        'dasha' => [
-            'name' => 'Dasha N',
-            'email' => 'dasha@thehub.test',
-            'role' => 'maker',
-            'avatar' => '/images/avatar-default.svg',
-            'bio' => 'Hardware prototyper. Ships fast field tests and clean post-mortems.',
-        ],
-        'ilya' => [
-            'name' => 'Ilya M',
-            'email' => 'ilya@thehub.test',
-            'role' => 'maker',
-            'avatar' => '/images/avatar-default.svg',
-            'bio' => 'Electronics builder. Focused on noise, power, and reliable boards.',
-        ],
-        'sveta' => [
-            'name' => 'Sveta L',
-            'email' => 'sveta@thehub.test',
-            'role' => 'maker',
-            'avatar' => '/images/avatar-default.svg',
-            'bio' => 'Prototype UX systems and gesture-driven interfaces.',
-        ],
-        'timur' => [
-            'name' => 'Timur K',
-            'email' => 'timur@thehub.test',
-            'role' => 'user',
-            'avatar' => '/images/avatar-default.svg',
-            'bio' => 'Student engineer exploring sensors and rapid validation.',
-        ],
-        'nikita' => [
-            'name' => 'Nikita B',
-            'email' => 'nikita@thehub.test',
-            'role' => 'user',
-            'avatar' => '/images/avatar-default.svg',
-            'bio' => 'Writes short, practical reviews to keep teams moving.',
-        ],
-        'mila' => [
-            'name' => 'Mila T',
-            'email' => 'mila@thehub.test',
-            'role' => 'maker',
-            'avatar' => '/images/avatar-default.svg',
-            'bio' => 'Content systems and calm reading workflows.',
-        ],
-        'katya' => [
-            'name' => 'Katya F',
-            'email' => 'katya@thehub.test',
-            'role' => 'user',
-            'avatar' => '/images/avatar-default.svg',
-            'bio' => 'Team lead who keeps projects scoped and documented.',
-        ],
-    ];
+            'dasha' => [
+                'name' => 'Dasha N',
+                'email' => 'dasha@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Hardware prototyper. Ships fast field tests and clean post-mortems.',
+            ],
+            'ilya' => [
+                'name' => 'Ilya M',
+                'email' => 'ilya@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Electronics builder. Focused on noise, power, and reliable boards.',
+            ],
+            'sveta' => [
+                'name' => 'Sveta L',
+                'email' => 'sveta@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Prototype UX systems and gesture-driven interfaces.',
+            ],
+            'timur' => [
+                'name' => 'Timur K',
+                'email' => 'timur@thehub.test',
+                'role' => 'user',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Student engineer exploring sensors and rapid validation.',
+            ],
+            'nikita' => [
+                'name' => 'Nikita B',
+                'email' => 'nikita@thehub.test',
+                'role' => 'user',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Writes short, practical reviews to keep teams moving.',
+            ],
+            'mila' => [
+                'name' => 'Mila T',
+                'email' => 'mila@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Content systems and calm reading workflows.',
+            ],
+            'katya' => [
+                'name' => 'Katya F',
+                'email' => 'katya@thehub.test',
+                'role' => 'user',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Team lead who keeps projects scoped and documented.',
+            ],
+            'artem' => [
+                'name' => 'Artem Volkov',
+                'email' => 'artem@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Furniture maker documenting jigs, finishes, and repairable construction.',
+            ],
+            'lena' => [
+                'name' => 'Lena Ortiz',
+                'email' => 'lena@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Data visualization designer interested in public-interest tools.',
+            ],
+            'noora' => [
+                'name' => 'Noora Laine',
+                'email' => 'noora@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Ceramic artist testing repeatable glazes and low-waste studio methods.',
+            ],
+            'emil' => [
+                'name' => 'Emil Saar',
+                'email' => 'emil@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Small-game developer focused on playful systems and accessible controls.',
+            ],
+            'vera' => [
+                'name' => 'Vera Kim',
+                'email' => 'vera@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Documentary photographer building careful community archives.',
+            ],
+            'anton' => [
+                'name' => 'Anton Reyes',
+                'email' => 'anton@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Mechanical prototyper. Mostly enclosures, fixtures, and 3D printing failures.',
+            ],
+            'sofia' => [
+                'name' => 'Sofia Berg',
+                'email' => 'sofia@thehub.test',
+                'role' => 'user',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Teacher adapting open tools for small classrooms and workshops.',
+            ],
+            'leo' => [
+                'name' => 'Leo Martins',
+                'email' => 'leo@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Open-source maintainer working on offline-first community software.',
+            ],
+            'aino' => [
+                'name' => 'Aino Kallio',
+                'email' => 'aino@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Textile artist mixing hand embroidery with small data stories.',
+            ],
+            'mika' => [
+                'name' => 'Mika Chen',
+                'email' => 'mika@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Robotics builder who cares about maintainable mechanisms and safe demos.',
+            ],
+            'robin' => [
+                'name' => 'Robin Adeyemi',
+                'email' => 'robin@thehub.test',
+                'role' => 'user',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Community climate researcher collecting small, useful local datasets.',
+            ],
+            'maja' => [
+                'name' => 'Maja Lind',
+                'email' => 'maja@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Sound designer recording ordinary places and unusual instruments.',
+            ],
+            'samir' => [
+                'name' => 'Samir Patel',
+                'email' => 'samir@thehub.test',
+                'role' => 'user',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Volunteer organizer improving onboarding, schedules, and shared documentation.',
+            ],
+        ];
 
         $users = [];
         foreach ($seedUsers as $key => $data) {
             $existing = User::where('email', $data['email'])->first();
             if ($existing) {
                 $users[$key] = $existing;
-                if (!empty($existing->slug)) {
+                if (! empty($existing->slug)) {
                     $usedSlugs[] = $existing->slug;
                 } else {
                     $existing->slug = $makeSlug($data['name']);
                     $existing->save();
                 }
+
                 continue;
             }
             $users[$key] = User::factory()->create(array_merge($data, [
@@ -136,7 +225,7 @@ class DatabaseSeeder extends Seeder
 
         $extraUsers = User::factory()
             ->count(6)
-            ->create();
+            ->create(['password' => $password]);
 
         User::query()->update([
             'avatar' => '/images/avatar-default.svg',
@@ -144,6 +233,7 @@ class DatabaseSeeder extends Seeder
 
         $estimateReadTime = static function (string $markdown): int {
             $wordCount = str_word_count(strip_tags($markdown));
+
             return max(1, (int) ceil($wordCount / 200));
         };
 
@@ -200,7 +290,7 @@ class DatabaseSeeder extends Seeder
                 'title' => 'Looking for a UI designer for a calm project dashboard',
                 'subtitle' => 'Looking for: UI designer to shape the dashboard and visual system.',
                 'status' => 'in_progress',
-                'tags' => ['collaboration', 'design', 'ui', 'product'],
+                'tags' => ['design', 'ui', 'product'],
                 'cover_url' => '/images/cover-gradient.svg',
                 'body_markdown' => "## About the project\nWe are building a calm dashboard for student teams to track weekly progress without noise.\n\n## What we need\n- Visual system and spacing rules\n- Reusable components for dashboards\n- A clean, readable layout\n\n## Time\n4-6 hours/week for 3-4 weeks. Remote. DM on profile if interested.",
             ],
@@ -211,7 +301,7 @@ class DatabaseSeeder extends Seeder
                 'title' => 'Need an embedded developer for a battery sensor kit',
                 'subtitle' => 'Looking for: embedded dev to ship firmware for a sensor kit.',
                 'status' => 'in_progress',
-                'tags' => ['collaboration', 'firmware', 'hardware', 'battery'],
+                'tags' => ['firmware', 'hardware', 'battery'],
                 'cover_url' => '/images/cover-gradient.svg',
                 'body_markdown' => "## About the project\nWe have a working prototype and need help polishing the firmware.\n\n## Scope\n- Low power sleep cycle\n- Sensor polling and debounce\n- Simple radio packet format\n\n## Time\n5-8 hours/week. Remote.",
             ],
@@ -222,7 +312,7 @@ class DatabaseSeeder extends Seeder
                 'title' => 'Seeking a technical writer to document our build',
                 'subtitle' => 'Looking for: technical writer to turn build notes into guides.',
                 'status' => 'in_progress',
-                'tags' => ['collaboration', 'writing', 'docs', 'community'],
+                'tags' => ['writing', 'docs', 'community'],
                 'cover_url' => '/images/cover-gradient.svg',
                 'body_markdown' => "## About the project\nWe have strong build notes but they are too chaotic for new contributors.\n\n## What we need\n- Turn notes into a structured guide\n- Clear summaries and screenshots\n- A consistent tone for new contributors\n\n## Time\n3-5 hours/week. Remote.",
             ],
@@ -297,135 +387,15 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        // --- Generate extra test posts (50+ posts) ---
-        $desiredPostTotal = 55;
-        $desiredQuestionTotal = 15;
+        $this->call(LivingForumSeeder::class);
 
-        $allUsers = collect($users)->values()->merge($extraUsers)->values();
-        $statusPool = ['done', 'in_progress', 'paused'];
-        $tagPool = [
-            'hardware', 'pcb', 'power', 'sensors', 'ux', 'product', 'writing', 'process',
-            'firmware', 'testing', 'field', 'docs', 'review', 'signal', 'tools', 'debug',
-            'battery', 'noise', 'measurement', 'prototype',
-        ];
+        Post::query()->where('type', 'question')->update(['is_project' => false]);
+        Post::query()->whereIn('slug', ['fast-breakdown', 'night-bus-photo-essay', 'procedural-moss-game'])
+            ->update(['is_project' => false]);
+        ProjectUpdate::query()->whereHas('post', fn ($query) => $query->where('is_project', false))->delete();
+        ProjectMember::query()->whereHas('post', fn ($query) => $query->where('is_project', false))->delete();
 
-        $postTitles = [
-            'Quick fixture for repeatable sensor tests',
-            'Notes on reducing ADC jitter in a noisy build',
-            'A simple checklist for field deployments',
-            'Lessons from a failed enclosure print',
-            'How we validated a buttonless UI',
-            'What broke our boot time and how we fixed it',
-            'Minimal logging that still tells the truth',
-            'Power budget template for small devices',
-            'Cable routing rules that saved our sanity',
-            'A tiny “definition of done” for prototypes',
-            'How we structure post-mortems for speed',
-            'Measuring real battery life in the field',
-            'Choosing pull-ups for I2C in messy wiring',
-            'When to stop iterating and ship the test',
-            'A calm way to tag and search project notes',
-            'How we keep prototypes readable for others',
-            'Noise hunting: what we check first',
-            'Simple UI copy that reduces support questions',
-            'A small rubric for peer reviews',
-            'The fastest way to reproduce a bug on hardware',
-            'Making sensor data debuggable with one CSV',
-            'A fast way to compare 3 regulator options',
-            'How we write “what we tried” notes that help later',
-            'Debug diary: from random resets to a single root cause',
-            'Simple shielding tricks that do not lie',
-        ];
-
-        $questionTitles = [
-            'Best way to document wiring changes between revisions?',
-            'How do you store calibration values safely?',
-            'Do you prefer SPI or I2C for short runs and why?',
-            'What’s your default approach to debounce?',
-            'How do you avoid scope creep in week-long prototypes?',
-            'What is your go-to method for measuring noise?',
-            'How do you handle “unknown unknowns” in field tests?',
-            'How do you write posts that people actually read?',
-            'Any simple way to track experiments and results?',
-            'What is your process for choosing sensors quickly?',
-            'Do you keep separate logs for analog and digital issues?',
-            'How do you decide a prototype is “good enough” to show?',
-        ];
-
-        $subtitlePool = [
-            'Short build, clean notes, and a result you can repeat.',
-            'Small change, big stability improvement.',
-            'A practical pattern you can copy into your project.',
-            'This took less time than debugging later.',
-            'We kept it simple and it worked.',
-            'No heroics: just a method.',
-            'The boring approach that scales.',
-            'This is what we would do again.',
-        ];
-
-        $currentPostCount = Post::where('type', 'post')->count();
-        $currentQuestionCount = Post::where('type', 'question')->count();
-        $postsToCreate = max(0, $desiredPostTotal - $currentPostCount);
-        $questionsToCreate = max(0, $desiredQuestionTotal - $currentQuestionCount);
-        $toCreate = $postsToCreate + $questionsToCreate;
-
-        for ($i = 0; $i < $toCreate; $i++) {
-            $isQuestion = false;
-            if ($questionsToCreate > 0 && $postsToCreate > 0) {
-                $isQuestion = random_int(1, 100) <= 25;
-            } elseif ($questionsToCreate > 0) {
-                $isQuestion = true;
-            }
-
-            if ($isQuestion) {
-                $questionsToCreate -= 1;
-            } else {
-                $postsToCreate -= 1;
-            }
-            $type = $isQuestion ? 'question' : 'post';
-
-            $title = $isQuestion
-                ? $questionTitles[array_rand($questionTitles)]
-                : $postTitles[array_rand($postTitles)];
-
-            // Reduce duplicates a bit
-            if (!$isQuestion && random_int(1, 100) <= 40) {
-                $title .= ' #' . random_int(2, 12);
-            }
-
-            $slug = $makePostSlug($title);
-
-            $subtitle = $isQuestion ? null : $subtitlePool[array_rand($subtitlePool)];
-            $status = $isQuestion ? null : $statusPool[array_rand($statusPool)];
-
-            $tagCount = random_int(2, 5);
-            $pool = $tagPool;
-            shuffle($pool);
-            $tags = array_slice($pool, 0, $tagCount);
-
-            $markdown = $isQuestion
-                ? "## Question\n{$title}\n\n## Context\n- What I already tried\n- Constraints (time, parts, power)\n\n## What I need\nA default approach or a small checklist I can apply."
-                : "## Context\nWhat we needed and what was failing.\n\n## Approach\n- Constraints\n- The smallest change that could work\n- What we measured\n\n## Results\nWhat improved, what stayed messy, and what we would do next time.\n\n## Notes\nTools, settings, and pitfalls for a repeatable test.";
-
-            $readTime = $estimateReadTime($markdown);
-
-            $author = $allUsers->random();
-
-            Post::create([
-                'user_id' => $author->id,
-                'type' => $type,
-                'slug' => $slug,
-                'title' => $title,
-                'subtitle' => $subtitle,
-                'body_markdown' => $markdown,
-                'body_html' => null,
-                'media_url' => null,
-                'cover_url' => '/images/cover-gradient.svg',
-                'status' => $status,
-                'tags' => $tags,
-                'read_time_minutes' => $readTime,
-            ]);
-        }
+        $postMap = Post::query()->get(['id', 'slug'])->keyBy('slug');
 
         // --- Comments (manual seeds) ---
         $commentSeeds = [
@@ -475,11 +445,12 @@ class DatabaseSeeder extends Seeder
         $commentIds = [];
         foreach ($commentSeeds as $seed) {
             $parentId = null;
-            if (!empty($seed['parent_key']) && isset($commentIds[$seed['parent_key']])) {
+            if (! empty($seed['parent_key']) && isset($commentIds[$seed['parent_key']])) {
                 $parentId = $commentIds[$seed['parent_key']];
             }
 
             $comment = PostComment::firstOrCreate([
+                'post_id' => $postMap[$seed['post_slug']]->id,
                 'post_slug' => $seed['post_slug'],
                 'user_id' => $users[$seed['user_key']]->id,
                 'body' => $seed['body'],
@@ -488,7 +459,7 @@ class DatabaseSeeder extends Seeder
                 'parent_id' => $parentId,
             ]);
 
-            if (!empty($seed['key'])) {
+            if (! empty($seed['key'])) {
                 $commentIds[$seed['key']] = $comment->id;
             }
         }
@@ -513,6 +484,7 @@ class DatabaseSeeder extends Seeder
 
         foreach ($reviewSeeds as $seed) {
             PostReview::firstOrCreate([
+                'post_id' => $postMap[$seed['post_slug']]->id,
                 'post_slug' => $seed['post_slug'],
                 'user_id' => $users[$seed['user_key']]->id,
                 'improve' => $seed['improve'],
@@ -520,9 +492,6 @@ class DatabaseSeeder extends Seeder
                 'how' => $seed['how'],
             ]);
         }
-
-        // Map posts for relations
-        $postMap = Post::query()->get(['id', 'slug'])->keyBy('slug');
 
         // --- Upvotes ---
         $upvotes = [
@@ -535,7 +504,7 @@ class DatabaseSeeder extends Seeder
 
         foreach ($upvotes as $vote) {
             $postId = $postMap[$vote['post_slug']]->id ?? null;
-            if (!$postId) {
+            if (! $postId) {
                 continue;
             }
             DB::table('post_upvotes')->insertOrIgnore([
@@ -555,7 +524,7 @@ class DatabaseSeeder extends Seeder
 
         foreach ($saves as $save) {
             $postId = $postMap[$save['post_slug']]->id ?? null;
-            if (!$postId) {
+            if (! $postId) {
                 continue;
             }
             DB::table('post_saves')->insertOrIgnore([
@@ -592,7 +561,7 @@ class DatabaseSeeder extends Seeder
 
         foreach ($readingProgress as $progress) {
             $postId = $postMap[$progress['post_slug']]->id ?? null;
-            if (!$postId) {
+            if (! $postId) {
                 continue;
             }
 
@@ -607,7 +576,6 @@ class DatabaseSeeder extends Seeder
             );
         }
 
-        $this->call(UserBadgeSeeder::class);
-        $this->call(DemoActivitySeeder::class);
+        $this->call(CollaborationSeeder::class);
     }
 }

@@ -209,6 +209,7 @@ class SupportArticleService
                 return $article;
             }
         }
+
         return null;
     }
 
@@ -219,6 +220,7 @@ class SupportArticleService
         $summaryKey = (string) ($article['summary'] ?? '');
         $title = $this->translateKey($titleKey, $locale);
         $summary = $summaryKey !== '' ? $this->translateKey($summaryKey, $locale) : '';
+
         return [$title, $summary];
     }
 
@@ -235,12 +237,14 @@ class SupportArticleService
                 return $candidate;
             }
         }
+
         return null;
     }
 
     public function articleEntries(?string $locale = null): array
     {
         $locale = $this->normalizeLocale($locale);
+
         return collect($this->articles())
             ->map(function (array $article) use ($locale) {
                 $titleKey = (string) ($article['title'] ?? '');
@@ -252,7 +256,7 @@ class SupportArticleService
                 $summary = $summaryKey !== '' ? $this->translateKey($summaryKey, $locale) : '';
                 $tags = array_filter(array_map('strval', $article['tags'] ?? []));
                 $markdownPath = (string) ($article['markdown'] ?? '');
-                if ($markdownPath === '' && !empty($article['slug']) && ($article['group'] ?? '') === 'kb') {
+                if ($markdownPath === '' && ! empty($article['slug']) && ($article['group'] ?? '') === 'kb') {
                     $markdownPath = (string) ($this->resolveKnowledgePath((string) $article['slug'], $locale) ?? '');
                 }
                 $content = $markdownPath !== '' ? $this->readMarkdownText($markdownPath) : '';
@@ -304,6 +308,7 @@ class SupportArticleService
                 'count' => count($items),
             ];
         }
+
         return $resolved;
     }
 
@@ -323,12 +328,14 @@ class SupportArticleService
                 }
             }
         }
+
         return '';
     }
 
     private function normalizeLocale(?string $locale): string
     {
         $locale = $locale ?: app()->getLocale();
+
         return in_array($locale, ['en', 'fi'], true) ? $locale : 'en';
     }
 
@@ -337,22 +344,24 @@ class SupportArticleService
         if ($key === '') {
             return '';
         }
+
         return trim((string) __($key, [], $locale));
     }
 
     private function readMarkdownText(?string $path): string
     {
-        if (!$path) {
+        if (! $path) {
             return '';
         }
         $fullPath = base_path($path);
-        if (!is_file($fullPath)) {
+        if (! is_file($fullPath)) {
             return '';
         }
         $contents = file_get_contents($fullPath);
         if ($contents === false) {
             return '';
         }
+
         return $this->stripMarkdown((string) $contents);
     }
 
@@ -365,6 +374,7 @@ class SupportArticleService
         $markdown = preg_replace('/^#+\s*/m', '', $markdown);
         $markdown = preg_replace('/[*_>#+-]/', ' ', $markdown);
         $markdown = preg_replace('/\s+/', ' ', $markdown);
+
         return trim((string) $markdown);
     }
 }

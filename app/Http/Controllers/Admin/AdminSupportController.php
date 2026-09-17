@@ -13,13 +13,9 @@ class AdminSupportController extends Controller
     public function respond(AdminSupportTicketResponseRequest $request, SupportTicket $ticket, ModerationService $moderation): RedirectResponse
     {
         $moderator = $request->user();
-        if (!$moderator) {
+        if (! $moderator) {
             return redirect()->route('login');
         }
-        if (!safeHasTable('support_tickets')) {
-            abort(503);
-        }
-
         $data = $request->validated();
 
         $response = trim((string) ($data['response'] ?? ''));

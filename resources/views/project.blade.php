@@ -86,6 +86,7 @@
                 <span class="dot">&bull;</span>
                 <span class="chip status status--{{ $projectStatusKey }}">{{ $statusLabel }}</span>
             </div>
+            <p class="feedback-note">{{ __('waasabi.'.($project_model->feedback_mode ?? 'sharing').'_note') }}</p>
             <div class="article-tags">
                 @if ($isNsfw)
                     <span class="chip chip--nsfw">NSFW</span>
@@ -107,6 +108,16 @@
             </div>
         </div>
         <div class="article-actions">
+            <a class="ghost-btn" href="#journal">{{ __('waasabi.journal') }}</a>
+            @auth
+                @php
+                    $followingProject = $project_model->followers()->where('users.id', Auth::id())->exists();
+                @endphp
+                <form method="POST" action="{{ route('projects.follow', $project_model) }}">@csrf @method('PUT')
+                    <input type="hidden" name="following" value="{{ $followingProject ? '0' : '1' }}">
+                    <button class="ghost-btn">{{ $followingProject ? __('waasabi.unfollow_project') : __('waasabi.follow_project') }}</button>
+                </form>
+            @endauth
             <button type="button" class="icon-action {{ !empty($project['is_upvoted']) ? 'is-active' : '' }}" data-action="upvote" data-project-slug="{{ $project['slug'] }}" data-upvoted="{{ !empty($project['is_upvoted']) ? '1' : '0' }}" data-base-count="{{ $score }}" aria-label="{{ __('ui.project.upvote') }}">
                 <i data-lucide="arrow-up" class="icon"></i>
                 <span class="action-count">{{ $score }}</span>
@@ -284,6 +295,12 @@
                                 <span>{{ $collaboration_roles[$membership->role] ?? $membership->role }}</span>
                             </span>
                         </a>
+                        @if ($isProjectOwner)
+                            <form method="POST" action="{{ route('project-members.permissions', [$project_model, $membership]) }}">@csrf @method('PATCH')
+                                <input type="hidden" name="can_edit" value="{{ $membership->can_edit ? '0' : '1' }}">
+                                <button class="ghost-btn">{{ $membership->can_edit ? __('waasabi.readonly') : __('waasabi.editing') }}</button>
+                            </form>
+                        @endif
                         @if ($isProjectOwner || Auth::id() === $membership->user_id)
                             <form method="POST" action="{{ route('project-members.destroy', [$project_model, $membership]) }}">
                                 @csrf
@@ -353,46 +370,6 @@
                     @endif
                 </div>
             @endforeach
-        </section>
-    @endif
-
-    @if (!empty($project['updates']) || $canManageProject)
-        <section class="card project-updates" aria-labelledby="project-updates-title">
-            <h2 id="project-updates-title">{{ __('ui.project.updates_title') }}</h2>
-            @foreach (($project['updates'] ?? []) as $update)
-                <article class="project-update">
-                    <div class="project-update__header">
-                        <div>
-                            <h3>{{ $update['title'] }}</h3>
-                            <span class="helper">{{ $update['author'] }} · {{ $update['time'] }}</span>
-                        </div>
-                        @if ($isProjectOwner || Auth::id() === ($update['user_id'] ?? null))
-                            <form method="POST" action="{{ route('projects.updates.destroy', [$project['slug'], $update['id']]) }}">
-                                @csrf
-                                @method('DELETE')
-                                <button class="icon-btn icon-btn--sm" type="submit" aria-label="{{ __('ui.project.delete_update') }}">
-                                    <i data-lucide="trash-2" class="icon"></i>
-                                </button>
-                            </form>
-                        @endif
-                    </div>
-                    <p>{{ $update['body'] }}</p>
-                </article>
-            @endforeach
-            @if ($canManageProject)
-                <form class="project-update-form" method="POST" action="{{ route('projects.updates.store', $project['slug']) }}">
-                    @csrf
-                    <label>
-                        <span class="label-text">{{ __('ui.project.update_title_label') }}</span>
-                        <input class="input" type="text" name="title" maxlength="120" required>
-                    </label>
-                    <label>
-                        <span class="label-text">{{ __('ui.project.update_body_label') }}</span>
-                        <textarea class="input" name="body" rows="4" minlength="20" maxlength="3000" required></textarea>
-                    </label>
-                    <button class="ghost-btn ghost-btn--accent" type="submit">{{ __('ui.project.post_update') }}</button>
-                </form>
-            @endif
         </section>
     @endif
 
@@ -712,6 +689,8 @@
             </div>
         </div>
     </div>
+
+    @include('partials.project-journal')
 
     @if (!empty($related_projects))
         <section class="related-projects" aria-labelledby="related-projects-title">

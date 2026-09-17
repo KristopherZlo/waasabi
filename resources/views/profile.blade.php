@@ -150,6 +150,9 @@
         @if (!empty($profile_user['bio']))
             <p>{{ $profile_user['bio'] }}</p>
         @endif
+        @if (!empty($profile_user['skills']))<p>{{ $profile_user['skills'] }}</p>@endif
+        @if (!empty($profile_user['open_to_help']))<p class="availability-note">{{ __('waasabi.available') }}</p>@endif
+        @if (!empty($profile_user['portfolio_url']))<a href="{{ $profile_user['portfolio_url'] }}" target="_blank" rel="noopener noreferrer">{{ __('waasabi.view_portfolio') }} ↗</a>@endif
         @if ($isBanned)
             <div class="profile-banned">{{ __('ui.profile.banned_notice') }}</div>
         @endif
@@ -181,6 +184,18 @@
         </div>
     </section>
 
+    @if ($help_requests->isNotEmpty())
+        <section class="profile-contributions"><h2>{{ __('waasabi.help_requests') }}</h2>
+            @foreach ($help_requests as $helpRequest)
+                <a href="{{ route('collaboration.show', $helpRequest) }}">{{ $helpRequest->title }} <span class="helper">{{ __('ui.collaboration.status_'.($helpRequest->isOpen() ? 'open' : 'closed')) }}</span></a>
+            @endforeach
+        </section>
+    @endif
+    @if (($contributions ?? collect())->isNotEmpty())
+        <section class="profile-contributions"><h2>{{ __('waasabi.contributions') }}</h2>
+            @foreach ($contributions as $contribution)<a href="{{ route('project', $contribution->slug) }}">{{ $contribution->title }} <span class="helper">{{ $contribution->user->name }}</span></a>@endforeach
+        </section>
+    @endif
     @include('partials.profile-modals')
 
     <div class="profile-content">
@@ -205,6 +220,7 @@
     <section class="section profile-section tab-panel is-active" data-tab-panel="projects">
         <div class="list">
             @forelse ($projects as $project)
+                @if (($profile_user['featured_post_id'] ?? null) === $project['id'])<h2>{{ __('waasabi.featured') }}</h2>@endif
                 @include('partials.project-card', ['project' => $project])
             @empty
                 <div class="profile-empty">

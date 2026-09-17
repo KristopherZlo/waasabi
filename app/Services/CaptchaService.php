@@ -25,8 +25,8 @@ class CaptchaService
 
     public function isEnabled(string $action): bool
     {
-        $config = (array) config('waasabi.captcha', []);
-        if (!(bool) ($config['enabled'] ?? false)) {
+        $config = (array) config('hub.captcha', []);
+        if (! (bool) ($config['enabled'] ?? false)) {
             return false;
         }
         $siteKey = trim((string) ($config['site_key'] ?? ''));
@@ -35,18 +35,19 @@ class CaptchaService
             return false;
         }
         $actions = (array) ($config['actions'] ?? []);
+
         return (bool) ($actions[$action] ?? false);
     }
 
     public function verify(Request $request): bool
     {
-        $config = (array) config('waasabi.captcha', []);
+        $config = (array) config('hub.captcha', []);
         $provider = strtolower((string) ($config['provider'] ?? 'turnstile'));
         $secret = (string) ($config['secret'] ?? '');
         $token = (string) $request->input('cf-turnstile-response', '');
 
         if ($provider !== 'turnstile') {
-            return true;
+            return false;
         }
         if ($secret === '' || $token === '') {
             return false;
@@ -65,6 +66,7 @@ class CaptchaService
         }
 
         $payload = $response->json();
+
         return (bool) ($payload['success'] ?? false);
     }
 }

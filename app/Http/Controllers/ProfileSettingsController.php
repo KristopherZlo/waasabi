@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileSettingsRequest;
+use App\Services\ContentModerationService;
+use App\Services\ImageUploadService;
 use App\Services\UserPayloadService;
 use App\Services\UserSlugService;
-use App\Services\ImageUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,11 +15,19 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 use RuntimeException;
 
 class ProfileSettingsController extends Controller
 {
-    public function edit(): \Illuminate\View\View
+    public function page(): View
+    {
+        return view('settings', [
+            'current_user' => app(UserPayloadService::class)->currentUserPayload(),
+        ]);
+    }
+
+    public function edit(): View
     {
         return view('profile-settings', [
             'current_user' => app(UserPayloadService::class)->currentUserPayload(),
@@ -26,19 +35,18 @@ class ProfileSettingsController extends Controller
         ]);
     }
 
-    public function update(ProfileSettingsRequest $request, UserSlugService $slugService, ImageUploadService $uploadService): RedirectResponse
+    public function update(ProfileSettingsRequest $request, UserSlugService $slugService, ImageUploadService $uploadService, ContentModerationService $moderation): RedirectResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return redirect()->route('login');
         }
 
         $section = $this->normalizeSection($request->input('section', 'profile'));
         $data = $request->validated();
+        $previousAvatar = (string) ($user->avatar ?? '');
 
         $user->name = $data['name'];
-        $avatarUrl = $data['avatar'] ?? null;
-
         if ($request->hasFile('avatar_file')) {
             try {
                 $result = $uploadService->process($request->file('avatar_file'), [
@@ -49,27 +57,21 @@ class ProfileSettingsController extends Controller
                     'format' => 'webp',
                 ]);
                 $user->avatar = $result['path'];
-                maybeFlagImageForModeration($result['path'], $user, 'avatar');
+                $moderation->moderateUploadedImage($result['path'], $user, 'avatar');
             } catch (RuntimeException $exception) {
-                return redirect()
-                    ->route('profile.settings', ['section' => $section])
+                return redirect(route('profile.settings').'#'.$section)
                     ->withErrors(['avatar_file' => $exception->getMessage()])
                     ->withInput();
             }
-        } elseif (!empty($avatarUrl)) {
-            $user->avatar = $avatarUrl;
         }
 
-        $user->bio = $data['bio'] ?? null;
-        if ($request->user()?->isAdmin() && isset($data['role']) && !$user->isAdmin()) {
-            // Prevent admin self-demotion from the profile settings screen.
-            $user->role = $data['role'];
+        foreach (['bio', 'skills', 'open_to_help', 'portfolio_url', 'featured_post_id', 'profile_readme', 'wall_mode'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $user->{$field} = $data[$field];
+            }
         }
-
         $booleanFields = [
-            'privacy_share_activity',
             'privacy_allow_mentions',
-            'privacy_personalized_recommendations',
             'notify_comments',
             'notify_reviews',
             'notify_follows',
@@ -78,36 +80,39 @@ class ProfileSettingsController extends Controller
             'security_login_alerts',
         ];
         foreach ($booleanFields as $field) {
-            if (!array_key_exists($field, $data)) {
+            if (! array_key_exists($field, $data)) {
                 continue;
             }
-            if (safeHasColumn('users', $field)) {
-                $user->{$field} = (bool) $data[$field];
-            }
+            $user->{$field} = (bool) $data[$field];
         }
 
-        if (safeHasColumn('users', 'slug') && empty($user->slug)) {
+        if (empty($user->slug)) {
             $user->slug = $slugService->generate($user->name);
         }
         $user->save();
+        if ($request->boolean('showcase_project_ids_present')) {
+            $user->showcaseProjects()->sync(collect($data['showcase_project_ids'] ?? [])->values()->mapWithKeys(fn ($id, $position) => [(int) $id => ['position' => $position]])->all());
+        }
+        if ($previousAvatar !== (string) ($user->avatar ?? '')) {
+            $this->deleteUploadedMedia($previousAvatar);
+        }
 
         $toastMessage = $section === 'profile'
             ? __('ui.js.profile_saved')
             : __('ui.js.settings_saved');
 
-        return redirect()
-            ->route('profile.settings', ['section' => $section])
-            ->with('toast', $toastMessage);
+        $route = $request->boolean('return_to_profile')
+            ? route('profile.show', $user->slug)
+            : route('profile.settings').'#'.$section;
+
+        return redirect($route)->with('toast', $toastMessage);
     }
 
-    public function updateBanner(Request $request, string $slug, ImageUploadService $uploadService): JsonResponse|RedirectResponse
+    public function updateBanner(Request $request, string $slug, ImageUploadService $uploadService, ContentModerationService $moderation): JsonResponse|RedirectResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             abort(401);
-        }
-        if (!safeHasColumn('users', 'banner_url')) {
-            return response()->json(['message' => 'Banner storage unavailable.'], 503);
         }
         if (($user->slug ?? '') !== $slug) {
             abort(403);
@@ -117,8 +122,8 @@ class ProfileSettingsController extends Controller
             'banner_file' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
         $file = $request->file('banner_file');
-        if (!$file instanceof UploadedFile) {
-            return response()->json(['message' => 'Invalid upload.'], 422);
+        if (! $file instanceof UploadedFile) {
+            return response()->json(['message' => __('ui.errors.invalid_upload')], 422);
         }
 
         try {
@@ -137,9 +142,11 @@ class ProfileSettingsController extends Controller
             return response()->json(['message' => $exception->getMessage()], 422);
         }
 
+        $previous = (string) ($user->banner_url ?? '');
         $user->banner_url = $result['path'];
         $user->save();
-        maybeFlagImageForModeration($result['path'], $user, 'banner');
+        $this->deleteUploadedMedia($previous);
+        $moderation->moderateUploadedImage($result['path'], $user, 'banner');
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -156,11 +163,8 @@ class ProfileSettingsController extends Controller
     public function deleteBanner(Request $request, string $slug): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             abort(401);
-        }
-        if (!safeHasColumn('users', 'banner_url')) {
-            return response()->json(['message' => 'Banner storage unavailable.'], 503);
         }
         if (($user->slug ?? '') !== $slug) {
             abort(403);
@@ -170,22 +174,15 @@ class ProfileSettingsController extends Controller
         $user->banner_url = null;
         $user->save();
 
-        if ($previous !== '' && isUserUploadedMediaPath($previous)) {
-            try {
-                $relative = Str::after(ltrim($previous, '/'), 'storage/');
-                Storage::disk('public')->delete($relative);
-            } catch (\Throwable $exception) {
-                Log::warning('Unable to delete banner file.', ['path' => $previous, 'error' => $exception->getMessage()]);
-            }
-        }
+        $this->deleteUploadedMedia($previous);
 
         return response()->json(['ok' => true]);
     }
 
-    public function updateAvatar(Request $request, string $slug, ImageUploadService $uploadService): JsonResponse|RedirectResponse
+    public function updateAvatar(Request $request, string $slug, ImageUploadService $uploadService, ContentModerationService $moderation): JsonResponse|RedirectResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             abort(401);
         }
         if (($user->slug ?? '') !== $slug) {
@@ -196,8 +193,8 @@ class ProfileSettingsController extends Controller
             'avatar_file' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
         $file = $request->file('avatar_file');
-        if (!$file instanceof UploadedFile) {
-            return response()->json(['message' => 'Invalid upload.'], 422);
+        if (! $file instanceof UploadedFile) {
+            return response()->json(['message' => __('ui.errors.invalid_upload')], 422);
         }
 
         try {
@@ -216,9 +213,11 @@ class ProfileSettingsController extends Controller
             return response()->json(['message' => $exception->getMessage()], 422);
         }
 
+        $previous = (string) ($user->avatar ?? '');
         $user->avatar = $result['path'];
         $user->save();
-        maybeFlagImageForModeration($result['path'], $user, 'avatar');
+        $this->deleteUploadedMedia($previous);
+        $moderation->moderateUploadedImage($result['path'], $user, 'avatar');
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -235,7 +234,7 @@ class ProfileSettingsController extends Controller
     public function deleteAvatar(Request $request, string $slug): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             abort(401);
         }
         if (($user->slug ?? '') !== $slug) {
@@ -246,14 +245,7 @@ class ProfileSettingsController extends Controller
         $user->avatar = null;
         $user->save();
 
-        if ($previous !== '' && isUserUploadedMediaPath($previous)) {
-            try {
-                $relative = Str::after(ltrim($previous, '/'), 'storage/');
-                Storage::disk('public')->delete($relative);
-            } catch (\Throwable $exception) {
-                Log::warning('Unable to delete avatar file.', ['path' => $previous, 'error' => $exception->getMessage()]);
-            }
-        }
+        $this->deleteUploadedMedia($previous);
 
         return response()->json([
             'ok' => true,
@@ -263,11 +255,36 @@ class ProfileSettingsController extends Controller
 
     private function normalizeSection(string $section): string
     {
-        $allowed = ['profile', 'privacy', 'notifications', 'connections', 'devices'];
-        if (!in_array($section, $allowed, true)) {
+        $section = match ($section) {
+            'connections' => 'privacy',
+            'devices' => 'security',
+            default => $section,
+        };
+        $allowed = ['profile', 'privacy', 'notifications', 'security', 'data'];
+        if (! in_array($section, $allowed, true)) {
             return 'profile';
         }
 
         return $section;
+    }
+
+    private function deleteUploadedMedia(string $path): void
+    {
+        $path = ltrim((string) (parse_url($path, PHP_URL_PATH) ?: $path), '/');
+        $relative = ltrim(Str::after($path, 'storage/'), '/');
+        if (
+            ! str_starts_with($path, 'storage/uploads/')
+            || str_contains($relative, '..')
+            || str_contains($relative, '\\')
+            || ! preg_match('/\Auploads\/(?:avatars|banners)\/[A-Za-z0-9_.\/-]+\z/', $relative)
+        ) {
+            return;
+        }
+
+        try {
+            Storage::disk('public')->delete($relative);
+        } catch (\Throwable $exception) {
+            Log::warning('Unable to delete profile media.', ['path' => $path, 'error' => $exception->getMessage()]);
+        }
     }
 }

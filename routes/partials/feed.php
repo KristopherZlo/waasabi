@@ -1,77 +1,46 @@
 <?php
 
-use App\Models\ContentReport;
-use App\Models\ModerationLog;
-use App\Models\Post;
-use App\Models\PostComment;
-use App\Models\PostReview;
-use App\Models\SupportTicket;
-use App\Models\TopbarPromo;
-use App\Models\User;
-use App\Http\Controllers\NotificationsController;
-use App\Http\Controllers\PublishController;
-use App\Http\Controllers\PostController;
-use App\Http\Controllers\ProfileSettingsController;
-use App\Http\Controllers\ProfileBadgeController;
-use App\Http\Controllers\ProfileFollowController;
-use App\Http\Controllers\ReportsController;
-use App\Http\Controllers\ReadLaterController;
-use App\Http\Controllers\SupportController;
-use App\Http\Controllers\SupportTicketController;
-use App\Http\Controllers\UploadController;
-use App\Http\Controllers\FeedController;
 use App\Http\Controllers\CollaborationController;
-use App\Http\Controllers\ModerationController;
-use App\Http\Controllers\Admin\AdminContentController;
-use App\Http\Controllers\Admin\AdminSupportController;
-use App\Http\Controllers\Admin\AdminUserController;
-use App\Http\Requests\StoreCommentRequest;
-use App\Http\Requests\StoreReviewRequest;
-use App\Services\AutoModerationService;
-use App\Services\BadgePayloadService;
-use App\Services\BadgeCatalogService;
-use App\Services\ContentModerationService;
-use App\Services\FeedService;
-use App\Services\ImageUploadService;
-use App\Services\VisibilityService;
-use App\Services\MakerPromotionService;
-use App\Services\ModerationService;
-use App\Services\TextModerationService;
-use App\Services\TopbarPromoService;
-use App\Services\UserSlugService;
-use Illuminate\Auth\Events\Registered;
-use Illuminate\Foundation\Auth\EmailVerificationRequest;
-use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\CommunityPageController;
+use App\Http\Controllers\FeedController;
+use App\Http\Controllers\PromoController;
+use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Illuminate\Support\Carbon;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 
-Route::get('/promos/{promo}/click', function (TopbarPromo $promo) {
-    if (safeHasColumn('topbar_promos', 'clicks_count')) {
-        TopbarPromo::query()
-            ->where('id', $promo->id)
-            ->update(['clicks_count' => DB::raw('clicks_count + 1')]);
-    }
-    return redirect()->away($promo->url);
-})->name('promos.click');
+Route::get('/promos/{promo}/click', [PromoController::class, 'click'])->name('promos.click');
 
 Route::get('/feed/chunk', [FeedController::class, 'chunk'])->name('feed.chunk');
+Route::get('/search', SearchController::class)->middleware('throttle:60,1')->name('search');
 
-Route::get('/', [FeedController::class, 'index'])->name('feed');
+Route::get('/', [CommunityPageController::class, 'feed'])->name('feed');
 
-Route::get('/collaboration', [CollaborationController::class, 'index'])->name('collaboration');
+Route::get('/collaboration', [CommunityPageController::class, 'collaborations'])->name('collaboration');
+Route::get('/collaboration/create', [CommunityPageController::class, 'helpEditor'])
+    ->middleware(['auth', 'can:publish'])
+    ->name('collaboration.create');
+Route::get('/collaboration/{collaborationRequest}', [CommunityPageController::class, 'collaboration'])
+    ->name('collaboration.show');
 Route::post('/collaboration', [CollaborationController::class, 'store'])
-    ->middleware(['auth', 'throttle:publish'])
+    ->middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:publish'])
     ->name('collaboration.store');
-
-
+Route::post('/collaboration/{collaborationRequest}/comments', [CollaborationController::class, 'storeComment'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:comments'])
+    ->name('collaboration.comments.store');
+Route::post('/collaboration/applications/{application}/messages', [CollaborationController::class, 'storeApplicationMessage'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:comments'])
+    ->name('collaboration.applications.messages.store');
+Route::delete('/collaboration/comments/{collaborationComment}', [CollaborationController::class, 'destroyComment'])
+    ->middleware(['auth', 'throttle:comments'])
+    ->name('collaboration.comments.destroy');
+Route::middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:publish'])->group(function (): void {
+    Route::post('/collaboration/{collaborationRequest}/applications', [CollaborationController::class, 'apply'])
+        ->name('collaboration.applications.store');
+    Route::patch('/collaboration/applications/{application}', [CollaborationController::class, 'decide'])
+        ->name('collaboration.applications.decide');
+    Route::delete('/collaboration/applications/{application}', [CollaborationController::class, 'withdraw'])
+        ->name('collaboration.applications.withdraw');
+    Route::patch('/collaboration/{collaborationRequest}/status', [CollaborationController::class, 'updateStatus'])
+        ->name('collaboration.status');
+    Route::delete('/collaboration/{collaborationRequest}', [CollaborationController::class, 'destroy'])
+        ->name('collaboration.destroy');
+});

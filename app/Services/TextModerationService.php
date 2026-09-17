@@ -10,12 +10,12 @@ class TextModerationService
     {
         $config = (array) config('moderation.text', []);
         $enabled = (bool) ($config['enabled'] ?? true);
-        if (!$enabled) {
+        if (! $enabled) {
             return $this->skipped('disabled');
         }
 
         $type = strtolower((string) ($context['type'] ?? 'post'));
-        $typeConfig = (array) Arr::get($config, 'types.' . $type, []);
+        $typeConfig = (array) Arr::get($config, 'types.'.$type, []);
         if ($typeConfig === []) {
             $typeConfig = (array) Arr::get($config, 'types.post', []);
         }
@@ -172,7 +172,7 @@ class TextModerationService
             'threshold' => 0.0,
             'signals' => [],
             'details' => [$reason],
-            'summary' => 'Text moderation skipped: ' . $reason . '.',
+            'summary' => __('ui.moderation.text_scan_skipped', ['reason' => $reason]),
             'metrics' => [],
         ];
     }
@@ -248,6 +248,7 @@ class TextModerationService
         // Strip common markdown control characters so word metrics are not distorted.
         $text = preg_replace('/[`*_>#\[\]\(\)\{\}\|~=-]+/u', ' ', $text) ?? $text;
         $text = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $text) ?? $text;
+
         return $text;
     }
 
@@ -267,6 +268,7 @@ class TextModerationService
             }
             $words[] = $word;
         }
+
         return $words;
     }
 
@@ -289,6 +291,7 @@ class TextModerationService
         $topWord = array_key_first($counts);
         $topCount = (int) ($counts[$topWord] ?? 0);
         $ratio = $topCount > 0 ? ($topCount / max(1, count($words))) : 0.0;
+
         return [(string) $topWord, $ratio];
     }
 
@@ -304,6 +307,7 @@ class TextModerationService
         foreach ($runs as $run) {
             $maxRun = max($maxRun, mb_strlen((string) $run));
         }
+
         return [count($runs), $maxRun];
     }
 
@@ -322,6 +326,7 @@ class TextModerationService
         }
         $ratio = $value / max(1, $minimum);
         $severity = 1.0 + (1.0 - $ratio);
+
         return min(2.0, max(1.0, $severity));
     }
 
@@ -336,12 +341,14 @@ class TextModerationService
         } else {
             $ratio = $value / $threshold;
         }
+
         return min(2.0, max(1.0, $ratio));
     }
 
     private function makeSignal(string $key, float $weight, float $severity, string $detail): array
     {
         $score = $weight * $severity;
+
         return [
             'key' => $key,
             'weight' => round($weight, 3),
@@ -359,6 +366,7 @@ class TextModerationService
         $keys = array_map(static fn (array $signal) => (string) ($signal['key'] ?? ''), $signals);
         $keys = array_values(array_filter($keys, static fn ($key) => $key !== ''));
         $keyList = $keys !== [] ? implode(', ', $keys) : 'signals';
+
         return sprintf(
             'Text moderation: score %.2f / %.2f; signals: %s.',
             $score,

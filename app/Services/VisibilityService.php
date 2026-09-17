@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\User;
-use Illuminate\Support\Facades\Schema;
 
 class VisibilityService
 {
@@ -18,44 +17,25 @@ class VisibilityService
 
     public function applyToQuery($query, string $table, ?User $viewer): void
     {
-        if ($table === 'posts' && $this->safeHasTable('users') && $this->safeHasColumn('users', 'is_banned')) {
-            $query->whereNotIn($table . '.user_id', function ($sub) {
+        if ($table === 'posts') {
+            $query->where($table.'.visibility', 'public');
+        }
+        if ($this->isModerator($viewer)) {
+            return;
+        }
+        if (in_array($table, ['posts', 'post_comments', 'post_reviews'], true)) {
+            $query->whereNotIn($table.'.user_id', function ($sub) {
                 $sub->select('id')
                     ->from('users')
                     ->where('is_banned', true);
             });
         }
-        if ($this->isModerator($viewer)) {
-            return;
-        }
-        if ($this->safeHasColumn($table, 'is_hidden')) {
-            $query->where($table . '.is_hidden', false);
-        }
-        if ($this->safeHasColumn($table, 'moderation_status')) {
-            $query->where($table . '.moderation_status', 'approved');
-        }
+        $query->where($table.'.is_hidden', false);
+        $query->where($table.'.moderation_status', 'approved');
     }
 
     private function isModerator(?User $user): bool
     {
         return $user ? $user->hasRole('moderator') : false;
-    }
-
-    private function safeHasTable(string $table): bool
-    {
-        try {
-            return Schema::hasTable($table);
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
-    private function safeHasColumn(string $table, string $column): bool
-    {
-        try {
-            return Schema::hasColumn($table, $column);
-        } catch (\Throwable $e) {
-            return false;
-        }
     }
 }

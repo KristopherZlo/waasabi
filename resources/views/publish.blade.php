@@ -8,11 +8,15 @@
     $pageSubtitle = $isEditing ? __('ui.publish.edit_subtitle') : __('ui.publish.subtitle');
     $submitLabel = $isEditing ? __('ui.publish.edit_cta') : __('ui.publish.publish_cta');
     $coauthorSuggestions = $coauthor_suggestions ?? [];
-    $prefillTags = $prefill_tags ?? '';
-    $tagsValue = old('tags', $editPost['tags'] ?? $prefillTags);
+    $tagsValue = old('tags', $editPost['tags'] ?? '');
+    $projectCategories = $project_categories ?? [];
+    $projectMediaTypes = $project_media_types ?? [];
+    $projectLicenses = $project_licenses ?? [];
+    $canManageTeam = $can_manage_team ?? true;
 @endphp
 
 @section('title', $pageTitle)
+@section('robots', 'noindex, nofollow')
 @section('page', $isEditing ? 'edit' : 'publish')
 
 @section('content')
@@ -31,8 +35,9 @@
         </div>
     </section>
 
+    <p class="writing-prompt">{{ __('waasabi.story_hint') }}</p>
     <section class="publish-workspace">
-        <form class="editor-shell" method="POST" action="{{ route('publish.store') }}" enctype="multipart/form-data" data-publish-form data-editing="{{ $isEditing ? '1' : '0' }}" data-publish-type="{{ $editType }}">
+        <form class="editor-shell" method="POST" action="{{ route('publish.store') }}" enctype="multipart/form-data" data-publish-form data-editing="{{ $isEditing ? '1' : '0' }}" data-publish-type="{{ $editType }}" data-restore-draft="{{ session()->hasOldInput() ? '0' : '1' }}" data-saved-at="{{ $editPost['saved_at'] ?? 0 }}">
             @csrf
             <input type="hidden" name="post_id" value="{{ $editPost['id'] ?? '' }}">
             <input type="hidden" name="publish_type" value="{{ $editType }}" data-publish-type-input data-draft-field="publish_type">
@@ -54,7 +59,7 @@
                             <span class="label-text" data-publish-label data-post-text="{{ __('ui.publish.subtitle_label') }}" data-question-text="{{ __('ui.publish.subtitle_label_question') }}">
                                 {{ __('ui.publish.subtitle_label') }}
                             </span>
-                            <input class="input editor-subtitle-input" type="text" name="subtitle" placeholder="{{ __('ui.publish.subtitle_placeholder') }}" value="{{ old('subtitle', $editPost['subtitle'] ?? '') }}" data-required data-required-type="post" data-draft-field="subtitle" data-publish-placeholder data-post-placeholder="{{ __('ui.publish.subtitle_placeholder') }}" data-question-placeholder="{{ __('ui.publish.subtitle_placeholder_question') }}">
+                            <input class="input editor-subtitle-input" type="text" name="subtitle" placeholder="{{ __('ui.publish.subtitle_placeholder') }}" value="{{ old('subtitle', $editPost['subtitle'] ?? '') }}" data-draft-field="subtitle" data-publish-placeholder data-post-placeholder="{{ __('ui.publish.subtitle_placeholder') }}" data-question-placeholder="{{ __('ui.publish.subtitle_placeholder_question') }}">
                             <span class="helper" data-publish-helper data-post-text="{{ __('ui.publish.subtitle_helper') }}" data-question-text="{{ __('ui.publish.subtitle_helper_question') }}">
                                 {{ __('ui.publish.subtitle_helper') }}
                             </span>
@@ -143,16 +148,59 @@
                 <aside class="editor-meta">
                     <fieldset class="editor-panel editor-panel--settings">
                         <legend>{{ __('ui.publish.details_title') }}</legend>
+                        <label data-publish-section="post">
+                            <span class="label-text">{{ __('waasabi.feedback') }}</span>
+                            <select class="input" name="feedback_mode" data-draft-field="feedback_mode">
+                                @foreach (['sharing' => 'sharing', 'feedback' => 'feedback_mode', 'help' => 'help_mode'] as $key => $label)
+                                    <option value="{{ $key }}" @selected(old('feedback_mode', $editPost['feedback_mode'] ?? 'sharing') === $key)>{{ __('waasabi.'.$label) }}</option>
+                                @endforeach
+                            </select>
+                        </label>
                         <label>
                             <span class="label-text">{{ __('ui.publish.tags_label') }}</span>
                             <input class="input" type="text" name="tags" placeholder="{{ __('ui.publish.tags_placeholder') }}" value="{{ $tagsValue }}" data-draft-field="tags">
                         </label>
+                        <div class="editor-field-row" data-publish-section="post">
+                            <label>
+                                <span class="label-text">{{ __('ui.publish.category_label') }}</span>
+                                <select class="input" name="category" data-draft-field="category">
+                                    @foreach ($projectCategories as $key => $label)
+                                        <option value="{{ $key }}" @selected(old('category', $editPost['category'] ?? 'other') === $key)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                            <label>
+                                <span class="label-text">{{ __('ui.publish.media_type_label') }}</span>
+                                <select class="input" name="media_type" data-draft-field="media_type">
+                                    @foreach ($projectMediaTypes as $key => $label)
+                                        <option value="{{ $key }}" @selected(old('media_type', $editPost['media_type'] ?? 'mixed') === $key)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                        </div>
+                        <div class="editor-field-row" data-publish-section="post">
+                            <label>
+                                <span class="label-text">{{ __('ui.publish.status_label') }}</span>
+                                <select class="input" name="status" data-draft-field="status">
+                                    <option value="in_progress" @selected(old('status', $editPost['status'] ?? 'in_progress') === 'in_progress')>{{ __('ui.publish.status_in_progress') }}</option>
+                                    <option value="done" @selected(old('status', $editPost['status'] ?? '') === 'done')>{{ __('ui.publish.status_done') }}</option>
+                                    <option value="paused" @selected(old('status', $editPost['status'] ?? '') === 'paused')>{{ __('ui.publish.status_paused') }}</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span class="label-text">{{ __('ui.publish.visibility_label') }}</span>
+                                <select class="input" name="visibility" data-draft-field="visibility">
+                                    <option value="public" @selected(old('visibility', $editPost['visibility'] ?? 'public') === 'public')>{{ __('ui.publish.visibility_public') }}</option>
+                                    <option value="unlisted" @selected(old('visibility', $editPost['visibility'] ?? '') === 'unlisted')>{{ __('ui.publish.visibility_unlisted') }}</option>
+                                </select>
+                            </label>
+                        </div>
                         <label data-publish-section="post">
-                            <span class="label-text">{{ __('ui.publish.status_label') }}</span>
-                            <select class="input" name="status" data-draft-field="status">
-                                <option value="in_progress" {{ ($editPost['status'] ?? 'in_progress') === 'in_progress' ? 'selected' : '' }}>{{ __('ui.publish.status_in_progress') }}</option>
-                                <option value="done" {{ ($editPost['status'] ?? '') === 'done' ? 'selected' : '' }}>{{ __('ui.publish.status_done') }}</option>
-                                <option value="paused" {{ ($editPost['status'] ?? '') === 'paused' ? 'selected' : '' }}>{{ __('ui.publish.status_paused') }}</option>
+                            <span class="label-text">{{ __('ui.publish.license_label') }}</span>
+                            <select class="input" name="license" data-draft-field="license">
+                                @foreach ($projectLicenses as $key => $label)
+                                    <option value="{{ $key }}" @selected(old('license', $editPost['license'] ?? 'all-rights-reserved') === $key)>{{ $label }}</option>
+                                @endforeach
                             </select>
                         </label>
                         <div class="nsfw-field" data-publish-section="post">
@@ -169,30 +217,55 @@
 
                     <fieldset class="editor-panel" data-publish-section="post">
                         <legend>{{ __('ui.publish.resources_title') }}</legend>
-                        <label>
+                        <label data-publish-section="post">
+                            <span class="label-text">{{ __('ui.publish.external_url_label') }}</span>
+                            <input class="input" type="url" name="external_url" value="{{ old('external_url', $editPost['external_url'] ?? '') }}" placeholder="https://" data-draft-field="external_url">
+                        </label>
+                        <label data-publish-section="post">
+                            <span class="label-text">{{ __('ui.publish.repository_url_label') }}</span>
+                            <input class="input" type="url" name="repository_url" value="{{ old('repository_url', $editPost['repository_url'] ?? '') }}" placeholder="https://" data-draft-field="repository_url">
+                        </label>
+                        <label data-publish-section="post">
                             <span class="label-text">{{ __('ui.publish.cover_label') }}</span>
                             <input class="input" type="file" name="cover_images[]" accept="image/jpeg,image/png,image/webp" multiple>
                             <span class="helper">{{ __('ui.publish.cover_helper') }}</span>
                         </label>
+                        <label data-publish-section="post">
+                            <span class="label-text">{{ __('ui.publish.attachments_label') }}</span>
+                            <input class="input" type="file" name="attachments[]" accept="audio/*,video/mp4,video/webm,application/pdf,application/zip,text/plain,text/markdown" multiple>
+                            <span class="helper">{{ __('ui.publish.attachments_helper') }}</span>
+                        </label>
+                        @if (!empty($editPost['attachments']))
+                            <div class="publish-attachments" data-publish-section="post">
+                                @foreach ($editPost['attachments'] as $attachment)
+                                    <label class="publish-attachment">
+                                        <input type="checkbox" name="remove_attachment_ids[]" value="{{ $attachment['id'] }}">
+                                        <span>{{ __('ui.publish.remove_attachment', ['name' => $attachment['name']]) }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        @endif
                     </fieldset>
 
-                    <fieldset class="editor-panel">
-                        <legend>{{ __('ui.publish.team_title') }}</legend>
-                        <label>
-                            <span class="label-text">{{ __('ui.publish.coauthors_label') }}</span>
-                            <input
-                                class="input"
-                                type="text"
-                                name="coauthors"
-                                placeholder="{{ __('ui.publish.coauthors_placeholder') }}"
-                                value="{{ old('coauthors', $editPost['coauthors'] ?? '') }}"
-                                data-draft-field="coauthors"
-                                @if (!empty($coauthorSuggestions)) list="publish-coauthors-suggestions" @endif
-                            >
-                            <span class="helper">{{ __('ui.publish.coauthors_helper') }}</span>
-                        </label>
-                    </fieldset>
-                    @if (!empty($coauthorSuggestions))
+                    @if ($canManageTeam)
+                        <fieldset class="editor-panel" data-publish-section="post">
+                            <legend>{{ __('ui.publish.team_title') }}</legend>
+                            <label>
+                                <span class="label-text">{{ __('ui.publish.coauthors_label') }}</span>
+                                <input
+                                    class="input"
+                                    type="text"
+                                    name="coauthors"
+                                    placeholder="{{ __('ui.publish.coauthors_placeholder') }}"
+                                    value="{{ old('coauthors', $editPost['coauthors'] ?? '') }}"
+                                    data-draft-field="coauthors"
+                                    @if (!empty($coauthorSuggestions)) list="publish-coauthors-suggestions" @endif
+                                >
+                                <span class="helper">{{ __('ui.publish.coauthors_helper') }}</span>
+                            </label>
+                        </fieldset>
+                    @endif
+                    @if ($canManageTeam && !empty($coauthorSuggestions))
                         <datalist id="publish-coauthors-suggestions">
                             @foreach ($coauthorSuggestions as $suggestion)
                                 @php
@@ -209,7 +282,8 @@
             </div>
 
             <div class="editor-actions">
-                <button type="submit" class="submit-btn" data-publish-submit disabled>{{ $submitLabel }}</button>
+                <button type="submit" class="ghost-btn" name="publish_action" value="draft" formnovalidate>{{ __('ui.publish.save_draft') }}</button>
+                <button type="submit" class="submit-btn" name="publish_action" value="publish" data-publish-submit disabled>{{ $submitLabel }}</button>
             </div>
             <div class="publish-loader" data-publish-loader hidden>
                 <div class="publish-loader__panel" role="status" aria-live="polite">

@@ -44,7 +44,6 @@ return [
             'sensitivity' => 0.35,
             'min_scale' => 0.75,
             'max_scale' => 1.6,
-            'cache_seconds' => 300,
         ],
 
         // Auto-hide: large report weight totals will hide content from the public feed.
@@ -61,9 +60,11 @@ return [
 
         // Different content types can use different thresholds.
         'types' => [
+            'collaboration' => ['min_chars' => 2, 'min_words' => 0, 'score_threshold' => 3.0],
+            'project_update' => ['min_chars' => 2, 'min_words' => 0, 'score_threshold' => 3.0],
             'post' => [
-                'min_chars' => 180,
-                'min_words' => 30,
+                'min_chars' => 2,
+                'min_words' => 0,
                 'score_threshold' => 2.6,
             ],
             'question' => [

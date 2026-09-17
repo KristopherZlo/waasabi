@@ -16,7 +16,7 @@ class TextModerationServiceTest extends TestCase
             'moderation.text.types.post.score_threshold' => 0.1,
         ]);
 
-        $service = new TextModerationService();
+        $service = new TextModerationService;
         $result = $service->analyze('Hi', ['type' => 'post']);
 
         $this->assertTrue($result['flagged']);
@@ -27,7 +27,7 @@ class TextModerationServiceTest extends TestCase
     {
         config(['moderation.text.enabled' => false]);
 
-        $service = new TextModerationService();
+        $service = new TextModerationService;
         $result = $service->analyze('Anything', ['type' => 'post']);
 
         $this->assertFalse($result['flagged']);

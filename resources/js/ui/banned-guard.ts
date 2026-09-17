@@ -17,7 +17,6 @@ const actionSelectors = [
     '[data-admin-nsfw]',
     '[data-admin-flag]',
     '[data-author-delete]',
-    '[data-reaction]',
     '[data-follow-button]',
     '[data-comment-submit]',
     '[data-comment-reply]',

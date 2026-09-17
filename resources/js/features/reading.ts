@@ -24,7 +24,7 @@ const syncReadingProgress = async (slug: string, state: ReadingState) => {
             }),
         });
     } catch {
-        // Ignore network errors in demo.
+        // Reading progress is best-effort and must not interrupt reading.
     }
 };
 

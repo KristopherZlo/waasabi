@@ -1,0 +1,14 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(?:\.git|\.github|app|bootstrap|config|database|docs|node_modules|resources|routes|scripts|storage|tests|vendor)(?:/|$) - [R=404,L,NC]
+</IfModule>
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^(?:\.env(?:\..*)?|AGENTS\.md|artisan|composer\.(?:json|lock)|LICENSE|package(?:-lock)?\.json|phpunit\.xml|README\.md|vite\.config\.js)$">
+    Require all denied
+</FilesMatch>

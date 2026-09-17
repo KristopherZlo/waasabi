@@ -1,5 +1,6 @@
 import { appUrl, csrfToken } from '../core/config';
 import { t } from '../core/i18n';
+import { focusModal, rememberFocus, restoreFocus, trapModalFocus } from '../core/modal';
 import { toast } from '../core/toast';
 
 export const submitReport = async (payload: {
@@ -42,14 +43,20 @@ export const setupReportModal = (root: ParentNode = document) => {
     const urlInput = form.querySelector<HTMLInputElement>('[data-report-url]');
     const reasonInput = form.querySelector<HTMLSelectElement>('[data-report-reason]');
     const detailsInput = form.querySelector<HTMLTextAreaElement>('[data-report-details]');
+    let returnFocus: HTMLElement | null = null;
 
     const close = () => {
         modal.hidden = true;
+        document.body.classList.remove('is-locked');
+        restoreFocus(returnFocus);
+        returnFocus = null;
     };
 
     const open = (button: HTMLElement) => {
+        returnFocus = rememberFocus();
         modal.hidden = false;
-        typeInput?.setAttribute('value', button.dataset.reportType ?? 'content');
+        document.body.classList.add('is-locked');
+        typeInput?.setAttribute('value', button.dataset.reportType ?? 'post');
         if (idInput) {
             idInput.value = button.dataset.reportId ?? '';
         }
@@ -62,6 +69,7 @@ export const setupReportModal = (root: ParentNode = document) => {
         if (detailsInput) {
             detailsInput.value = '';
         }
+        focusModal(modal, reasonInput);
     };
 
     const bindOpenButtons = (scope: ParentNode) => {
@@ -90,6 +98,9 @@ export const setupReportModal = (root: ParentNode = document) => {
             }
         });
         document.addEventListener('keydown', (event) => {
+            if (!modal.hidden) {
+                trapModalFocus(modal, event);
+            }
             if (event.key === 'Escape' && !modal.hidden) {
                 close();
             }
@@ -99,7 +110,7 @@ export const setupReportModal = (root: ParentNode = document) => {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const payload = {
-            content_type: typeInput?.value ?? 'content',
+            content_type: typeInput?.value ?? 'post',
             content_id: idInput?.value ?? null,
             content_url: urlInput?.value ?? window.location.href,
             reason: reasonInput?.value ?? 'other',

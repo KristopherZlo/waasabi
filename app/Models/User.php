@@ -2,25 +2,19 @@
 
 namespace App\Models;
 
+use App\Services\BadgeCatalogService;
+use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
-use App\Models\PostComment;
-use App\Models\PostReview;
-use App\Models\SupportTicket;
-use App\Models\UserBadge;
-use App\Models\UserNotification;
-use App\Models\UserReportProfile;
-use App\Services\BadgeCatalogService;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     /**
@@ -33,13 +27,19 @@ class User extends Authenticatable implements MustVerifyEmail
         'slug',
         'email',
         'password',
+        'legal_version',
+        'legal_accepted_at',
         'role',
         'avatar',
         'banner_url',
         'bio',
-        'privacy_share_activity',
+        'skills',
+        'open_to_help',
+        'portfolio_url',
+        'featured_post_id',
+        'profile_readme',
+        'wall_mode',
         'privacy_allow_mentions',
-        'privacy_personalized_recommendations',
         'notify_comments',
         'notify_reviews',
         'notify_follows',
@@ -68,10 +68,9 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
+            'legal_accepted_at' => 'datetime',
             'password' => 'hashed',
-            'privacy_share_activity' => 'boolean',
             'privacy_allow_mentions' => 'boolean',
-            'privacy_personalized_recommendations' => 'boolean',
             'notify_comments' => 'boolean',
             'notify_reviews' => 'boolean',
             'notify_follows' => 'boolean',
@@ -79,6 +78,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'connections_show_follow_counts' => 'boolean',
             'security_login_alerts' => 'boolean',
             'is_banned' => 'boolean',
+            'open_to_help' => 'boolean',
         ];
     }
 
@@ -95,6 +95,41 @@ class User extends Authenticatable implements MustVerifyEmail
     public function posts(): HasMany
     {
         return $this->hasMany(Post::class);
+    }
+
+    public function uploadAssets(): HasMany
+    {
+        return $this->hasMany(UploadAsset::class);
+    }
+
+    public function collaborationRequests(): HasMany
+    {
+        return $this->hasMany(CollaborationRequest::class);
+    }
+
+    public function collaborationApplications(): HasMany
+    {
+        return $this->hasMany(CollaborationApplication::class);
+    }
+
+    public function collaborationComments(): HasMany
+    {
+        return $this->hasMany(CollaborationComment::class);
+    }
+
+    public function wallPosts(): HasMany
+    {
+        return $this->hasMany(ProfileWallPost::class, 'profile_user_id');
+    }
+
+    public function showcaseProjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Post::class, 'profile_showcase_projects')->withPivot('position')->orderByPivot('position');
+    }
+
+    public function projectMemberships(): HasMany
+    {
+        return $this->hasMany(ProjectMember::class);
     }
 
     public function badges(): HasMany
@@ -141,6 +176,7 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         $role = strtolower((string) ($this->role ?? 'user'));
         $order = $this->roleOrder();
+
         return in_array($role, $order, true) ? $role : 'user';
     }
 
@@ -148,6 +184,7 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         $order = $this->roleOrder();
         $index = array_search($this->roleKey(), $order, true);
+
         return $index === false ? 0 : (int) $index;
     }
 
@@ -159,6 +196,7 @@ class User extends Authenticatable implements MustVerifyEmail
         if ($targetIndex === false) {
             return false;
         }
+
         return $this->roleRank() >= (int) $targetIndex;
     }
 
@@ -202,10 +240,6 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function sendNotification(string $type, string $text, ?string $link = null): ?UserNotification
     {
-        if (!$this->safeHasTable('user_notifications')) {
-            return null;
-        }
-
         return $this->notifications()->create([
             'type' => $type,
             'text' => $text,
@@ -213,14 +247,15 @@ class User extends Authenticatable implements MustVerifyEmail
         ]);
     }
 
+    public function sendPreferredNotification(string $preference, string $type, string $text, ?string $link = null): ?UserNotification
+    {
+        return ($this->{$preference} ?? true) ? $this->sendNotification($type, $text, $link) : null;
+    }
+
     public function grantBadge(string $badgeKey, array $attributes = [], bool $notify = true): UserBadge
     {
-        if (!$this->safeHasTable('user_badges')) {
-            throw new \RuntimeException('Badge storage unavailable.');
-        }
-
         $catalog = $attributes['catalog'] ?? app(BadgeCatalogService::class)->find($badgeKey);
-        if (!$catalog) {
+        if (! $catalog) {
             throw new \InvalidArgumentException('Unknown badge.');
         }
 
@@ -245,7 +280,11 @@ class User extends Authenticatable implements MustVerifyEmail
                 $badgeName = (string) ($catalog['name'] ?? $badgeKey);
             }
             $link = $attributes['link'] ?? null;
-            $this->sendNotification('Badge', 'You received the badge "' . $badgeName . '".', $link);
+            $this->sendNotification(
+                __('ui.notifications.type_badge'),
+                __('ui.notifications.badge_received', ['badge' => $badgeName]),
+                $link,
+            );
         }
 
         return $badge;
@@ -253,12 +292,8 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function revokeBadge(int|UserBadge $badge): bool
     {
-        if (!$this->safeHasTable('user_badges')) {
-            return false;
-        }
-
         $badgeId = $badge instanceof UserBadge ? $badge->id : $badge;
-        if (!$badgeId) {
+        if (! $badgeId) {
             return false;
         }
 
@@ -268,15 +303,7 @@ class User extends Authenticatable implements MustVerifyEmail
     private function roleOrder(): array
     {
         $order = config('roles.order', ['user', 'maker', 'moderator', 'admin']);
-        return array_values(array_filter(array_map('strval', (array) $order)));
-    }
 
-    private function safeHasTable(string $table): bool
-    {
-        try {
-            return Schema::hasTable($table);
-        } catch (\Throwable $e) {
-            return false;
-        }
+        return array_values(array_filter(array_map('strval', (array) $order)));
     }
 }

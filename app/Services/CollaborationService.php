@@ -2,178 +2,149 @@
 
 namespace App\Services;
 
+use App\Models\CollaborationRequest;
 use App\Models\Post;
 use App\Models\User;
-use App\Support\SchemaGuard;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
 
 class CollaborationService
 {
-    private const PAGE_LIMIT = 120;
-
-    public function __construct(
-        private DemoContentService $demoContent,
-        private VisibilityService $visibility
-    ) {
-    }
+    private const SEARCH_SYNONYMS = [
+        'design' => ['role' => ['designer', 'visual-artist', 'illustrator']],
+        'designer' => ['role' => ['designer', 'visual-artist']],
+        'draw' => ['role' => ['illustrator', 'visual-artist']],
+        'illustration' => ['role' => ['illustrator', 'visual-artist']],
+        'art' => ['role' => ['visual-artist', 'illustrator', '3d-artist', 'graffiti-artist']],
+        'code' => ['role' => ['developer']],
+        'developer' => ['role' => ['developer']],
+        'programming' => ['role' => ['developer']],
+        'writing' => ['role' => ['writer', 'editor', 'coauthor', 'poet']],
+        'text' => ['role' => ['writer', 'editor', 'coauthor']],
+        'music' => ['role' => ['musician', 'vocalist', 'composer', 'sound-designer']],
+        'audio' => ['role' => ['musician', 'composer', 'sound-designer']],
+        'photo' => ['role' => ['photographer', 'filmmaker']],
+        'video' => ['role' => ['filmmaker', 'animator']],
+        'remote' => ['format' => ['remote', 'async']],
+        'online' => ['format' => ['remote', 'async']],
+        'local' => ['format' => ['on-site', 'hybrid']],
+        'quick' => ['availability' => ['one-time']],
+        'evening' => ['availability' => ['one-time']],
+        'weekly' => ['availability' => ['part-time', 'regular']],
+        'flexible' => ['availability' => ['flexible']],
+    ];
 
     public function roleOptions(): array
     {
-        return [
-            'designer' => 'Designer',
-            'ui-ux' => 'UI/UX designer',
-            'frontend' => 'Frontend developer',
-            'backend' => 'Backend developer',
-            'fullstack' => 'Full-stack developer',
-            'hardware' => 'Hardware engineer',
-            'firmware' => 'Firmware developer',
-            'product' => 'Product manager',
-            'writer' => 'Technical writer',
-            'research' => 'Researcher',
-            'data' => 'Data analyst',
-        ];
+        return (array) __('ui.collaboration.roles');
     }
 
     public function availabilityOptions(): array
     {
-        return [
-            'one-time' => 'One-time',
-            'part-time' => 'Part-time',
-            'full-time' => 'Full-time',
-            'flexible' => 'Flexible',
-        ];
+        return (array) __('ui.collaboration.availability_options');
     }
 
     public function formatOptions(): array
     {
-        return [
-            'remote' => 'Remote',
-            'hybrid' => 'Hybrid',
-            'on-site' => 'On-site',
-            'async' => 'Async',
-        ];
+        return (array) __('ui.collaboration.format_options');
     }
 
-    public function buildPageData(?User $viewer): array
+    public function requests(array $filters, ?User $viewer): LengthAwarePaginator
     {
-        $items = $this->fetchCollaborationItems($viewer);
+        $query = CollaborationRequest::query()
+            ->with([
+                'post:id,user_id,slug,title,cover_url,status',
+                'user:id,slug,name,avatar,role',
+            ])
+            ->withCount('applications')
+            ->visibleTo($viewer);
 
-        return [
-            'collaboration_items' => $items,
-            'collaboration_roles' => $this->roleOptions(),
-            'collaboration_availability' => $this->availabilityOptions(),
-            'collaboration_formats' => $this->formatOptions(),
-        ];
-    }
-
-    public function buildTagsForRequest(string $roleKey, string $availabilityKey, string $formatKey, array $skills): array
-    {
-        $roleLabel = $this->roleOptions()[$roleKey] ?? $roleKey;
-        $availabilityLabel = $this->availabilityOptions()[$availabilityKey] ?? $availabilityKey;
-        $formatLabel = $this->formatOptions()[$formatKey] ?? $formatKey;
-
-        $tags = [
-            'Collaboration',
-            $roleLabel,
-            $availabilityLabel,
-            $formatLabel,
-        ];
-
-        foreach ($skills as $skill) {
-            $tags[] = $skill;
+        $status = (string) ($filters['status'] ?? 'open');
+        if (! in_array($status, ['open', 'filled', 'closed', 'all'], true)) {
+            $status = 'open';
+        }
+        if ($status !== 'all') {
+            $query->where('status', $status);
+        }
+        if ($status === 'open') {
+            $query->where(fn ($dateQuery) => $dateQuery->whereNull('expires_at')->orWhere('expires_at', '>', now()));
         }
 
-        return array_values(array_unique(array_filter($tags)));
-    }
-
-    public function formatBody(
-        string $roleLabel,
-        string $availabilityLabel,
-        string $formatLabel,
-        array $skills,
-        string $summary,
-        ?string $contact
-    ): string {
-        $skillsLine = !empty($skills) ? implode(', ', $skills) : 'Open to suggestions';
-        $contactLine = $contact ? trim($contact) : 'Send a message via my profile.';
-
-        return "## Looking for\n"
-            . "Role: {$roleLabel}\n"
-            . "Availability: {$availabilityLabel}\n"
-            . "Format: {$formatLabel}\n"
-            . "Skills: {$skillsLine}\n\n"
-            . "## Project\n"
-            . $summary
-            . "\n\n"
-            . "## How to join\n"
-            . $contactLine;
-    }
-
-    private function fetchCollaborationItems(?User $viewer): array
-    {
-        $useDbFeed = SchemaGuard::hasTable('posts') && Post::query()->exists();
-        if ($useDbFeed) {
-            return $this->fetchDbItems($viewer);
-        }
-
-        $projects = $this->demoContent->projects();
-        $items = [];
-        foreach ($projects as $project) {
-            if (!$this->hasCollaborationTag($project['tags'] ?? [])) {
-                continue;
+        foreach (['role', 'availability', 'format'] as $field) {
+            $value = trim((string) ($filters[$field] ?? ''));
+            if ($value !== '') {
+                $query->where($field, $value);
             }
-            $items[] = [
-                'type' => 'project',
-                'data' => $project,
-                'published_minutes' => (int) ($project['published_minutes'] ?? 0),
-            ];
         }
 
-        return $items;
+        $scope = (string) ($filters['scope'] ?? '');
+        if ($viewer && $scope === 'mine') {
+            $query->where('user_id', $viewer->id);
+        } elseif ($viewer && $scope === 'applied') {
+            $query->whereHas('applications', fn ($applications) => $applications->where('user_id', $viewer->id));
+        }
+
+        $search = trim((string) ($filters['q'] ?? ''));
+        if ($search !== '') {
+            $expanded = $this->expandSearch($search);
+            $query->where(function ($searchQuery) use ($search, $expanded): void {
+                $searchQuery
+                    ->where('title', 'like', "%{$search}%")
+                    ->orWhere('summary', 'like', "%{$search}%")
+                    ->orWhere('skills', 'like', "%{$search}%")
+                    ->orWhereHas('post', fn ($postQuery) => $postQuery->where('title', 'like', "%{$search}%"));
+                foreach ($expanded as $field => $values) {
+                    if ($values !== []) {
+                        $searchQuery->orWhereIn($field, $values);
+                    }
+                }
+            });
+        }
+
+        return $query->latest()->paginate(20)->withQueryString();
     }
 
-    private function fetchDbItems(?User $viewer): array
+    public function manageableProjects(User $user)
     {
-        $query = Post::with(['user', 'editedBy'])
+        return Post::query()
+            ->select(['id', 'slug', 'title'])
             ->where('type', 'post')
-            ->orderByDesc('created_at')
-            ->limit(self::PAGE_LIMIT);
+            ->where('user_id', $user->id)
+            ->where('visibility', 'public')
+            ->where('is_hidden', false)
+            ->where('moderation_status', 'approved')
+            ->latest()
+            ->get();
+    }
 
-        $this->visibility->applyToQuery($query, 'posts', $viewer);
-
-        $posts = $query->get();
-        if ($posts->isEmpty()) {
-            return [];
-        }
-
-        $filtered = $posts->filter(fn (Post $post) => $this->hasCollaborationTag($post->tags ?? []));
-        if ($filtered->isEmpty()) {
-            return [];
-        }
-
-        $stats = FeedService::preparePostStats($filtered, $viewer);
-
-        return $filtered
-            ->map(function (Post $post) use ($stats) {
-                $data = FeedService::mapPostToProjectWithStats($post, $stats);
-                return [
-                    'type' => 'project',
-                    'data' => $data,
-                    'published_minutes' => (int) ($data['published_minutes'] ?? 0),
-                ];
-            })
+    public function parseSkills(string $raw): array
+    {
+        return collect(explode(',', $raw))
+            ->map(fn ($skill) => trim(strip_tags((string) $skill)))
+            ->filter()
+            ->map(fn ($skill) => mb_substr($skill, 0, 40))
+            ->unique(fn ($skill) => mb_strtolower($skill))
+            ->take(10)
             ->values()
             ->all();
     }
 
-    private function hasCollaborationTag(array $tags): bool
+    /** @return array{role: array<int, string>, availability: array<int, string>, format: array<int, string>} */
+    private function expandSearch(string $search): array
     {
-        foreach ($tags as $tag) {
-            $slug = Str::slug((string) $tag);
-            if ($slug === 'collaboration') {
-                return true;
+        $normalized = Str::lower($search);
+        $tokens = preg_split('/[^\pL\pN-]+/u', $normalized, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $expanded = ['role' => [], 'availability' => [], 'format' => []];
+
+        foreach (self::SEARCH_SYNONYMS as $word => $matches) {
+            if (! in_array($word, $tokens, true)) {
+                continue;
+            }
+            foreach ($matches as $field => $values) {
+                $expanded[$field] = array_values(array_unique(array_merge($expanded[$field], $values)));
             }
         }
-        return false;
+
+        return $expanded;
     }
 }

@@ -1,24 +1,23 @@
 @extends('layouts.app')
 
 @section('title', __('ui.read_later.title'))
+@section('robots', 'noindex, nofollow')
 @section('page', 'read-later')
 
 @section('content')
-    <section class="hero">
-        <h1>{{ __('ui.read_later.title') }}</h1>
-        <p>{{ __('ui.read_later.subtitle') }}</p>
-    </section>
-
-    <section class="section" style="margin-top: 24px;">
-        <div class="list" data-read-later-page-list>
+    <section class="saved-library">
+        <header class="saved-library__header">
+            <div>
+                <h1>{{ __('ui.read_later.title') }}</h1>
+                <p>{{ __('ui.read_later.subtitle') }}</p>
+            </div>
+            <span class="saved-library__count" data-read-later-page-count>{{ count($items) }}</span>
+        </header>
+        <div class="saved-library__list" data-read-later-page-list>
             @foreach ($items as $item)
-                @if (($item['type'] ?? 'project') === 'question')
-                    @include('partials.question-card', ['question' => $item['data'] ?? []])
-                @else
-                    @include('partials.project-card', ['project' => $item['data'] ?? []])
-                @endif
+                @include('partials.read-later-item', ['item' => $item])
             @endforeach
-            <div class="list-item" data-read-later-page-empty hidden>{{ __('ui.read_later.empty') }}</div>
+            <div class="saved-library__empty" data-read-later-page-empty @if (count($items) > 0) hidden @endif>{{ __('ui.read_later.empty') }}</div>
         </div>
     </section>
 @endsection

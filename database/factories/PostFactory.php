@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Post>
+ * @extends Factory<Post>
  */
 class PostFactory extends Factory
 {
@@ -21,7 +21,7 @@ class PostFactory extends Factory
         if ($slugBase === '') {
             $slugBase = 'post';
         }
-        $slug = $slugBase . '-' . Str::lower(Str::random(6));
+        $slug = $slugBase.'-'.Str::lower(Str::random(6));
         $body = fake()->paragraphs(3, true);
         $readMinutes = max(1, (int) ceil(str_word_count($body) / 200));
 
@@ -30,6 +30,7 @@ class PostFactory extends Factory
         return [
             'user_id' => $existingUserId ?? User::factory(),
             'type' => 'post',
+            'is_project' => true,
             'slug' => $slug,
             'title' => $title,
             'subtitle' => fake()->sentence(10),
@@ -47,6 +48,7 @@ class PostFactory extends Factory
     {
         return $this->state(fn () => [
             'type' => 'question',
+            'is_project' => false,
             'status' => null,
         ]);
     }

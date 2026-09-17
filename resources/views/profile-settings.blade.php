@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('title', __('ui.profile_settings.title'))
+@section('robots', 'noindex, nofollow')
 @section('page', 'profile-settings')
 
 @section('content')
@@ -16,12 +17,7 @@
         $avatarUrl = \Illuminate\Support\Str::startsWith($avatarPath, ['http://', 'https://'])
             ? $avatarPath
             : asset(ltrim($avatarPath, '/'));
-        $privacyShareActivity = old('privacy_share_activity', $user?->privacy_share_activity ?? true);
         $privacyAllowMentions = old('privacy_allow_mentions', $user?->privacy_allow_mentions ?? true);
-        $privacyPersonalized = old(
-            'privacy_personalized_recommendations',
-            $user?->privacy_personalized_recommendations ?? false,
-        );
         $notifyComments = old('notify_comments', $user?->notify_comments ?? true);
         $notifyReviews = old('notify_reviews', $user?->notify_reviews ?? true);
         $notifyFollows = old('notify_follows', $user?->notify_follows ?? true);
@@ -141,6 +137,7 @@
                             <textarea id="settings-bio" class="input" name="bio">{{ old('bio', $userBio) }}</textarea>
                         </div>
                     </div>
+                    @include('partials.maker-settings')
                     @if ($user?->isAdmin())
                         <div class="settings-row settings-row--info">
                             <div class="settings-row__label">
@@ -175,34 +172,12 @@
                     </div>
                     <div class="settings-toggle">
                         <div>
-                            <div class="settings-toggle__title">{{ __('ui.profile_settings.privacy_activity_title') }}</div>
-                            <div class="settings-toggle__desc">{{ __('ui.profile_settings.privacy_activity_desc') }}</div>
-                        </div>
-                        <input type="hidden" name="privacy_share_activity" value="0">
-                        <label class="switch">
-                            <input type="checkbox" name="privacy_share_activity" value="1" @checked($privacyShareActivity)>
-                            <span class="switch__track"></span>
-                        </label>
-                    </div>
-                    <div class="settings-toggle">
-                        <div>
                             <div class="settings-toggle__title">{{ __('ui.profile_settings.privacy_mentions_title') }}</div>
                             <div class="settings-toggle__desc">{{ __('ui.profile_settings.privacy_mentions_desc') }}</div>
                         </div>
                         <input type="hidden" name="privacy_allow_mentions" value="0">
                         <label class="switch">
                             <input type="checkbox" name="privacy_allow_mentions" value="1" @checked($privacyAllowMentions)>
-                            <span class="switch__track"></span>
-                        </label>
-                    </div>
-                    <div class="settings-toggle">
-                        <div>
-                            <div class="settings-toggle__title">{{ __('ui.profile_settings.privacy_recommendations_title') }}</div>
-                            <div class="settings-toggle__desc">{{ __('ui.profile_settings.privacy_recommendations_desc') }}</div>
-                        </div>
-                        <input type="hidden" name="privacy_personalized_recommendations" value="0">
-                        <label class="switch">
-                            <input type="checkbox" name="privacy_personalized_recommendations" value="1" @checked($privacyPersonalized)>
                             <span class="switch__track"></span>
                         </label>
                     </div>
@@ -333,6 +308,42 @@
 
                 <div class="settings-empty helper" data-settings-empty hidden>{{ __('ui.profile_settings.search_empty') }}</div>
             </form>
+
+            <section class="settings-panel account-security" aria-labelledby="account-security-title">
+                <div class="settings-panel__header">
+                    <div>
+                        <h2 class="settings-panel__title" id="account-security-title">{{ __('ui.profile_settings.security_title') }}</h2>
+                        <div class="settings-panel__subtitle">{{ __('ui.profile_settings.devices_hint') }}</div>
+                    </div>
+                </div>
+                <form class="settings-form" method="POST" action="{{ route('account.password.update') }}">
+                    @csrf
+                    @method('PATCH')
+                    <label>{{ __('ui.profile_settings.current_password') }}<input class="input" type="password" name="current_password" required autocomplete="current-password"></label>
+                    <label>{{ __('ui.profile_settings.new_password') }}<input class="input" type="password" name="password" required autocomplete="new-password"></label>
+                    <label>{{ __('ui.auth.password_confirm') }}<input class="input" type="password" name="password_confirmation" required autocomplete="new-password"></label>
+                    <button class="submit-btn" type="submit">{{ __('ui.profile_settings.update_password') }}</button>
+                </form>
+                <div class="settings-row settings-row--info">
+                    <div class="settings-row__label"><strong>{{ __('ui.profile_settings.export_title') }}</strong></div>
+                    <div class="settings-row__control">
+                        <p class="settings-note">{{ __('ui.profile_settings.export_hint') }}</p>
+                        <a class="ghost-btn ghost-btn--compact" href="{{ route('account.export') }}">{{ __('ui.profile_settings.export_cta') }}</a>
+                    </div>
+                </div>
+                <div class="settings-row settings-row--danger">
+                    <div class="settings-row__label"><strong>{{ __('ui.profile_settings.delete_account_title') }}</strong></div>
+                    <div class="settings-row__control">
+                        <p class="settings-note">{{ __('ui.profile_settings.delete_account_hint') }}</p>
+                        <form method="POST" action="{{ route('account.destroy') }}" data-confirm-submit data-confirm-message="{{ __('ui.profile_settings.delete_account_confirm') }}">
+                            @csrf
+                            @method('DELETE')
+                            <input class="input" type="password" name="password" placeholder="{{ __('ui.profile_settings.current_password') }}" required autocomplete="current-password">
+                            <button class="btn btn--danger" type="submit">{{ __('ui.profile_settings.delete_account_cta') }}</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
         </div>
     </section>
 @endsection

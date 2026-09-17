@@ -1,19 +1,14 @@
 import { Editor, Mark, mergeAttributes } from '@tiptap/core';
-import CharacterCount from '@tiptap/extension-character-count';
+import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
-import Placeholder from '@tiptap/extension-placeholder';
 import StarterKit from '@tiptap/starter-kit';
-import Table from '@tiptap/extension-table';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import TableRow from '@tiptap/extension-table-row';
+import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { marked } from 'marked';
 import { appUrl, csrfToken } from '../core/config';
 import { t, tFormat } from '../core/i18n';
-import { getPublishDraft, updatePublishDraft } from '../core/storage';
+import { recoverPublishDraft, updatePublishDraft } from '../core/storage';
 import { toast } from '../core/toast';
 
 const Spoiler = Mark.create({
@@ -122,14 +117,12 @@ export const setupArticleEditor = () => {
         const imageInsertButton = root?.querySelector<HTMLButtonElement>('[data-editor-image-insert]');
         const imageUploadButton = root?.querySelector<HTMLButtonElement>('[data-editor-image-upload]');
         const imageCloseButton = root?.querySelector<HTMLButtonElement>('[data-editor-image-close]');
-        const imageToggleButton = toolbar?.querySelector<HTMLButtonElement>('[data-editor-action="image"]');
         const tablePanel = root?.querySelector<HTMLElement>('[data-editor-table-panel]');
         const placeholder = surface.dataset.editorPlaceholder ?? t('editor_placeholder', 'Start writing...');
         const initialValue = output?.value ?? '';
         const form = surface.closest<HTMLFormElement>('[data-publish-form]');
-        const isEditing = form?.dataset.editing === '1';
-        const draft = isEditing ? null : getPublishDraft();
-        const initialContent = draft?.contentHtml ? draft.contentHtml : initialValue;
+        const draft = recoverPublishDraft(form);
+        const initialContent = draft?.contentHtml ? draft.contentHtml : marked.parse(initialValue, { gfm: true });
 
         const turndown = new TurndownService({
             codeBlockStyle: 'fenced',
@@ -150,6 +143,7 @@ export const setupArticleEditor = () => {
         const scheduleDraftSave = (instance: Editor) => {
             window.clearTimeout(draftTimer);
             draftTimer = window.setTimeout(() => {
+                if (!surface.isConnected) return;
                 updatePublishDraft({ contentHtml: instance.getHTML() });
             }, 800);
         };
@@ -202,8 +196,8 @@ export const setupArticleEditor = () => {
             container.addEventListener('focusout', () => hideTooltip());
         };
 
-        attachTooltips(toolbar, '[data-editor-action]');
-        attachTooltips(tablePanel, '[data-table-action]');
+        attachTooltips(toolbar ?? null, '[data-editor-action]');
+        attachTooltips(tablePanel ?? null, '[data-table-action]');
         window.addEventListener('scroll', hideTooltip, { passive: true });
         window.addEventListener('resize', hideTooltip);
 
@@ -235,6 +229,12 @@ export const setupArticleEditor = () => {
         let editor: Editor;
 
         const handlePaste = (_view: unknown, event: ClipboardEvent) => {
+            const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith('image/'));
+            if (files.length) {
+                event.preventDefault();
+                void insertImagesFromList(files);
+                return true;
+            }
             const text = event.clipboardData?.getData('text/plain') ?? '';
             if (!looksLikeMarkdown(text)) {
                 return false;
@@ -248,7 +248,7 @@ export const setupArticleEditor = () => {
             const htmlFromMarkdown = marked.parse(prepared, { gfm: true, breaks: true }) as string;
             const shouldSnapshot = wasEmpty || isFullSelection;
             if (shouldSnapshot) {
-                editor.commands.setContent(htmlFromMarkdown, false, { preserveWhitespace: 'full' });
+                editor.commands.setContent(htmlFromMarkdown, { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } });
             } else {
                 editor.commands.insertContent(htmlFromMarkdown);
             }
@@ -266,13 +266,12 @@ export const setupArticleEditor = () => {
         editor = new Editor({
             element: surface,
             extensions: [
-                StarterKit,
+                StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true }, underline: false }),
                 Table.configure({ resizable: true }),
                 TableRow,
                 TableHeader,
                 TableCell,
                 Spoiler,
-                Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }),
                 ResizableImage.configure({ allowBase64: true }),
                 Placeholder.configure({ placeholder }),
                 CharacterCount.configure(),
@@ -287,6 +286,76 @@ export const setupArticleEditor = () => {
             onUpdate: ({ editor }) => {
                 syncOutput(editor);
             },
+        });
+
+        const preview = document.createElement('div');
+        window.addEventListener('pagehide', () => {
+            if (surface.isConnected) updatePublishDraft({ contentHtml: editor.getHTML() });
+        }, { once: true });
+        form?.addEventListener('submit', () => {
+            window.clearTimeout(draftTimer);
+            updatePublishDraft({ contentHtml: editor.getHTML() });
+        });
+        preview.className = 'editor-preview reading-content';
+        preview.hidden = true;
+        surface.after(preview);
+        const previewButton = document.createElement('button');
+        previewButton.type = 'button';
+        previewButton.className = 'ghost-btn';
+        previewButton.textContent = t('editor_preview', 'Preview');
+        previewButton.setAttribute('aria-pressed', 'false');
+        toolbar?.append(previewButton);
+        previewButton.addEventListener('click', () => {
+            const showPreview = preview.hidden;
+            preview.hidden = !showPreview;
+            surface.hidden = showPreview;
+            if (showPreview) preview.innerHTML = editor.getHTML();
+            previewButton.textContent = showPreview ? t('editor_write', 'Write') : t('editor_preview', 'Preview');
+            previewButton.setAttribute('aria-pressed', String(showPreview));
+        });
+
+        const linkPanel = document.createElement('div');
+        linkPanel.className = 'editor-link-panel';
+        linkPanel.hidden = true;
+        const linkInput = document.createElement('input');
+        linkInput.className = 'input';
+        linkInput.type = 'url';
+        linkInput.placeholder = 'https://';
+        linkInput.required = true;
+        linkInput.setAttribute('aria-label', t('link_prompt', 'Link'));
+        const linkApplyButton = document.createElement('button');
+        linkApplyButton.type = 'button';
+        linkApplyButton.className = 'ghost-btn';
+        linkApplyButton.textContent = t('link_apply', 'Apply link');
+        const linkCancelButton = document.createElement('button');
+        linkCancelButton.type = 'button';
+        linkCancelButton.className = 'ghost-btn';
+        linkCancelButton.textContent = t('cancel', 'Cancel');
+        linkPanel.append(linkInput, linkApplyButton, linkCancelButton);
+        toolbar?.after(linkPanel);
+        const applyLink = () => {
+            const url = linkInput.value.trim();
+            if (!/^https?:\/\/\S+$/i.test(url)) {
+                linkInput.setCustomValidity(t('link_invalid', 'Paste a full http:// or https:// link.'));
+                linkInput.reportValidity();
+                return;
+            }
+            editor.chain().focus().setLink({ href: url }).run();
+            linkInput.value = '';
+            linkPanel.hidden = true;
+            updateToolbar();
+        };
+        linkInput.addEventListener('input', () => linkInput.setCustomValidity(''));
+        linkInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                applyLink();
+            }
+        });
+        linkApplyButton.addEventListener('click', applyLink);
+        linkCancelButton.addEventListener('click', () => {
+            linkPanel.hidden = true;
+            editor.chain().focus().run();
         });
 
         const closeImagePanel = () => {
@@ -534,11 +603,6 @@ export const setupArticleEditor = () => {
             }
         };
 
-        imageToggleButton?.addEventListener('click', (event) => {
-            event.preventDefault();
-            handleImageAction();
-        });
-
         toolbar?.addEventListener('click', (event) => {
             const target = event.target as HTMLElement | null;
             const button = target?.closest<HTMLButtonElement>('[data-editor-action]');
@@ -565,11 +629,10 @@ export const setupArticleEditor = () => {
             if (action === 'link') {
                 if (editor.isActive('link')) {
                     editor.chain().focus().unsetLink().run();
+                    linkPanel.hidden = true;
                 } else {
-                    const url = window.prompt(t('link_prompt', 'Link'));
-                    if (url) {
-                        editor.chain().focus().setLink({ href: url }).run();
-                    }
+                    linkPanel.hidden = false;
+                    linkInput.focus();
                 }
             }
             if (action === 'image') {

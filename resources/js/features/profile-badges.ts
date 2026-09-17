@@ -1,5 +1,6 @@
 import { appUrl, csrfToken } from '../core/config';
 import { t } from '../core/i18n';
+import { focusModal, rememberFocus, restoreFocus, trapModalFocus } from '../core/modal';
 import { toast } from '../core/toast';
 
 type BadgeCatalogEntry = {
@@ -31,9 +32,20 @@ const readJsonScript = <T>(selector: string): T | null => {
     }
 };
 
+const modalFocus = new WeakMap<HTMLElement, HTMLElement | null>();
+
 const setModalOpen = (modal: HTMLElement, open: boolean) => {
+    if (open) {
+        modalFocus.set(modal, rememberFocus());
+    }
     modal.hidden = !open;
     document.body.classList.toggle('is-locked', open);
+    if (open) {
+        focusModal(modal);
+    } else {
+        restoreFocus(modalFocus.get(modal) ?? null);
+        modalFocus.delete(modal);
+    }
 };
 
 export const setupProfileBadges = () => {
@@ -184,7 +196,7 @@ export const setupProfileBadges = () => {
         clearBurst();
     }
 
-    const defaultGlowRgb = '78, 161, 255';
+    const defaultGlowRgb = '214, 139, 119';
     let glowRequestId = 0;
 
     const setGlowReady = (ready: boolean) => {
@@ -564,6 +576,10 @@ export const setupProfileBadges = () => {
     });
 
     document.addEventListener('keydown', (event) => {
+        const activeModal = [viewModal, grantModal, revokeModal].find((modal) => modal && !modal.hidden);
+        if (activeModal) {
+            trapModalFocus(activeModal, event);
+        }
         if (event.key === 'Escape') {
             if (viewModal && !viewModal.hidden) {
                 closeViewModal();

@@ -3,17 +3,12 @@
 namespace App\Services;
 
 use App\Models\User;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class CoauthorService
 {
     public function listSuggestions(int $limit = 200, ?User $actor = null): array
     {
-        if (!$this->safeHasTable('users') || !$this->safeHasColumn('users', 'slug')) {
-            return [];
-        }
-
         $query = User::query()
             ->select(['id', 'slug', 'name'])
             ->whereNotNull('slug')
@@ -22,12 +17,7 @@ class CoauthorService
         if ($actor) {
             $query->where('id', '<>', $actor->id);
         }
-        if ($this->safeHasColumn('users', 'is_banned')) {
-            $query->where('is_banned', false);
-        }
-        if ($this->safeHasColumn('users', 'privacy_allow_mentions')) {
-            $query->where('privacy_allow_mentions', true);
-        }
+        $query->where('is_banned', false)->where('privacy_allow_mentions', true);
 
         return $query
             ->orderBy('name')
@@ -46,7 +36,7 @@ class CoauthorService
     public function resolveUsers(string $raw, ?User $actor = null, int $limit = 8): array
     {
         $tokens = $this->parseTokens($raw);
-        if ($tokens === [] || !$this->safeHasTable('users') || !$this->safeHasColumn('users', 'slug')) {
+        if ($tokens === []) {
             return [
                 'tokens' => $tokens,
                 'users' => collect(),
@@ -85,12 +75,7 @@ class CoauthorService
         if ($actor) {
             $query->where('id', '<>', $actor->id);
         }
-        if ($this->safeHasColumn('users', 'is_banned')) {
-            $query->where('is_banned', false);
-        }
-        if ($this->safeHasColumn('users', 'privacy_allow_mentions')) {
-            $query->where('privacy_allow_mentions', true);
-        }
+        $query->where('is_banned', false)->where('privacy_allow_mentions', true);
 
         $users = $query->get();
         if ($users->isEmpty()) {
@@ -111,12 +96,13 @@ class CoauthorService
             $lower = Str::lower($token);
             $slug = Str::slug($token);
             $user = $bySlug->get($lower) ?? ($slug !== '' ? $bySlug->get($slug) : null);
-            if (!$user) {
+            if (! $user) {
                 continue;
             }
             $key = (int) $user->id;
             if (isset($ordered[$key])) {
                 $resolvedTokens[] = $token;
+
                 continue;
             }
             $ordered[$key] = $user;
@@ -140,7 +126,7 @@ class CoauthorService
 
         $unresolved = [];
         foreach ($tokens as $token) {
-            if (!in_array($token, $resolvedTokens, true)) {
+            if (! in_array($token, $resolvedTokens, true)) {
                 $unresolved[] = $token;
             }
         }
@@ -172,23 +158,5 @@ class CoauthorService
             ->unique()
             ->values()
             ->all();
-    }
-
-    private function safeHasTable(string $table): bool
-    {
-        try {
-            return Schema::hasTable($table);
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
-    private function safeHasColumn(string $table, string $column): bool
-    {
-        try {
-            return Schema::hasColumn($table, $column);
-        } catch (\Throwable $e) {
-            return false;
-        }
     }
 }

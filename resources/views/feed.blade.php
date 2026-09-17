@@ -14,6 +14,10 @@
         $activeStream = $active_stream ?? 'projects';
         $isCollaborationStream = $activeStream === 'collaboration';
     @endphp
+    <header class="community-heading community-welcome">
+        <div><h1>{{ __('waasabi.intro') }}</h1><p>{{ __('waasabi.intro_detail') }}</p></div>
+        <div class="community-actions"><a class="cta-btn" href="{{ route('publish') }}">{{ __('waasabi.share') }}</a><a class="ghost-btn" href="{{ route('collaboration.create') }}">{{ __('waasabi.help') }}</a></div>
+    </header>
     <section class="feed-header">
         <div class="feed-title">{{ __('ui.feed.all_streams') }}</div>
         <div class="tabs feed-tabs" role="group" aria-label="{{ __('ui.feed.streams_label') }}">
@@ -56,6 +60,8 @@
                     <button type="button" class="feed-filter" data-feed-filter="fresh" aria-pressed="false">
                         {{ __('ui.feed.filter_fresh') }}
                     </button>
+                    <button type="button" class="feed-filter" data-feed-filter="following" aria-pressed="false">{{ __('waasabi.following') }}</button>
+                    <button type="button" class="feed-filter" data-feed-filter="quiet" aria-pressed="false">{{ __('waasabi.quiet') }}</button>
                     <button type="button" class="feed-filter" data-feed-filter="reading" aria-pressed="false">
                         {{ __('ui.feed.filter_reading') }}
                     </button>

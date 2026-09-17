@@ -2,11 +2,100 @@
 
 namespace App\Services;
 
+use App\Models\ContentReport;
+use App\Models\User;
 use Aws\Rekognition\RekognitionClient;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ContentModerationService
 {
+    public function moderateUploadedImage(string $publicPath, ?User $user, string $context): array
+    {
+        $path = ltrim((string) (parse_url($publicPath, PHP_URL_PATH) ?: $publicPath), '/');
+        if (! str_starts_with($path, 'storage/uploads/')) {
+            return [
+                'status' => 'error',
+                'flagged' => false,
+                'labels' => [],
+                'reason' => 'invalid_path',
+            ];
+        }
+
+        $relativePath = Str::after($path, 'storage/');
+        if (
+            str_contains($relativePath, '..')
+            || str_contains($relativePath, '\\')
+            || ! preg_match('/\Auploads\/[A-Za-z0-9_\/-]+\.(?:jpe?g|png|webp)\z/i', $relativePath)
+        ) {
+            return [
+                'status' => 'error',
+                'flagged' => false,
+                'labels' => [],
+                'reason' => 'invalid_path',
+            ];
+        }
+        $result = $this->scanImageForSexualContent(Storage::disk('public')->path($relativePath));
+        $needsReview = (bool) ($result['flagged'] ?? false)
+            || (($result['status'] ?? '') !== 'ok'
+                && config('services.rekognition.fallback_action', 'mod') === 'mod');
+
+        if ($needsReview) {
+            $details = ! empty($result['labels'])
+                ? $this->formatLabels((array) $result['labels'], $context)
+                : $this->formatFallback($result['reason'] ?? null, $context);
+
+            ContentReport::firstOrCreate(
+                [
+                    'user_id' => $user?->id,
+                    'content_type' => 'content',
+                    'content_id' => $path,
+                ],
+                [
+                    'reporter_role' => $user?->roleKey() ?? 'system',
+                    'role_weight' => 1,
+                    'reporter_weight' => 1,
+                    'reporter_trust' => 1,
+                    'weight' => 1,
+                    'content_url' => asset($path),
+                    'reason' => 'admin_flag',
+                    'details' => $details,
+                    'resolved_status' => 'pending',
+                    'meta' => [
+                        'context' => $context,
+                        'scan' => $result,
+                    ],
+                ],
+            );
+            $result['review_requested'] = true;
+        }
+
+        return $result;
+    }
+
+    public function formatLabels(array $labels, string $context): string
+    {
+        $items = collect($labels)
+            ->take(5)
+            ->map(static function (array $label): string {
+                $name = trim((string) ($label['name'] ?? $label['parent'] ?? 'label'));
+                $confidence = round((float) ($label['confidence'] ?? 0), 1);
+
+                return $name.' ('.$confidence.'%)';
+            })
+            ->implode(', ');
+
+        return __('ui.admin.media_scan_flagged', ['context' => $context, 'labels' => $items]);
+    }
+
+    public function formatFallback(mixed $reason, string $context): string
+    {
+        $reason = trim((string) $reason) ?: __('ui.admin.media_scan_unknown_error');
+
+        return __('ui.admin.media_scan_unavailable', ['context' => $context, 'reason' => $reason]);
+    }
+
     public function scanImageForSexualContent(string $absolutePath): array
     {
         $result = [
@@ -16,14 +105,16 @@ class ContentModerationService
             'reason' => null,
         ];
 
-        if (!config('services.rekognition.enabled')) {
+        if (! config('services.rekognition.enabled')) {
             $result['reason'] = 'disabled';
+
             return $result;
         }
 
-        if (!is_file($absolutePath)) {
+        if (! is_file($absolutePath)) {
             $result['status'] = 'error';
             $result['reason'] = 'missing_file';
+
             return $result;
         }
 
@@ -32,13 +123,15 @@ class ContentModerationService
             Log::warning('Rekognition region missing, skipping moderation scan.');
             $result['status'] = 'error';
             $result['reason'] = 'region_missing';
+
             return $result;
         }
 
-        if (!class_exists(RekognitionClient::class)) {
+        if (! class_exists(RekognitionClient::class)) {
             Log::warning('Rekognition SDK missing, skipping moderation scan.');
             $result['status'] = 'error';
             $result['reason'] = 'sdk_missing';
+
             return $result;
         }
 
@@ -47,6 +140,7 @@ class ContentModerationService
             Log::warning('Unable to encode image for moderation scan.', ['path' => $absolutePath]);
             $result['status'] = 'error';
             $result['reason'] = 'encode_failed';
+
             return $result;
         }
 
@@ -74,18 +168,21 @@ class ContentModerationService
             Log::warning('Rekognition scan failed.', ['error' => $exception->getMessage()]);
             $result['status'] = 'error';
             $result['reason'] = 'rekognition_failed';
+
             return $result;
         }
 
         $labels = $response['ModerationLabels'] ?? [];
-        if (!is_array($labels) || $labels === []) {
+        if (! is_array($labels) || $labels === []) {
             $result['status'] = 'ok';
+
             return $result;
         }
 
         $targets = $this->targetLabels();
         if ($targets === []) {
             $result['status'] = 'ok';
+
             return $result;
         }
 
@@ -108,6 +205,7 @@ class ContentModerationService
 
         if ($matches === []) {
             $result['status'] = 'ok';
+
             return $result;
         }
 
@@ -128,7 +226,7 @@ class ContentModerationService
         if (is_string($raw)) {
             $raw = array_filter(array_map('trim', explode(',', $raw)));
         }
-        if (!is_array($raw)) {
+        if (! is_array($raw)) {
             return [];
         }
         $normalized = [];
@@ -138,6 +236,7 @@ class ContentModerationService
                 $normalized[] = strtolower($label);
             }
         }
+
         return $normalized;
     }
 
@@ -146,13 +245,14 @@ class ContentModerationService
         if ($label === '') {
             return false;
         }
+
         return in_array(strtolower($label), $targets, true);
     }
 
     private function encodeToJpegBytes(string $absolutePath): ?string
     {
         $info = @getimagesize($absolutePath);
-        if (!$info) {
+        if (! $info) {
             return null;
         }
 
@@ -164,7 +264,7 @@ class ContentModerationService
             default => null,
         };
 
-        if (!$source) {
+        if (! $source) {
             return null;
         }
 

@@ -12,59 +12,59 @@ class ImageUploadService
     public function process(UploadedFile $file, array $options): array
     {
         $path = $file->getRealPath();
-        if (!$path) {
-            throw new RuntimeException('Invalid upload.');
+        if (! $path) {
+            throw new RuntimeException(__('ui.errors.invalid_upload'));
         }
 
         $info = @getimagesize($path);
-        if (!$info) {
-            throw new RuntimeException('Invalid image.');
+        if (! $info) {
+            throw new RuntimeException(__('ui.errors.invalid_image'));
         }
 
         [$width, $height, $type] = $info;
         $allowedTypes = $options['allowed_types'] ?? [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP];
-        if (!in_array($type, $allowedTypes, true)) {
-            throw new RuntimeException('Unsupported image type.');
+        if (! in_array($type, $allowedTypes, true)) {
+            throw new RuntimeException(__('ui.errors.unsupported_image_type'));
         }
 
         $minWidth = $options['min_width'] ?? null;
         if ($minWidth && $width < $minWidth) {
-            throw new RuntimeException('Image too small.');
+            throw new RuntimeException(__('ui.errors.image_too_small'));
         }
         $minHeight = $options['min_height'] ?? null;
         if ($minHeight && $height < $minHeight) {
-            throw new RuntimeException('Image too small.');
+            throw new RuntimeException(__('ui.errors.image_too_small'));
         }
 
         $maxWidth = $options['max_width'] ?? null;
         if ($maxWidth && $width > $maxWidth) {
-            throw new RuntimeException('Image too large.');
+            throw new RuntimeException(__('ui.errors.image_too_large'));
         }
         $maxHeight = $options['max_height'] ?? null;
         if ($maxHeight && $height > $maxHeight) {
-            throw new RuntimeException('Image too large.');
+            throw new RuntimeException(__('ui.errors.image_too_large'));
         }
 
         $minSide = $options['min_side'] ?? null;
         if ($minSide && min($width, $height) < $minSide) {
-            throw new RuntimeException('Image too small.');
+            throw new RuntimeException(__('ui.errors.image_too_small'));
         }
 
         $maxSideInput = $options['max_side_input'] ?? null;
         if ($maxSideInput && max($width, $height) > $maxSideInput) {
-            throw new RuntimeException('Image too large.');
+            throw new RuntimeException(__('ui.errors.image_too_large'));
         }
 
         $maxPixels = $options['max_pixels'] ?? null;
         if ($maxPixels && ($width * $height) > $maxPixels) {
-            throw new RuntimeException('Image too large.');
+            throw new RuntimeException(__('ui.errors.image_too_large'));
         }
 
         $targetWidthOption = $options['target_width'] ?? null;
         $targetHeightOption = $options['target_height'] ?? null;
 
         $cropAspectOption = $options['crop_aspect'] ?? null;
-        if (!$cropAspectOption && $targetWidthOption && $targetHeightOption) {
+        if (! $cropAspectOption && $targetWidthOption && $targetHeightOption) {
             $cropAspectOption = (float) $targetWidthOption / max(1, (float) $targetHeightOption);
         }
         $cropAspect = is_numeric($cropAspectOption) ? max(0.1, (float) $cropAspectOption) : null;
@@ -98,7 +98,7 @@ class ImageUploadService
         }
 
         $format = $options['format'] ?? 'webp';
-        if ($format === 'webp' && !function_exists('imagewebp')) {
+        if ($format === 'webp' && ! function_exists('imagewebp')) {
             $format = 'jpeg';
         }
         $extension = $format === 'webp' ? 'webp' : 'jpg';
@@ -115,44 +115,44 @@ class ImageUploadService
         }
 
         $basename = (string) Str::uuid();
-        $relativePath = $dir . '/' . $basename . '.' . $extension;
-        $fullPath = storage_path('app/public/' . $relativePath);
+        $relativePath = $dir.'/'.$basename.'.'.$extension;
+        $fullPath = $disk->path($relativePath);
 
         $source = $this->createImageResource($path, $type);
-        if (!$source) {
-            throw new RuntimeException('Unable to read image.');
+        if (! $source) {
+            throw new RuntimeException(__('ui.errors.image_read_failed'));
         }
 
         $workingSource = $source;
         if ($cropAspect) {
             $workingSource = $this->cropImageResource($source, $cropX, $cropY, $cropWidth, $cropHeight, $preserveAlpha);
-            if (!$workingSource) {
+            if (! $workingSource) {
                 imagedestroy($source);
-                throw new RuntimeException('Unable to crop image.');
+                throw new RuntimeException(__('ui.errors.image_crop_failed'));
             }
         }
 
         $resized = $this->resizeImageResource($workingSource, $workingWidth, $workingHeight, $targetWidth, $targetHeight, $preserveAlpha);
-        if (!$this->saveImageResource($resized, $fullPath, $format, $quality)) {
+        if (! $this->saveImageResource($resized, $fullPath, $format, $quality)) {
             imagedestroy($source);
             if ($workingSource !== $source) {
                 imagedestroy($workingSource);
             }
             imagedestroy($resized);
-            throw new RuntimeException('Unable to save image.');
+            throw new RuntimeException(__('ui.errors.image_save_failed'));
         }
 
         $previewPath = null;
-        if ($previewDir && !empty($options['preview_side'])) {
+        if ($previewDir && ! empty($options['preview_side'])) {
             $previewSide = (int) $options['preview_side'];
             $previewScale = min(1, $previewSide / max($workingWidth, $workingHeight));
             $previewWidth = max(1, (int) round($workingWidth * $previewScale));
             $previewHeight = max(1, (int) round($workingHeight * $previewScale));
-            $previewRelative = $previewDir . '/' . $basename . '.' . $extension;
-            $previewFull = storage_path('app/public/' . $previewRelative);
+            $previewRelative = $previewDir.'/'.$basename.'.'.$extension;
+            $previewFull = $disk->path($previewRelative);
             $previewImage = $this->resizeImageResource($workingSource, $workingWidth, $workingHeight, $previewWidth, $previewHeight, $preserveAlpha);
             if ($this->saveImageResource($previewImage, $previewFull, $format, $quality)) {
-                $previewPath = 'storage/' . $previewRelative;
+                $previewPath = 'storage/'.$previewRelative;
             }
             imagedestroy($previewImage);
         }
@@ -164,7 +164,7 @@ class ImageUploadService
         imagedestroy($resized);
 
         return [
-            'path' => 'storage/' . $relativePath,
+            'path' => 'storage/'.$relativePath,
             'preview' => $previewPath,
         ];
     }
@@ -192,6 +192,7 @@ class ImageUploadService
             imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $white);
         }
         imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $sourceWidth, $sourceHeight);
+
         return $target;
     }
 
@@ -208,20 +209,23 @@ class ImageUploadService
             imagefilledrectangle($target, 0, 0, $cropWidth, $cropHeight, $white);
         }
         imagecopy($target, $source, 0, 0, $x, $y, $cropWidth, $cropHeight);
+
         return $target;
     }
 
     private function saveImageResource($image, string $path, string $format, int $quality): bool
     {
         if ($format === 'webp') {
-            if (!function_exists('imagewebp')) {
+            if (! function_exists('imagewebp')) {
                 return false;
             }
+
             return imagewebp($image, $path, $quality);
         }
         if ($format === 'jpeg') {
             return imagejpeg($image, $path, $quality);
         }
+
         return false;
     }
 }

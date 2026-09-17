@@ -1,0 +1,42 @@
+<?php
+
+return [
+    'statuses' => ['in_progress', 'done', 'paused'],
+    'categories' => [
+        'visual-art' => 'ui.project_options.categories.visual_art',
+        'illustration' => 'ui.project_options.categories.illustration',
+        'music' => 'ui.project_options.categories.music',
+        'writing' => 'ui.project_options.categories.writing',
+        'poetry' => 'ui.project_options.categories.poetry',
+        'film' => 'ui.project_options.categories.film',
+        'photography' => 'ui.project_options.categories.photography',
+        'graffiti' => 'ui.project_options.categories.graffiti',
+        'game' => 'ui.project_options.categories.game',
+        'software' => 'ui.project_options.categories.software',
+        'hardware' => 'ui.project_options.categories.hardware',
+        'craft' => 'ui.project_options.categories.craft',
+        'performance' => 'ui.project_options.categories.performance',
+        'research' => 'ui.project_options.categories.research',
+        'other' => 'ui.project_options.categories.other',
+    ],
+    'media_types' => [
+        'mixed' => 'ui.project_options.media_types.mixed',
+        'image' => 'ui.project_options.media_types.image',
+        'audio' => 'ui.project_options.media_types.audio',
+        'video' => 'ui.project_options.media_types.video',
+        'text' => 'ui.project_options.media_types.text',
+        'software' => 'ui.project_options.media_types.software',
+        'physical' => 'ui.project_options.media_types.physical',
+    ],
+    'licenses' => [
+        'all-rights-reserved' => 'ui.project_options.licenses.all_rights_reserved',
+        'cc-by' => 'ui.project_options.licenses.cc_by',
+        'cc-by-sa' => 'ui.project_options.licenses.cc_by_sa',
+        'cc-by-nc' => 'ui.project_options.licenses.cc_by_nc',
+        'cc0' => 'ui.project_options.licenses.cc0',
+        'open-source' => 'ui.project_options.licenses.open_source',
+        'custom' => 'ui.project_options.licenses.custom',
+    ],
+    'attachment_max_kb' => 51200,
+    'attachment_max_count' => 8,
+];

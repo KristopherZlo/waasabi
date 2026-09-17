@@ -8,7 +8,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\PostComment>
+ * @extends Factory<PostComment>
  */
 class PostCommentFactory extends Factory
 {
@@ -16,11 +16,11 @@ class PostCommentFactory extends Factory
 
     public function definition(): array
     {
+        $post = Post::query()->inRandomOrder()->first() ?? Post::factory()->create();
+
         return [
-            'post_slug' => function () {
-                $post = Post::query()->inRandomOrder()->first() ?? Post::factory()->create();
-                return $post->slug;
-            },
+            'post_id' => $post->id,
+            'post_slug' => $post->slug,
             'user_id' => User::factory(),
             'body' => fake()->sentence(12),
             'section' => fake()->optional()->words(2, true),

@@ -23,6 +23,7 @@ class ScribbleAvatar
     public static function createSvgFromName(string $name): string
     {
         $seed = self::seedFromName($name);
+
         return self::createSvgFromSeed($seed);
     }
 
@@ -44,6 +45,7 @@ class ScribbleAvatar
             ? mb_strtolower($trimmed, 'UTF-8')
             : strtolower($trimmed);
         $hash = self::cyrb128($normalized);
+
         return $hash[0] & 0xFFFFFFFF;
     }
 
@@ -76,8 +78,9 @@ class ScribbleAvatar
 
     private static function utf16CodeUnits(string $input): array
     {
-        if (!function_exists('mb_convert_encoding')) {
+        if (! function_exists('mb_convert_encoding')) {
             $bytes = array_map('ord', str_split($input));
+
             return $bytes;
         }
 
@@ -89,18 +92,21 @@ class ScribbleAvatar
             $hi = ord($utf16[$i + 1] ?? "\x00");
             $units[] = $lo | ($hi << 8);
         }
+
         return $units;
     }
 
     private static function mulberry32(int $seed): callable
     {
         $t = $seed & 0xFFFFFFFF;
+
         return function () use (&$t) {
-            $t = ($t + 0x6d2b79f5) & 0xFFFFFFFF;
+            $t = ($t + 0x6D2B79F5) & 0xFFFFFFFF;
             $x = self::imul($t ^ (($t & 0xFFFFFFFF) >> 15), 1 | $t);
             $x ^= ($x + self::imul($x ^ (($x & 0xFFFFFFFF) >> 7), 61 | $x)) & 0xFFFFFFFF;
             $x ^= ($x & 0xFFFFFFFF) >> 14;
-            return (($x & 0xFFFFFFFF) / self::TWO_POW_32);
+
+            return ($x & 0xFFFFFFFF) / self::TWO_POW_32;
         };
     }
 
@@ -236,6 +242,7 @@ class ScribbleAvatar
             $out[] = $points[(int) floor($i * $step)];
         }
         $out[$target - 1] = $points[$count - 1];
+
         return $out;
     }
 
@@ -250,6 +257,7 @@ class ScribbleAvatar
             for ($i = 1; $i < count($points); $i++) {
                 $d .= sprintf(' L %.2f %.2f', $points[$i]['x'], $points[$i]['y']);
             }
+
             return $d;
         }
 
@@ -284,8 +292,15 @@ class ScribbleAvatar
 
     private static function buildSvg(array $p, string $pathD, int $seed): string
     {
-        $bg = $p['invert'] ? '#fff' : '#000';
-        $stroke = $p['invert'] ? '#000' : '#fff';
+        $palette = [
+            ['#48243d', '#ffb4cf'],
+            ['#203d32', '#9aefc4'],
+            ['#4a2f19', '#ffd08a'],
+            ['#33275a', '#c9b9ff'],
+            ['#5a2726', '#ffb0a2'],
+            ['#16424a', '#9ee8e8'],
+        ];
+        [$bg, $stroke] = $p['invert'] ? ['#f7f4ee', '#191919'] : $palette[$seed % count($palette)];
 
         $opacity = self::clamp($p['alpha'], 0.05, 1);
         $cap = $p['roundCaps'] ? 'round' : 'butt';
@@ -298,24 +313,24 @@ class ScribbleAvatar
         $filterAttr = '';
         if ($useNoise) {
             $defs = '<filter id="paperNoise" x="-20%" y="-20%" width="140%" height="140%">'
-                . '<feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="' . $seed . '" result="n"/>'
-                . '<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 ' . $noiseAlpha . ' 0" in="n" result="na"/>'
-                . '<feBlend mode="overlay" in="SourceGraphic" in2="na"/>'
-                . '</filter>';
+                .'<feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="'.$seed.'" result="n"/>'
+                .'<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 '.$noiseAlpha.' 0" in="n" result="na"/>'
+                .'<feBlend mode="overlay" in="SourceGraphic" in2="na"/>'
+                .'</filter>';
             $filterAttr = ' filter="url(#paperNoise)"';
         }
 
         $defsBlock = $defs !== '' ? "  <defs>\n$defs\n  </defs>\n" : '';
 
-        return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
-            . '<svg xmlns="http://www.w3.org/2000/svg" width="' . $p['width'] . '" height="' . $p['height'] . '" viewBox="0 0 ' . $p['width'] . ' ' . $p['height'] . '">' . "\n"
-            . $defsBlock
-            . '  <rect width="100%" height="100%" fill="' . $bg . '"/>' . "\n"
-            . '  <g' . $filterAttr . '>' . "\n"
-            . '    <path d="' . $pathD . '" fill="none" stroke="' . $stroke . '" stroke-width="' . $p['lineWidth'] . '" stroke-opacity="' . $opacity . '"'
-            . ' stroke-linecap="' . $cap . '" stroke-linejoin="' . $join . '"/>' . "\n"
-            . "  </g>\n"
-            . '</svg>';
+        return '<?xml version="1.0" encoding="UTF-8"?>'."\n"
+            .'<svg xmlns="http://www.w3.org/2000/svg" width="'.$p['width'].'" height="'.$p['height'].'" viewBox="0 0 '.$p['width'].' '.$p['height'].'">'."\n"
+            .$defsBlock
+            .'  <rect width="100%" height="100%" fill="'.$bg.'"/>'."\n"
+            .'  <g'.$filterAttr.'>'."\n"
+            .'    <path d="'.$pathD.'" fill="none" stroke="'.$stroke.'" stroke-width="'.$p['lineWidth'].'" stroke-opacity="'.$opacity.'"'
+            .' stroke-linecap="'.$cap.'" stroke-linejoin="'.$join.'"/>'."\n"
+            ."  </g>\n"
+            .'</svg>';
     }
 
     private static function clamp(float $value, float $min, float $max): float
@@ -331,6 +346,7 @@ class ScribbleAvatar
     private static function fromPercent(float $min, float $max, float $percent): float
     {
         $t = self::clamp($percent / 100, 0, 1);
+
         return self::lerp($min, $max, $t);
     }
 
@@ -349,6 +365,7 @@ class ScribbleAvatar
         $bHigh = ($b >> 16) & 0xFFFF;
         $low = $aLow * $bLow;
         $mid = ($aHigh * $bLow + $aLow * $bHigh) << 16;
+
         return ($low + $mid) & 0xFFFFFFFF;
     }
 }
