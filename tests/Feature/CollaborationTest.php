@@ -320,10 +320,17 @@ class CollaborationTest extends TestCase
         $project = Post::factory()->for($owner)->create();
         $match = $this->collaborationRequest($owner, $project, ['role' => 'illustrator', 'title' => 'Draw a short comic']);
         $this->collaborationRequest($owner, $project, ['role' => 'musician', 'title' => 'Compose a theme']);
+        $secondMatch = $this->collaborationRequest($owner, $project, ['role' => 'developer', 'title' => 'Build an interactive prototype']);
 
         $this->get(route('feed', ['stream' => 'collaboration', 'role' => 'illustrator']))
             ->assertOk()
             ->assertSee($match->title)
+            ->assertDontSee('Compose a theme');
+
+        $this->get(route('collaboration', ['role' => 'illustrator,developer']))
+            ->assertOk()
+            ->assertSee($match->title)
+            ->assertSee($secondMatch->title)
             ->assertDontSee('Compose a theme');
     }
 
