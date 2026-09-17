@@ -14,22 +14,8 @@
 </head>
 <body class="static-shell" data-page="@yield('page', 'static')">
     <a class="skip" href="#main-content">{{ __('ui.app.skip_to_content') }}</a>
-    <header class="topbar static-topbar">
-        <div class="topbar-inner static-topbar-inner">
-            <a class="brand" href="{{ route('feed') }}"><img src="{{ asset('images/logo-black.svg') }}" alt=""><span>Waasabi</span></a>
-            @yield('context-nav')
-            <nav class="static-nav" aria-label="Primary">
-                <a href="{{ route('feed') }}">{{ __('ui.nav.feed') }}</a>
-                <a href="{{ route('collaboration') }}">{{ __('ui.feed.tab_collaboration') }}</a>
-                <a href="{{ route('support') }}">{{ __('ui.support.title') }}</a>
-                @auth
-                    <a href="{{ route('profile.show', Auth::user()->slug) }}">{{ Auth::user()->name }}</a>
-                @else
-                    <a href="{{ route('login') }}">{{ __('ui.topbar.login') }}</a>
-                @endauth
-            </nav>
-        </div>
-    </header>
+    @include('partials.studio-topbar')
+    @hasSection('context-nav')<div class="static-context-nav">@yield('context-nav')</div>@endif
     <main class="page static-page" id="main-content" tabindex="-1">@if(session('toast'))<p class="notice" role="status">{{ session('toast') }}</p>@endif @yield('content')</main>
     <footer class="static-footer">
         <div class="static-footer-inner">
@@ -42,5 +28,6 @@
         </div>
     </footer>
     @stack('scripts')
+    <script nonce="{{ $csp_nonce ?? '' }}">document.querySelector('[data-static-theme]')?.addEventListener('click', () => {const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = next; try { localStorage.setItem('waasabi:theme', next); } catch {}}); document.addEventListener('keydown', event => {if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {event.preventDefault(); document.querySelector('[data-static-search]')?.focus();}});</script>
 </body>
 </html>

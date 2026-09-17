@@ -5,12 +5,18 @@ import { Empty, InfinitePage, PersonLine, date, useShared } from '../components'
 import type { Opening, Pagination } from '../types';
 
 function MultiFilter({label, anyLabel, options, selected, onChange}: {label: string; anyLabel: string; options: Record<string, string>; selected: string[]; onChange: (values: string[]) => void}) {
-    const {copy: t} = useShared(); const [query, setQuery] = useState('');
+    const {copy: t} = useShared(); const [query, setQuery] = useState(''); const root = useRef<HTMLDetailsElement>(null);
+    useEffect(() => {
+        const outside = (event: PointerEvent) => {if (!root.current?.contains(event.target as Node)) root.current?.removeAttribute('open');};
+        const escape = (event: KeyboardEvent) => {if (event.key === 'Escape') root.current?.removeAttribute('open');};
+        document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
+        return () => {document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape);};
+    }, []);
     const visible = Object.entries(options).filter(([, option]) => option.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
     const selectedLabels = selected.map(value => options[value]).filter(Boolean);
     const summary = selectedLabels.length > 1 ? `${selectedLabels[0]} +${selectedLabels.length - 1}` : selectedLabels[0] || anyLabel;
     const toggle = (value: string) => onChange(selected.includes(value) ? selected.filter(item => item !== value) : [...selected, value]);
-    return <details className="multi-filter"><summary><span>{label}</span><strong>{summary}</strong><ChevronDown size={16}/></summary><div className="multi-filter-menu"><label className="multi-filter-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={t.search_short} aria-label={`${t.search_short}: ${label}`}/></label><div className="multi-filter-options" role="listbox" aria-multiselectable="true">{visible.map(([value, option]) => <button type="button" role="option" aria-selected={selected.includes(value)} key={value} onClick={() => toggle(value)}><Check size={15}/><span>{option}</span></button>)}{!visible.length && <span className="multi-filter-empty">{t.empty}</span>}</div>{selected.length > 0 && <button type="button" className="multi-filter-clear" onClick={() => onChange([])}>{t.clear}</button>}</div></details>;
+    return <details ref={root} className="multi-filter"><summary><span>{label}</span><strong>{summary}</strong><ChevronDown size={16}/></summary><div className="multi-filter-menu"><label className="multi-filter-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={t.search_short} aria-label={`${t.search_short}: ${label}`}/></label><div className="multi-filter-options" role="listbox" aria-multiselectable="true">{visible.map(([value, option]) => <button type="button" role="option" aria-selected={selected.includes(value)} key={value} onClick={() => toggle(value)}><Check size={15}/><span>{option}</span></button>)}{!visible.length && <span className="multi-filter-empty">{t.empty}</span>}</div>{selected.length > 0 && <button type="button" className="multi-filter-clear" onClick={() => onChange([])}>{t.clear}</button>}</div></details>;
 }
 
 const selectedValues = (value?: string) => (value || '').split(',').map(item => item.trim()).filter(Boolean);

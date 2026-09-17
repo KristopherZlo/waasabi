@@ -14,6 +14,8 @@ class SupportPagesTest extends TestCase
     {
         $this->get('/support')->assertOk()
             ->assertSee('static-shell', false)
+            ->assertSee('top-search static-search', false)
+            ->assertSee('top-actions', false)
             ->assertDontSee('support-topbar', false);
     }
 
@@ -55,6 +57,8 @@ class SupportPagesTest extends TestCase
         $this->get('/definitely-missing')->assertNotFound()
             ->assertSee('static-shell', false)
             ->assertSee('data-not-found-game', false)
+            ->assertSee('data-game-star', false)
+            ->assertSee('aria-hidden="true" hidden', false)
             ->assertSee('type="module"', false);
     }
 }
