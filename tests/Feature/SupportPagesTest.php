@@ -12,7 +12,9 @@ class SupportPagesTest extends TestCase
 
     public function test_support_index_loads(): void
     {
-        $this->get('/support')->assertOk();
+        $this->get('/support')->assertOk()
+            ->assertSee('static-shell', false)
+            ->assertDontSee('support-topbar', false);
     }
 
     public function test_support_kb_article_loads(): void
@@ -46,5 +48,12 @@ class SupportPagesTest extends TestCase
     public function test_support_unknown_kb_article_returns_404(): void
     {
         $this->get('/support/kb/unknown-article')->assertStatus(404);
+    }
+
+    public function test_not_found_page_uses_the_current_static_shell(): void
+    {
+        $this->get('/definitely-missing')->assertNotFound()
+            ->assertSee('static-shell', false)
+            ->assertDontSee('data-not-found-game', false);
     }
 }

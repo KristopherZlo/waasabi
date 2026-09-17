@@ -40,7 +40,7 @@
                             <p class="support-banner__summary">{{ __('ui.support.portal_kb_text') }}</p>
                         </div>
                         <label class="support-banner__search" role="search">
-                            <i data-lucide="search" class="icon"></i>
+                            <span class="icon" aria-hidden="true">⌕</span>
                             <input
                                 class="support-search__input"
                                 type="search"
@@ -65,7 +65,7 @@
                                             <div class="support-kb__summary-text">{{ $section['summary'] }}</div>
                                         @endif
                                     </div>
-                                    <i data-lucide="chevron-down" class="icon support-kb__chevron" aria-hidden="true"></i>
+                                    <span class="icon support-kb__chevron" aria-hidden="true">⌄</span>
                                 </summary>
                                 <div class="support-kb__items">
                                     @foreach (($section['items'] ?? []) as $article)

@@ -369,6 +369,22 @@ class CollaborationTest extends TestCase
                 ->where('projects.0.title', 'Public project context'));
     }
 
+    public function test_owner_can_edit_a_collaboration_request(): void
+    {
+        $owner = $this->eligibleUser();
+        $project = Post::factory()->for($owner)->create();
+        $opening = $this->collaborationRequest($owner, $project);
+
+        $this->actingAs($owner)->get(route('collaboration.edit', $opening))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('HelpEditor')->where('opening.id', $opening->id));
+        $this->actingAs($owner)->patch(route('collaboration.update', $opening), [
+            'post_id' => $project->id, 'title' => 'Updated collaboration request', 'role' => 'developer',
+            'availability' => 'part-time', 'format' => 'remote', 'skills' => 'Laravel, React',
+            'summary' => $this->goodText('The updated request now has a clearer scope and ownership.'), 'expires_in_days' => 30,
+        ])->assertRedirect(route('collaboration.show', $opening));
+        $this->assertDatabaseHas('collaboration_requests', ['id' => $opening->id, 'title' => 'Updated collaboration request', 'role' => 'developer']);
+    }
+
     public function test_collaboration_stream_uses_collaboration_language(): void
     {
         $owner = $this->eligibleUser();
@@ -476,7 +492,9 @@ class CollaborationTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('Collaboration')
                 ->where('comments.0.id', $comment->id)
-                ->where('comments.0.body', $comment->body));
+                ->where('comments.0.body', $comment->body)
+                ->where('comments.0.can_edit', true)
+                ->where('comments.0.can_delete', true));
         $this->assertDatabaseHas('user_notifications', [
             'user_id' => $owner->id,
             'text' => __('ui.notifications.comment_added', [
@@ -488,6 +506,10 @@ class CollaborationTest extends TestCase
         $this->actingAs($owner)
             ->delete(route('collaboration.comments.destroy', $comment))
             ->assertForbidden();
+        $this->actingAs($candidate)->patch(route('collaboration.comments.update', $comment), [
+            'body' => 'Would you be open to async collaboration across nearby time zones?',
+        ])->assertRedirect();
+        $this->assertDatabaseHas('collaboration_comments', ['id' => $comment->id, 'body' => 'Would you be open to async collaboration across nearby time zones?']);
         $this->actingAs($candidate)
             ->delete(route('collaboration.comments.destroy', $comment))
             ->assertRedirect();

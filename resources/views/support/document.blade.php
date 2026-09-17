@@ -20,7 +20,7 @@
                 <div class="support-banner__content">
                     <div class="support-breadcrumbs">
                         <a class="support-breadcrumbs__back" href="{{ $backUrl }}" aria-label="{{ $backLabel }}" title="{{ $backLabel }}">
-                            <i data-lucide="arrow-left" class="icon"></i>
+                            <span aria-hidden="true">←</span>
                         </a>
                         <a class="support-breadcrumbs__link" href="{{ route('support') }}">{{ __('ui.support.title') }}</a>
                         @if ($documentSection !== '')
@@ -40,7 +40,7 @@
                     @endif
                 </div>
                 <label class="support-banner__search" role="search">
-                    <i data-lucide="search" class="icon"></i>
+                    <span class="icon" aria-hidden="true">⌕</span>
                     <input
                         class="support-search__input"
                         type="search"

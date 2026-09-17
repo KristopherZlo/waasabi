@@ -136,6 +136,17 @@ class CollaborationController extends Controller
         return back()->with('toast', __('ui.collaboration.comment_deleted'));
     }
 
+    public function updateComment(Request $request, CollaborationComment $collaborationComment): RedirectResponse
+    {
+        abort_unless($collaborationComment->user_id === $request->user()->id, 403);
+        $data = $request->validate(['body' => ['required', 'string', 'min:2', 'max:2000']]);
+        $body = trim(strip_tags($data['body']));
+        $this->ensureTextIsAllowed($body, 'Collaboration comment', 'body');
+        $collaborationComment->update(['body' => $body]);
+
+        return back();
+    }
+
     public function storeApplicationMessage(Request $request, CollaborationApplication $application): RedirectResponse
     {
         $application->load('collaborationRequest.user', 'user');
@@ -200,6 +211,23 @@ class CollaborationController extends Controller
 
         return redirect()->route('collaboration.show', $collaborationRequest)
             ->with('toast', __('ui.collaboration.posted'));
+    }
+
+    public function update(StoreCollaborationRequest $request, CollaborationRequest $collaborationRequest): RedirectResponse
+    {
+        abort_unless($collaborationRequest->user_id === $request->user()->id, 403);
+        $data = $request->validated();
+        $post = ! empty($data['post_id']) ? Post::query()->where('type', 'post')->findOrFail($data['post_id']) : null;
+        abort_unless(! $post || $post->user_id === $request->user()->id, 403);
+        $this->ensureTextIsAllowed($data['summary'], $data['title']);
+        $collaborationRequest->update([
+            'post_id' => $post?->id, 'title' => $data['title'], 'role' => $data['role'],
+            'skills' => $this->collaboration->parseSkills((string) ($data['skills'] ?? '')),
+            'availability' => $data['availability'], 'format' => $data['format'], 'summary' => $data['summary'],
+            'expires_at' => now()->addDays((int) ($data['expires_in_days'] ?? 60)),
+        ]);
+
+        return redirect()->route('collaboration.show', $collaborationRequest);
     }
 
     public function apply(

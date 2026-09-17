@@ -273,10 +273,13 @@ class ProfileTest extends TestCase
         $this->actingAs($visitor)->post(route('profile.wall.store', $owner->slug), ['body' => $body])->assertForbidden();
         $owner->update(['wall_mode' => 'everyone']);
         $this->actingAs($visitor)->post(route('profile.wall.store', $owner->slug), ['body' => $body])->assertRedirect();
+        $visitorPost = ProfileWallPost::firstOrFail();
+        $this->actingAs($owner)->patch(route('profile.wall.update', $visitorPost), ['body' => 'Owner cannot rewrite a visitor post.'])->assertForbidden();
+        $this->actingAs($visitor)->patch(route('profile.wall.update', $visitorPost), ['body' => 'Updated after spotting a typo in the original wall post.'])->assertRedirect();
+        $this->assertDatabaseHas('profile_wall_posts', ['id' => $visitorPost->id, 'body' => 'Updated after spotting a typo in the original wall post.']);
         $this->actingAs($owner)->post(route('profile.wall.store', $owner->slug), ['body' => 'A quick update from My work.', 'return_view' => 'work'])
             ->assertRedirect(route('profile.show', ['slug' => $owner->slug, 'view' => 'work']));
-        $post = ProfileWallPost::firstOrFail();
-        $this->actingAs($owner)->delete(route('profile.wall.destroy', $post))->assertRedirect();
-        $this->assertDatabaseMissing('profile_wall_posts', ['id' => $post->id]);
+        $this->actingAs($owner)->delete(route('profile.wall.destroy', $visitorPost))->assertRedirect();
+        $this->assertDatabaseMissing('profile_wall_posts', ['id' => $visitorPost->id]);
     }
 }

@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\CollaborationApplication;
 use App\Models\CollaborationRequest;
 use App\Models\Post;
-use App\Models\ProjectUpdate;
 use App\Models\ProfileWallPost;
+use App\Models\ProjectUpdate;
 use App\Models\User;
 use App\Services\BadgeCatalogService;
 use App\Services\BadgePayloadService;
@@ -141,6 +141,8 @@ class CommunityPageController extends Controller
             'author' => $this->person($c->user), 'date' => $c->created_at->toISOString(),
             'reply_to' => $c->replyTo?->user ? $this->person($c->replyTo->user) : null,
             'score' => (int) $c->vote_score, 'vote' => (int) ($commentVotes[$c->id] ?? 0),
+            'can_edit' => $request->user()?->id === $c->user_id,
+            'can_delete' => $request->user()?->id === $c->user_id,
         ]);
         $updates = $post->updates()->with('user')->whereHas('user', fn ($q) => $q->where('is_banned', false))
             ->when(! $staff, fn ($q) => $q->where(fn ($q) => $q->where('is_hidden', false)->orWhere('user_id', $request->user()?->id ?? 0)))
@@ -210,6 +212,7 @@ class CommunityPageController extends Controller
         $wallPosts = ProfileWallPost::with('user')->where('profile_user_id', $user->id)->where('is_hidden', false)->where('moderation_status', 'approved')
             ->whereHas('user', fn ($q) => $q->where('is_banned', false))->latest()->take(50)->get()->map(fn ($post) => [
                 'id' => $post->id, 'body' => $post->body, 'date' => $post->created_at?->toISOString(), 'author' => $this->person($post->user),
+                'can_edit' => $request->user()?->id === $post->user_id,
                 'can_delete' => $request->user() && ($request->user()->id === $user->id || $request->user()->id === $post->user_id || $request->user()->hasRole('moderator')),
             ]);
         $stats = [
@@ -292,12 +295,16 @@ class CommunityPageController extends Controller
             'filters' => $request->only('status', 'role', 'availability', 'format', 'scope', 'q')]);
     }
 
-    public function helpEditor(Request $request): Response
+    public function helpEditor(Request $request, ?CollaborationRequest $collaborationRequest = null): Response
     {
         $service = app(CollaborationService::class);
+        if ($collaborationRequest) {
+            abort_unless($collaborationRequest->user_id === $request->user()->id, 403);
+        }
 
         return Inertia::render('HelpEditor', ['roles' => $service->roleOptions(), 'availability' => $service->availabilityOptions(), 'formats' => $service->formatOptions(),
-            'projects' => $service->manageableProjects($request->user())->map(fn ($p) => $p->only('id', 'title')), 'projectId' => (string) $request->query('project', '')]);
+            'projects' => $service->manageableProjects($request->user())->map(fn ($p) => $p->only('id', 'title')), 'projectId' => (string) ($collaborationRequest?->post_id ?? $request->query('project', '')),
+            'opening' => $collaborationRequest?->only('id', 'title', 'role', 'summary', 'availability', 'format', 'skills')]);
     }
 
     public function collaboration(Request $request, CollaborationRequest $collaborationRequest): Response
@@ -316,7 +323,8 @@ class CommunityPageController extends Controller
                 ]),
             ]),
             'comments' => $collaborationRequest->comments()->with('user')->whereHas('user', fn ($q) => $q->where('is_banned', false))->oldest()->get()
-                ->map(fn ($c) => $c->only('id', 'body') + ['author' => $this->person($c->user), 'date' => $c->created_at->toISOString()]),
+                ->map(fn ($c) => $c->only('id', 'body') + ['author' => $this->person($c->user), 'date' => $c->created_at->toISOString(),
+                    'can_edit' => $request->user()?->id === $c->user_id, 'can_delete' => $request->user()?->id === $c->user_id || ($request->user()?->hasRole('moderator') ?? false)]),
             'candidateProjects' => $request->user() && ! $owner
                 ? app(CollaborationService::class)->manageableProjects($request->user())->reject(fn ($project) => $project->id === $collaborationRequest->post_id)
                     ->map(fn ($project) => $project->only('id', 'title'))->values()

@@ -43,4 +43,21 @@ class ProfileWallController extends Controller
 
         return back();
     }
+
+    public function update(Request $request, ProfileWallPost $profileWallPost, TextModerationService $moderation): RedirectResponse
+    {
+        abort_unless($request->user()->id === $profileWallPost->user_id, 403);
+        $data = $request->validate(['body' => ['required', 'string', 'min:1', 'max:2000']]);
+        $body = trim(strip_tags($data['body']));
+        if ($body === '') {
+            throw ValidationException::withMessages(['body' => __('validation.required', ['attribute' => 'body'])]);
+        }
+        $result = $moderation->analyze($body, ['type' => 'profile_wall']);
+        if (($result['flagged'] ?? false) === true) {
+            throw ValidationException::withMessages(['body' => (string) ($result['summary'] ?: __('ui.moderation.text_flagged_detail'))]);
+        }
+        $profileWallPost->update(['body' => $body]);
+
+        return back();
+    }
 }

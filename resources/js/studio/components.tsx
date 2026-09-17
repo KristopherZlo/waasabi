@@ -87,14 +87,14 @@ export function Errors() {
 }
 
 export function Form({action, method = 'post', children, className = '', reset = false, json = false, reloadData, scrollToResult = false, confirmMessage, onSuccess}: {action: string; method?: 'post' | 'put' | 'patch' | 'delete'; children: ReactNode; className?: string; reset?: boolean; json?: boolean; reloadData?: string | string[]; scrollToResult?: boolean | string; confirmMessage?: string; onSuccess?: () => void}) {
-    const {csrf} = useShared();
+    const {csrf, copy: t} = useShared();
     const [busy, setBusy] = useState(false);
     const [failure, setFailure] = useState('');
-    const submit = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault(); if (busy || (confirmMessage && !window.confirm(confirmMessage))) return;
-        const form = event.currentTarget;
+    const [pending, setPending] = useState<{form: HTMLFormElement; submitter: HTMLButtonElement | null} | null>(null);
+    const performSubmit = (form: HTMLFormElement, submitter: HTMLButtonElement | null) => {
+        if (busy) return;
+        setPending(null);
         const data = new FormData(form);
-        const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
         if (submitter?.name) data.set(submitter.name, submitter.value);
         setBusy(true); setFailure('');
         if (json) {
@@ -111,10 +111,17 @@ export function Form({action, method = 'post', children, className = '', reset =
         }
         router.post(action, data, {preserveScroll: true, onSuccess: () => {if (reset) form.reset(); onSuccess?.();}, onFinish: () => setBusy(false)});
     };
-    return <form action={action} method="post" encType="multipart/form-data" onSubmit={submit} className={className} aria-busy={busy}>
+    const submit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault(); if (busy) return;
+        const form = event.currentTarget;
+        const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+        if (confirmMessage) {setPending({form, submitter}); return;}
+        performSubmit(form, submitter);
+    };
+    return <><form action={action} method="post" encType="multipart/form-data" onSubmit={submit} className={className} aria-busy={busy}>
         <input type="hidden" name="_token" value={csrf}/>{method !== 'post' && <input type="hidden" name="_method" value={method.toUpperCase()}/>}
         <fieldset disabled={busy}>{children}</fieldset>{failure && <p className="field-error" role="alert">{failure}</p>}
-    </form>;
+    </form>{confirmMessage && <Dialog title={t.delete} open={Boolean(pending)} close={() => setPending(null)}><div className="confirm-dialog"><p>{confirmMessage}</p><div className="button-row"><button type="button" className="button" onClick={() => setPending(null)}>{t.cancel}</button><button type="button" className="button danger" onClick={() => pending && performSubmit(pending.form, pending.submitter)}>{t.delete}</button></div></div></Dialog>}</>;
 }
 
 export function InfinitePage({data, children, className = ''}: {data: string; children: ReactNode; className?: string}) {

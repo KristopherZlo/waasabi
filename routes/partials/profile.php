@@ -62,6 +62,9 @@ Route::post('/profile/{slug}/follow', [ProfileFollowController::class, 'toggle']
 Route::post('/profile/{user:slug}/wall', [ProfileWallController::class, 'store'])
     ->middleware(['auth', 'verified', 'account.age', 'throttle:comments'])
     ->name('profile.wall.store');
+Route::patch('/profile/wall/{profileWallPost}', [ProfileWallController::class, 'update'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:comments'])
+    ->name('profile.wall.update');
 Route::delete('/profile/wall/{profileWallPost}', [ProfileWallController::class, 'destroy'])
     ->middleware(['auth', 'throttle:comments'])
     ->name('profile.wall.destroy');

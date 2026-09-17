@@ -18,6 +18,9 @@ Route::get('/collaboration', [CommunityPageController::class, 'collaborations'])
 Route::get('/collaboration/create', [CommunityPageController::class, 'helpEditor'])
     ->middleware(['auth', 'can:publish'])
     ->name('collaboration.create');
+Route::get('/collaboration/{collaborationRequest}/edit', [CommunityPageController::class, 'helpEditor'])
+    ->middleware(['auth', 'can:publish'])
+    ->name('collaboration.edit');
 Route::get('/collaboration/{collaborationRequest}', [CommunityPageController::class, 'collaboration'])
     ->name('collaboration.show');
 Route::post('/collaboration', [CollaborationController::class, 'store'])
@@ -32,6 +35,9 @@ Route::post('/collaboration/applications/{application}/messages', [Collaboration
 Route::delete('/collaboration/comments/{collaborationComment}', [CollaborationController::class, 'destroyComment'])
     ->middleware(['auth', 'throttle:comments'])
     ->name('collaboration.comments.destroy');
+Route::patch('/collaboration/comments/{collaborationComment}', [CollaborationController::class, 'updateComment'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:comments'])
+    ->name('collaboration.comments.update');
 Route::middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:publish'])->group(function (): void {
     Route::post('/collaboration/{collaborationRequest}/applications', [CollaborationController::class, 'apply'])
         ->name('collaboration.applications.store');
@@ -41,6 +47,8 @@ Route::middleware(['auth', 'can:publish', 'verified', 'account.age', 'throttle:p
         ->name('collaboration.applications.withdraw');
     Route::patch('/collaboration/{collaborationRequest}/status', [CollaborationController::class, 'updateStatus'])
         ->name('collaboration.status');
+    Route::patch('/collaboration/{collaborationRequest}', [CollaborationController::class, 'update'])
+        ->name('collaboration.update');
     Route::delete('/collaboration/{collaborationRequest}', [CollaborationController::class, 'destroy'])
         ->name('collaboration.destroy');
 });
