@@ -1,76 +1,60 @@
-﻿# waasabi
+# Waasabi
 
-Творческое сообщество на основе The Hub: показывать работы, вести дневник проекта и находить людей для небольших совместных задач.
+Waasabi is a community for creative work, long-term projects, questions, and small collaborations. It continues The Hub through a full rebuild.
 
-## Открыть локально
+People can publish work, document a project, ask for feedback, and find collaborators. Each collaboration response opens a private conversation between the project owner and the candidate.
 
-Адрес: **http://127.0.0.1:8081**. Если сервер остановлен, запустите из PowerShell:
+![Waasabi feed](docs/screenshots/feed.png)
 
-```powershell
-cd E:\xampp\htdocs\waasabi
-.\start.ps1
-```
+## Main features
 
-Вход администратора хранится в `.local-access.txt`. Файл локальный, не входит в Git. У сайта своя база `database/waasabi.sqlite`, собственные загрузки и ключ приложения. Исходный `the-hub` для работы не нужен.
+- A discovery feed with tags, search, and hot and new sorting modes.
+- Work and question pages with media, discussions, feedback, and answer voting.
+- Project pages with journals, teams, followers, and open collaboration requests.
+- Profiles with project showcases, statistics, posts, and collaboration history.
+- Private collaboration threads for each response.
+- Notifications, saved work, moderation tools, and role-based access.
 
-Локальные примеры записаны в базу отдельным `WaasabiDemoSeeder`; приложение не подставляет фиктивные данные при ошибках базы. В интерфейсе нет служебного баннера и тестовых пометок. Для поиска нажмите кнопку в верхней панели или `Ctrl/Cmd+K`.
+## Screenshots
 
-## Что работает
+| Work | Collaborations | Profile |
+| --- | --- | --- |
+| ![A published work](docs/screenshots/work.png) | ![Open collaboration requests](docs/screenshots/collaborations.png) | ![A creator profile](docs/screenshots/profile.png) |
 
-- Страница автора: описание, аватар, обложка, навыки, ссылка на портфолио/контакт, закреплённая работа, готовность помочь, список своих заявок и проектов с участием.
-- Творческие публикации: визуальный редактор Tiptap, изображения, форматирование, предпросмотр, локальное восстановление текста, серверные черновики, галерея и файлы.
-- Отдельная работа и долгоживущий проект — разные режимы. Работу можно продолжить как проект без смены адреса и потери обсуждения.
-- Страница проекта: описание, обсуждение, отзывы, команда, отдельные записи дневника с изображениями, редактированием и постоянными ссылками.
-- Подписки на авторов и проекты, уведомления об опубликованных работах и обновлениях, лента подписок и фильтр работ без ответа.
-- Короткая заявка на помощь: роль, размер участия и задача; проект привязывается по желанию. Отклик можно отправить без сопроводительного текста.
-- Принятие нескольких участников, добровольный выход, повторный отклик. Права редактировать проект владелец выдаёт отдельно.
-- Каталог людей, готовых помочь, с поиском по имени, навыкам и описанию.
-- Модерация: быстрая очередь на `/admin`, полный набор жалоб, массовых действий, ролей, блокировок и аудита на `/admin/tools`, отдельная проверка обновлений проекта.
+The [screenshot workflow](.github/workflows/screenshots.yml) rebuilds these images from seeded data after interface changes. Do not edit the PNG files manually.
 
-Логотип и генератор закарючек сохранены из The Hub. Базовый интерфейс — английский; прежний финский перевод сохранён, новые строки используют английский fallback.
+## Stack
 
-## Технологии
+Waasabi uses Laravel 12, Inertia 3, React 19, TypeScript, Tiptap 3, and Vite. SQLite is the default local database.
 
-Laravel 12, Inertia 3, React 19, TypeScript, Tiptap 3 и Vite. Blade остаётся для корневого документа и отдельных операционных страниц. Локальная база — SQLite. Это один серверный проект: Node нужен для сборки ресурсов, отдельный frontend-сервер не нужен. При росте нагрузки база может быть перенесена на MySQL/PostgreSQL с проверкой миграций.
+## Local setup
 
-## Чистая установка
+Requirements: PHP 8.2 or later, Composer 2, Node.js 22, SQLite, and GD.
 
-Нужны PHP 8.2+ с PDO SQLite и GD, Composer 2 и Node.js 20.19+ или 22.12+.
-
-```powershell
+```bash
 composer install
 npm ci
-Copy-Item .env.example .env
-New-Item database/waasabi.sqlite -ItemType File
+cp .env.example .env
+touch database/waasabi.sqlite
 php artisan key:generate
 php artisan migrate
 php artisan storage:link
 npm run build
-php artisan admin:create owner@example.com
-php artisan serve --host=127.0.0.1 --port=8081
+php artisan serve
 ```
 
-Примеры, только по желанию и только локально: `php artisan db:seed --class=WaasabiDemoSeeder`.
+Run `php artisan db:seed --class=WaasabiDemoSeeder` to add local sample content.
 
-## Проверки
+## Checks
 
-```powershell
+```bash
 php artisan test
-php vendor/bin/pint --test
 npm test
 npm run build
-npm audit
 composer audit
+npm audit
 ```
 
-Проверка Spotlight в локальном Chrome при запущенном сайте: `node --experimental-websocket tests/Frontend/spotlight.mjs`. Проверяет сочетания клавиш, выбор результата, состояния поиска и мобильную ширину.
+See [deployment](docs/DEPLOYMENT.md), [architecture](docs/ARCHITECTURE.md), and [the rebuild notes](docs/WAASABI.md) for more information.
 
-PHP-тесты используют отдельную временную базу. Новые сценарии проверяются в `tests/Feature/StudioTest.php` и `tests/Feature/WaasabiTest.php`.
-
-## Перед публичным запуском
-
-Сейчас сайт запущен локально. Почта записывается в `storage/logs/laravel.log`: там находятся ссылки подтверждения регистрации и сброса пароля. Для посетителей нужны настоящая почтовая доставка, HTTPS, резервные копии базы и загрузок, scheduler и настройка модерации изображений. Локально сканер изображений отключён, публикация разрешена; `.env.example` предусматривает ручную проверку при недоступности сканера. Демонстрационные данные не переносите в рабочую базу.
-
-Настройка Apache: DocumentRoot должен указывать на `E:/xampp/htdocs/waasabi/public`, а не на корень проекта. `start.ps1` уже запускает правильную точку входа. Подробности: [развёртывание](docs/DEPLOYMENT.md), [что изменилось](docs/WAASABI.md), [архитектура](docs/ARCHITECTURE.md).
-
-Лицензия унаследована от исходного проекта: [LICENSE](LICENSE).
+Waasabi uses the license from The Hub. See [LICENSE](LICENSE).
