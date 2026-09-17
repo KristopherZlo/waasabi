@@ -1,6 +1,6 @@
 # Waasabi
 
-Waasabi is a community for creative work, long-term projects, questions, and small collaborations. It continues The Hub through a full rebuild.
+Waasabi is a community for creative work, long-term projects, questions, and small collaborations.
 
 People can publish work, document a project, ask for feedback, and find collaborators. Each collaboration response opens a private conversation between the project owner and the candidate.
 
@@ -21,7 +21,7 @@ People can publish work, document a project, ask for feedback, and find collabor
 | --- | --- | --- |
 | ![A published work](docs/screenshots/work.png) | ![Open collaboration requests](docs/screenshots/collaborations.png) | ![A creator profile](docs/screenshots/profile.png) |
 
-The [screenshot workflow](.github/workflows/screenshots.yml) rebuilds these images from seeded data after interface changes. Do not edit the PNG files manually.
+The [screenshot workflow](.github/workflows/screenshots.yml) updates these images from seeded data after interface changes. Do not edit the PNG files manually.
 
 ## Stack
 
@@ -55,6 +55,6 @@ composer audit
 npm audit
 ```
 
-See [deployment](docs/DEPLOYMENT.md), [architecture](docs/ARCHITECTURE.md), and [the rebuild notes](docs/WAASABI.md) for more information.
+See [deployment](docs/DEPLOYMENT.md) and [architecture](docs/ARCHITECTURE.md) for more information.
 
 See [LICENSE](LICENSE) for the license terms.
