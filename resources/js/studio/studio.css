@@ -915,14 +915,4 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
     .not-found-page__body { top: 56px; }
     .not-found-game__score { top: 155px; }
 }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms!important; transition-duration: .01ms!important; } }
-@media (prefers-reduced-motion: reduce) {
-    .not-found-game__score span:nth-child(1) { animation-duration: 7.2s!important; animation-iteration-count: infinite!important; }
-    .not-found-game__score span:nth-child(2) { animation-duration: 8.6s!important; animation-iteration-count: infinite!important; }
-    .not-found-game__score span:nth-child(3) { animation-duration: 6.8s!important; animation-iteration-count: infinite!important; }
-    .not-found-game__planet-position.is-hit .not-found-game__planet-effect, .not-found-game__planet-position.is-hit .not-found-game__planet-effect::after { animation-duration: 560ms!important; animation-iteration-count: 1!important; }
-    .not-found-page.is-lost .not-found-game__planet-effect { animation-duration: 700ms!important; animation-iteration-count: 1!important; }
-    .not-found-game__catcher-position.is-catching .not-found-game__catcher-effect { animation-duration: 340ms!important; animation-iteration-count: 1!important; }
-    .not-found-page.is-won .not-found-game__planet-effect, .not-found-page.is-won .not-found-game__orbit { animation-duration: 1.6s!important; animation-iteration-count: 1!important; }
-    .not-found-page.is-lost .not-found-game__catcher-position, .not-found-page.is-won .not-found-game__catcher-position { transition-duration: 2.8s!important; }
-}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

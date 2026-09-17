@@ -9,10 +9,10 @@
     <meta name="robots" content="@yield('robots', 'index, follow')">
     <script nonce="{{ $csp_nonce ?? '' }}">try { document.documentElement.dataset.theme = localStorage.getItem('waasabi:theme') || 'dark'; } catch { document.documentElement.dataset.theme = 'dark'; }</script>
     @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
-        @vite('resources/js/studio/static.css')
+        @vite(['resources/js/studio/static.css', 'resources/js/studio/static.ts'])
     @endif
 </head>
-<body class="static-shell" data-page="@yield('page', 'static')">
+<body class="static-shell" data-page="@yield('page', 'static')" data-external-warning-title="{{ __('studio.leave_site') }}" data-external-warning-text="{{ __('studio.leave_site_hint') }}" data-external-warning-cancel="{{ __('studio.stay_here') }}" data-external-warning-continue="{{ __('studio.continue_external') }}">
     <a class="skip" href="#main-content">{{ __('ui.app.skip_to_content') }}</a>
     @include('partials.studio-topbar')
     @hasSection('context-nav')<div class="static-context-nav">@yield('context-nav')</div>@endif

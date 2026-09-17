@@ -2,6 +2,7 @@ import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
 import '@fontsource-variable/golos-text';
 import './studio.css';
+import '../ui/external-links';
 import { Shell } from './components';
 
 const pages = import.meta.glob('./pages/*.tsx');

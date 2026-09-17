@@ -35,7 +35,7 @@
         window.APP_I18N = @json(trans('ui.js'));
     </script>
 </head>
-<body data-user-id="{{ Auth::id() ?? 'guest' }}" class="app-shell" data-page="@yield('page', 'feed')" data-app-url="{{ url('/') }}" data-locale="{{ app()->getLocale() }}" data-placeholder="{{ asset('images/placeholder.svg') }}" data-auth-state="{{ Auth::check() && !(Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-banned="{{ Auth::check() && (Auth::user()?->is_banned ?? false) ? '1' : '0' }}" @if (session('toast')) data-toast-message="{{ session('toast') }}" @endif>
+<body data-user-id="{{ Auth::id() ?? 'guest' }}" class="app-shell" data-page="@yield('page', 'feed')" data-app-url="{{ url('/') }}" data-locale="{{ app()->getLocale() }}" data-placeholder="{{ asset('images/placeholder.svg') }}" data-auth-state="{{ Auth::check() && !(Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-banned="{{ Auth::check() && (Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-external-warning-title="{{ __('studio.leave_site') }}" data-external-warning-text="{{ __('studio.leave_site_hint') }}" data-external-warning-cancel="{{ __('studio.stay_here') }}" data-external-warning-continue="{{ __('studio.continue_external') }}" @if (session('toast')) data-toast-message="{{ session('toast') }}" @endif>
     <a class="skip-link" href="#main-content">{{ __('ui.app.skip_to_content') }}</a>
 
     <header class="topbar">

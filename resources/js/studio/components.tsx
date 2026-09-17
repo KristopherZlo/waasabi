@@ -37,12 +37,9 @@ export function Shell({children}: {children: ReactNode}) {
     const authPage = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'].some(path => url.startsWith(path));
     useEffect(() => {setTheme(document.documentElement.dataset.theme || 'dark');}, []);
     useEffect(() => {const meta = document.querySelector<HTMLMetaElement>('meta[name=csrf-token]'); if (meta) meta.content = csrf;}, [csrf]);
-    useEffect(() => {
-        setToast(flash.message ?? '');
-        if (!flash.message) return;
-        const timer = window.setTimeout(() => setToast(''), 4200);
-        return () => window.clearTimeout(timer);
-    }, [flash.message, url]);
+    useEffect(() => {if (flash.message) setToast(flash.message);}, [flash.message, url]);
+    useEffect(() => {if (!toast) return; const timer = window.setTimeout(() => setToast(''), 4200); return () => window.clearTimeout(timer);}, [toast]);
+    useEffect(() => {const show = (event: Event) => setToast((event as CustomEvent<string>).detail); window.addEventListener('waasabi:toast', show); return () => window.removeEventListener('waasabi:toast', show);}, []);
     useEffect(() => {
         const outside = (event: PointerEvent) => {if (!actionsRef.current?.contains(event.target as Node)) setMenu(null);};
         const escape = (event: KeyboardEvent) => {if (event.key === 'Escape') setMenu(null);};
@@ -86,11 +83,12 @@ export function Errors() {
     return <div className="notice error" role="alert"><strong>{t.errors}</strong><ul>{Object.entries(errors).map(([key, message]) => <li key={key}>{message}</li>)}</ul></div>;
 }
 
-export function Form({action, method = 'post', children, className = '', reset = false, json = false, reloadData, scrollToResult = false, confirmMessage, onSuccess}: {action: string; method?: 'post' | 'put' | 'patch' | 'delete'; children: ReactNode; className?: string; reset?: boolean; json?: boolean; reloadData?: string | string[]; scrollToResult?: boolean | string; confirmMessage?: string; onSuccess?: () => void}) {
+export function Form({action, method = 'post', children, className = '', reset = false, json = false, reloadData, scrollToResult = false, confirmMessage, preventEnterSubmit = false, onSuccess}: {action: string; method?: 'post' | 'put' | 'patch' | 'delete'; children: ReactNode; className?: string; reset?: boolean; json?: boolean; reloadData?: string | string[]; scrollToResult?: boolean | string; confirmMessage?: string; preventEnterSubmit?: boolean; onSuccess?: () => void}) {
     const {csrf, copy: t} = useShared();
     const [busy, setBusy] = useState(false);
     const [failure, setFailure] = useState('');
     const [pending, setPending] = useState<{form: HTMLFormElement; submitter: HTMLButtonElement | null} | null>(null);
+    const complete = () => {onSuccess?.(); if (method === 'delete') window.dispatchEvent(new CustomEvent('waasabi:toast', {detail: t.deleted_successfully}));};
     const performSubmit = (form: HTMLFormElement, submitter: HTMLButtonElement | null) => {
         if (busy) return;
         setPending(null);
@@ -102,14 +100,14 @@ export function Form({action, method = 'post', children, className = '', reset =
                 if (reset) form.reset();
                 const only = typeof reloadData === 'string' ? [reloadData] : reloadData;
                 router.reload({...only ? {only, reset: only} : {}, onSuccess: () => {
-                    onSuccess?.();
+                    complete();
                     const target = typeof scrollToResult === 'string' ? scrollToResult : scrollToResult && result.id ? `comment-${result.id}` : '';
                     if (target) requestAnimationFrame(() => document.getElementById(target)?.scrollIntoView({block: 'center', behavior: 'smooth'}));
                 }, onFinish: () => setBusy(false)});
             }).catch(error => {setFailure((error as Error).message); setBusy(false);});
             return;
         }
-        router.post(action, data, {preserveScroll: true, onSuccess: () => {if (reset) form.reset(); onSuccess?.();}, onFinish: () => setBusy(false)});
+        router.post(action, data, {preserveScroll: true, onSuccess: () => {if (reset) form.reset(); complete();}, onFinish: () => setBusy(false)});
     };
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault(); if (busy) return;
@@ -118,7 +116,7 @@ export function Form({action, method = 'post', children, className = '', reset =
         if (confirmMessage) {setPending({form, submitter}); return;}
         performSubmit(form, submitter);
     };
-    return <><form action={action} method="post" encType="multipart/form-data" onSubmit={submit} className={className} aria-busy={busy}>
+    return <><form action={action} method="post" encType="multipart/form-data" onSubmit={submit} onKeyDown={event => {const input = event.target instanceof HTMLInputElement ? event.target : null; if (preventEnterSubmit && event.key === 'Enter' && !event.defaultPrevented && input && !['button', 'checkbox', 'file', 'radio', 'submit'].includes(input.type)) event.preventDefault();}} className={className} aria-busy={busy}>
         <input type="hidden" name="_token" value={csrf}/>{method !== 'post' && <input type="hidden" name="_method" value={method.toUpperCase()}/>}
         <fieldset disabled={busy}>{children}</fieldset>{failure && <p className="field-error" role="alert">{failure}</p>}
     </form>{confirmMessage && <Dialog title={t.delete} open={Boolean(pending)} close={() => setPending(null)}><div className="confirm-dialog"><p>{confirmMessage}</p><div className="button-row"><button type="button" className="button" onClick={() => setPending(null)}>{t.cancel}</button><button type="button" className="button danger" onClick={() => pending && performSubmit(pending.form, pending.submitter)}>{t.delete}</button></div></div></Dialog>}</>;

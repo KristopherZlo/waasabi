@@ -21,7 +21,7 @@ return [
     'any_role' => 'Any role', 'any_availability' => 'Any time commitment', 'any_format' => 'Any format', 'replies' => 'replies', 'no_applications' => 'No one has replied yet.',
     'choose' => 'What would you like to share?', 'create_hint' => 'Start with what you have. You can always add more later.',
     'about' => 'About', 'journal' => 'Updates', 'discussion' => 'Discussion', 'answers' => 'Answers', 'team' => 'Team', 'write_update' => 'Write an update', 'project_details' => 'Project details',
-    'edit' => 'Edit', 'delete' => 'Delete', 'confirm_delete' => 'Delete this permanently?', 'follow' => 'Follow project', 'unfollow' => 'Unfollow project',
+    'edit' => 'Edit', 'delete' => 'Delete', 'confirm_delete' => 'Delete this permanently?', 'deleted_successfully' => 'Deleted successfully.', 'follow' => 'Follow project', 'unfollow' => 'Unfollow project',
     'follow_author' => 'Follow author', 'unfollow_author' => 'Unfollow author', 'start_project' => 'Continue as a project',
     'start_project_hint' => 'Add a journal and invite people to help. Your work and its address stay here.',
     'sharing' => 'Just sharing', 'feedback' => 'Feedback welcome', 'help_mode' => 'Looking for help',
@@ -94,4 +94,5 @@ return [
     'export_data' => 'Export your data', 'export_data_hint' => 'Download your profile, work, collaborations, notifications, and support history as JSON.', 'download_export' => 'Download export',
     'sign_out' => 'Sign out', 'sign_out_hint' => 'End this session on this device.', 'delete_account' => 'Delete account',
     'delete_account_hint' => 'Permanently remove your account and uploaded content. This cannot be undone.', 'confirm_account_delete' => 'Permanently delete this account and its data?',
+    'leave_site' => 'You are leaving waasabi', 'leave_site_hint' => 'This link opens a different website. Check the address before you continue.', 'stay_here' => 'Stay here', 'continue_external' => 'Continue',
 ];

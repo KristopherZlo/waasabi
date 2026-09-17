@@ -10,7 +10,7 @@
     @vite('resources/js/studio/app.tsx')
     @inertiaHead
 </head>
-<body>
+<body data-external-warning-title="{{ __('studio.leave_site') }}" data-external-warning-text="{{ __('studio.leave_site_hint') }}" data-external-warning-cancel="{{ __('studio.stay_here') }}" data-external-warning-continue="{{ __('studio.continue_external') }}">
     @inertia
     <noscript><p>Enable JavaScript to use the community editor and navigation.</p></noscript>
 </body>
