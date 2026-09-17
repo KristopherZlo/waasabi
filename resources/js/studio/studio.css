@@ -242,8 +242,8 @@ body[data-page='not-found'] .static-page { width: 100%; padding: 0; }
 .feed-controls .feed-tabs { min-width: 0; flex: 1; border-bottom: 0; }
 .feed-tabs a, .section-tabs a { flex: 0 0 auto; padding: 10px 0; color: var(--muted); border-bottom: 2px solid transparent; }
 .feed-tabs a.active, .section-tabs a.active { border-color: var(--accent); color: var(--text); }
-.feed-sort-row { padding: 7px 0 3px; display: flex; justify-content: flex-end; }
 .feed-sort { padding: 2px; display: flex; flex: 0 0 auto; gap: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.feed-controls .feed-sort { margin-left: 8px; }
 .feed-sort button { min-height: 28px; padding: 3px 9px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; }
 .feed-sort button:hover, .feed-sort button.active { background: var(--surface-3); color: var(--text); }
 .feed-controls .filter-icon { width: 36px; height: 36px; flex: 0 0 auto; padding: 0; display: grid; place-items: center; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); }
