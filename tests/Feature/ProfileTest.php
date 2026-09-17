@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -262,6 +263,29 @@ class ProfileTest extends TestCase
             ->where('stats.followers', 1)->where('stats.upvotes', 1)
             ->where('showcase.0.id', $project->id)
             ->where('profileReadmeHtml', fn ($html) => str_contains($html, 'Things I make')));
+    }
+
+    public function test_profile_showcase_can_use_a_public_github_readme(): void
+    {
+        $owner = User::factory()->create(['slug' => 'github-readme-owner']);
+        Http::fake([
+            'api.github.com/repos/octocat/hello-world/readme' => Http::response('# README from GitHub'),
+        ]);
+
+        $this->actingAs($owner)->post(route('profile.settings.update'), [
+            'name' => $owner->name,
+            'profile_readme' => '# Local fallback',
+            'github_readme_repository' => 'https://github.com/octocat/hello-world',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $owner->id, 'github_readme_repository' => 'https://github.com/octocat/hello-world']);
+        $this->get(route('profile.show', $owner->slug))->assertInertia(fn (Assert $page) => $page
+            ->where('profileReadmeHtml', fn ($html) => str_contains($html, 'README from GitHub') && ! str_contains($html, 'Local fallback'))
+            ->where('profileReadmeSource.repository', 'octocat/hello-world')
+            ->where('profileReadmeSource.url', 'https://github.com/octocat/hello-world'));
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/octocat/hello-world/readme'
+            && $request->hasHeader('Accept', 'application/vnd.github.raw+json'));
     }
 
     public function test_wall_respects_owner_mode_and_owner_can_delete_any_entry(): void

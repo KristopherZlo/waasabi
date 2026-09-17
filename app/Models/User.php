@@ -38,6 +38,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'portfolio_url',
         'featured_post_id',
         'profile_readme',
+        'github_readme_repository',
         'wall_mode',
         'privacy_allow_mentions',
         'notify_comments',

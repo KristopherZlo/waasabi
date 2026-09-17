@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\BadgeCatalogService;
 use App\Services\BadgePayloadService;
 use App\Services\CollaborationService;
+use App\Services\GitHubReadmeService;
 use App\Services\MarkdownService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -222,6 +223,8 @@ class CommunityPageController extends Controller
             'collaborations' => CollaborationApplication::where('status', 'accepted')->where(fn ($q) => $q->where('user_id', $user->id)
                 ->orWhereHas('collaborationRequest', fn ($requestQuery) => $requestQuery->where('user_id', $user->id)))->count(),
         ];
+        $githubReadme = $user->is_banned ? null : app(GitHubReadmeService::class)->get($user->github_readme_repository);
+        $readme = $githubReadme['markdown'] ?? $user->profile_readme;
 
         return Inertia::render('Profile', [
             'person' => $this->person($user) + ['featured_post_id' => $user->featured_post_id, 'is_banned' => $user->is_banned, 'wall_mode' => $user->wall_mode,
@@ -229,7 +232,8 @@ class CommunityPageController extends Controller
                 'following' => $request->user() && DB::table('user_follows')->where('follower_id', $request->user()->id)->where('following_id', $user->id)->exists()],
             'badges' => app(BadgePayloadService::class)->forUser($user, app(BadgeCatalogService::class)->all()),
             'isOwner' => $owner, 'works' => Inertia::scroll($works), 'workFilter' => ['kind' => $kind, 'q' => $term], 'view' => $view,
-            'stats' => $stats, 'showcase' => $showcase, 'profileReadmeHtml' => app(MarkdownService::class)->render((string) $user->profile_readme), 'wallPosts' => $wallPosts,
+            'stats' => $stats, 'showcase' => $showcase, 'profileReadmeHtml' => app(MarkdownService::class)->render((string) $readme),
+            'profileReadmeSource' => $githubReadme ? ['repository' => $githubReadme['repository'], 'url' => $githubReadme['url']] : null, 'wallPosts' => $wallPosts,
             'openings' => CollaborationRequest::with('user', 'post')->withCount('applications')->visibleTo($request->user())->where('user_id', $user->id)->where('status', 'open')
                 ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))->latest()->take(20)->get()->map(fn ($o) => $this->opening($o)),
             'contributions' => $this->publicWorks()->where('user_id', '!=', $user->id)->whereHas('members', fn ($q) => $q->where('user_id', $user->id)->whereNotNull('accepted_at'))
@@ -339,7 +343,7 @@ class CommunityPageController extends Controller
         return Inertia::render('Settings', ['person' => $this->person($user) + $user->only(
             'featured_post_id', 'email', 'email_verified_at', 'privacy_allow_mentions',
             'notify_comments', 'notify_reviews', 'notify_follows', 'connections_allow_follow',
-            'connections_show_follow_counts', 'security_login_alerts', 'profile_readme', 'wall_mode'
+            'connections_show_follow_counts', 'security_login_alerts', 'profile_readme', 'github_readme_repository', 'wall_mode'
         ),
             'projects' => $user->posts()->where('type', 'post')->where('is_project', true)->latest()->get(['id', 'title']),
             'showcaseProjectIds' => $user->showcaseProjects()->pluck('posts.id'),

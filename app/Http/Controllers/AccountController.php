@@ -46,7 +46,7 @@ class AccountController extends Controller
         ]);
         $payload = [
             'exported_at' => now()->toIso8601String(),
-            'profile' => $user->only(['id', 'name', 'slug', 'email', 'bio', 'role', 'created_at', 'legal_version', 'legal_accepted_at', 'skills', 'open_to_help', 'portfolio_url', 'featured_post_id', 'profile_readme', 'wall_mode']),
+            'profile' => $user->only(['id', 'name', 'slug', 'email', 'bio', 'role', 'created_at', 'legal_version', 'legal_accepted_at', 'skills', 'open_to_help', 'portfolio_url', 'featured_post_id', 'profile_readme', 'github_readme_repository', 'wall_mode']),
             'showcase_project_ids' => $user->showcaseProjects()->pluck('posts.id'),
             'wall_posts' => DB::table('profile_wall_posts')->where(fn ($query) => $query->where('profile_user_id', $user->id)->orWhere('user_id', $user->id))->get(),
             'followed_projects' => DB::table('project_follows')->where('user_id', $user->id)->pluck('post_id'),

@@ -16,6 +16,7 @@ type SettingsPerson = Person & {
     connections_show_follow_counts: boolean;
     security_login_alerts: boolean;
     profile_readme: string | null;
+    github_readme_repository: string | null;
     wall_mode: 'everyone' | 'owner';
 };
 
@@ -59,7 +60,7 @@ export default function Settings({person, projects, showcaseProjectIds}: {person
                         <label>{t.skills}<input name="skills" maxLength={400} defaultValue={person.skills || ''}/></label>
                         <label>{t.portfolio}<input type="url" name="portfolio_url" maxLength={500} defaultValue={person.portfolio_url || ''} placeholder="https://"/></label>
                         <label>{t.featured}<select name="featured_post_id" defaultValue={person.featured_post_id || ''}><option value="">{t.no_featured}</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label>
-                        <div id="showcase" className="settings-subsection"><h3>{t.showcase}</h3><input type="hidden" name="showcase_project_ids_present" value="1"/><label>{t.showcase_projects}<select name="showcase_project_ids[]" multiple size={Math.min(6, Math.max(3, projects.length))} defaultValue={showcaseProjectIds.map(String)}>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label><label>{t.profile_readme}<textarea name="profile_readme" rows={8} maxLength={5000} defaultValue={person.profile_readme || ''} placeholder={t.profile_readme_hint}/></label></div>
+                        <div id="showcase" className="settings-subsection"><h3>{t.showcase}</h3><input type="hidden" name="showcase_project_ids_present" value="1"/><label>{t.showcase_projects}<select name="showcase_project_ids[]" multiple size={Math.min(6, Math.max(3, projects.length))} defaultValue={showcaseProjectIds.map(String)}>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label><label>{t.github_readme}<input name="github_readme_repository" maxLength={255} defaultValue={person.github_readme_repository || ''} placeholder="owner/repository"/><span className="meta">{t.github_readme_hint}</span></label><label>{t.profile_readme}<textarea name="profile_readme" rows={6} maxLength={5000} defaultValue={person.profile_readme || ''} placeholder={t.profile_readme_hint}/></label></div>
                         <input type="hidden" name="open_to_help" value="0"/><label className="check"><input type="checkbox" name="open_to_help" value="1" defaultChecked={person.open_to_help}/>{t.available}</label>
                         <button className="button primary">{t.save_profile}</button>
                     </Form>

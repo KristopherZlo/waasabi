@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Services\GitHubReadmeService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -29,6 +30,11 @@ class ProfileSettingsRequest extends FormRequest
             'portfolio_url' => ['nullable', 'url:http,https', 'max:500'],
             'featured_post_id' => ['nullable', 'integer', Rule::exists('posts', 'id')->where('user_id', $this->user()->id)->where('type', 'post')],
             'profile_readme' => ['nullable', 'string', 'max:5000'],
+            'github_readme_repository' => ['nullable', 'string', 'max:255', function (string $attribute, mixed $value, \Closure $fail): void {
+                if (! app(GitHubReadmeService::class)->repositoryPath((string) $value)) {
+                    $fail('Use a public GitHub repository such as owner/repository.');
+                }
+            }],
             'showcase_project_ids' => ['nullable', 'array', 'max:6'],
             'showcase_project_ids.*' => ['integer', 'distinct', Rule::exists('posts', 'id')->where('user_id', $this->user()->id)->where('type', 'post')->where('is_project', true)],
             'showcase_project_ids_present' => ['nullable', 'boolean'],

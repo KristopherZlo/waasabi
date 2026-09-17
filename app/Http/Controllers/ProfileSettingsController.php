@@ -65,7 +65,7 @@ class ProfileSettingsController extends Controller
             }
         }
 
-        foreach (['bio', 'skills', 'open_to_help', 'portfolio_url', 'featured_post_id', 'profile_readme', 'wall_mode'] as $field) {
+        foreach (['bio', 'skills', 'open_to_help', 'portfolio_url', 'featured_post_id', 'profile_readme', 'github_readme_repository', 'wall_mode'] as $field) {
             if (array_key_exists($field, $data)) {
                 $user->{$field} = $data[$field];
             }

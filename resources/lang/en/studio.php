@@ -64,6 +64,7 @@ return [
     'featured' => 'Featured work', 'no_featured' => 'No pinned work', 'contributions' => 'Projects I helped with', 'help_requests' => 'Open collaborations',
     'followers' => 'Followers', 'total_upvotes' => 'Total upvotes', 'collaborations_count' => 'Collaborations',
     'showcase' => 'Project showcase', 'showcase_projects' => 'Projects to show (up to 6)', 'showcase_empty' => 'Choose projects and add a README to build your showcase.', 'profile_readme' => 'Profile README', 'profile_readme_hint' => 'Introduce your work, process, tools, or what you want to make next. Markdown is supported.',
+    'github_readme' => 'GitHub README', 'github_readme_hint' => 'Public owner/repository or its GitHub URL. When available, it replaces the profile README below.',
     'profile_sections' => 'Profile sections', 'wall' => 'Wall', 'wall_access' => 'Who can write on your wall', 'wall_everyone' => 'Everyone can write', 'wall_owner' => 'Only the profile owner can write',
     'wall_placeholder' => 'Write something on this wall…', 'post_placeholder' => 'What are you making?', 'wall_empty' => 'Nothing has been posted here yet.', 'wall_post_on' => 'Posted on the wall of',
     'email' => 'Email', 'password' => 'Password', 'password_confirmation' => 'Repeat password', 'forgot' => 'Forgot your password?', 'remember' => 'Remember me',
