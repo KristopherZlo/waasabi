@@ -20,6 +20,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        DB::transaction(fn () => $this->seedCommunity());
+    }
+
+    private function seedCommunity(): void
+    {
         $password = Hash::make(Str::random(40));
         $usedSlugs = [];
 
@@ -200,36 +205,56 @@ class DatabaseSeeder extends Seeder
                 'avatar' => '/images/avatar-default.svg',
                 'bio' => 'Volunteer organizer improving onboarding, schedules, and shared documentation.',
             ],
+            'johanna' => [
+                'name' => 'Johanna Wu',
+                'email' => 'johanna@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Book designer testing small-run publishing methods and accessible layouts.',
+            ],
+            'owen' => [
+                'name' => 'Owen Brooks',
+                'email' => 'owen@thehub.test',
+                'role' => 'user',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Urban gardener building simple tools for shared courtyards.',
+            ],
+            'hana' => [
+                'name' => 'Hana Mori',
+                'email' => 'hana@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Motion designer interested in type, public screens, and live events.',
+            ],
+            'mateo' => [
+                'name' => 'Mateo Silva',
+                'email' => 'mateo@thehub.test',
+                'role' => 'maker',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Audio engineer making repairable recording tools for field work.',
+            ],
+            'elina' => [
+                'name' => 'Elina Koski',
+                'email' => 'elina@thehub.test',
+                'role' => 'user',
+                'avatar' => '/images/avatar-default.svg',
+                'bio' => 'Community librarian working on local archives and practical guides.',
+            ],
         ];
 
         $users = [];
         foreach ($seedUsers as $key => $data) {
             $existing = User::where('email', $data['email'])->first();
-            if ($existing) {
-                $users[$key] = $existing;
-                if (! empty($existing->slug)) {
-                    $usedSlugs[] = $existing->slug;
-                } else {
-                    $existing->slug = $makeSlug($data['name']);
-                    $existing->save();
-                }
-
-                continue;
+            $slug = $existing?->slug ?: $makeSlug($data['name']);
+            if ($existing?->slug) {
+                $usedSlugs[] = $existing->slug;
             }
-            $users[$key] = User::factory()->create(array_merge($data, [
-                'slug' => $makeSlug($data['name']),
+            $users[$key] = User::updateOrCreate(['email' => $data['email']], $data + [
+                'slug' => $slug,
                 'password' => $password,
                 'email_verified_at' => now(),
-            ]));
+            ]);
         }
-
-        $extraUsers = User::factory()
-            ->count(6)
-            ->create(['password' => $password]);
-
-        User::query()->update([
-            'avatar' => '/images/avatar-default.svg',
-        ]);
 
         $estimateReadTime = static function (string $markdown): int {
             $wordCount = str_word_count(strip_tags($markdown));
@@ -338,15 +363,9 @@ class DatabaseSeeder extends Seeder
             $markdown = $post['body_markdown'] ?? '';
             $readTime = $estimateReadTime($markdown);
 
-            $existingPost = Post::where('slug', $post['slug'])->first();
-            if ($existingPost) {
-                continue;
-            }
-
-            Post::create([
+            Post::updateOrCreate(['slug' => $post['slug']], [
                 'user_id' => $users[$post['user_key']]->id,
                 'type' => $post['type'],
-                'slug' => $post['slug'],
                 'title' => $post['title'],
                 'subtitle' => $post['subtitle'] ?? null,
                 'body_markdown' => $markdown,
@@ -367,14 +386,9 @@ class DatabaseSeeder extends Seeder
             $type = $post['type'] ?? 'post';
             $slug = $post['slug'] ?? $makePostSlug($post['title']);
 
-            if (Post::where('slug', $slug)->exists()) {
-                continue;
-            }
-
-            Post::create([
+            Post::updateOrCreate(['slug' => $slug], [
                 'user_id' => $users[$post['user_key']]->id,
                 'type' => $type,
-                'slug' => $slug,
                 'title' => $post['title'],
                 'subtitle' => $post['subtitle'] ?? null,
                 'body_markdown' => $markdown,
@@ -576,6 +590,9 @@ class DatabaseSeeder extends Seeder
             );
         }
 
-        $this->call(CollaborationSeeder::class);
+        $this->call([
+            CollaborationSeeder::class,
+            CommunityDetailsSeeder::class,
+        ]);
     }
 }

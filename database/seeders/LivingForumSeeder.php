@@ -140,7 +140,7 @@ class LivingForumSeeder extends Seeder
 
         foreach ($posts as $postIndex => $post) {
             $otherUsers = $users->reject(fn (User $user) => $user->id === $post->user_id)->values();
-            $commentCount = $post->type === 'question' ? 4 + ($postIndex % 4) : 2 + ($postIndex % 4);
+            $commentCount = $postIndex % 13 === 12 ? 0 : ($post->type === 'question' ? 4 + ($postIndex % 4) : 2 + ($postIndex % 4));
             $templates = $post->type === 'question' ? $questionComments : $projectComments;
             $tag = (string) (($post->tags ?? [])[0] ?? 'project');
 
@@ -151,15 +151,16 @@ class LivingForumSeeder extends Seeder
                 if ($createdAt->isFuture()) {
                     $createdAt = now()->subMinutes(10 + $commentIndex * 7);
                 }
-                $comment = PostComment::create([
+                $comment = PostComment::updateOrCreate([
                     'post_id' => $post->id,
-                    'post_slug' => $post->slug,
                     'user_id' => $author->id,
                     'body' => $body,
+                    'parent_id' => null,
+                ], [
+                    'post_slug' => $post->slug,
                     'section' => $post->type === 'post' ? ['Context', 'Build', 'Results', 'Next step'][$commentIndex % 4] : null,
                     'useful' => 0,
                     'vote_score' => 0,
-                    'parent_id' => null,
                     'moderation_status' => 'approved',
                     'is_hidden' => false,
                 ]);
@@ -170,15 +171,16 @@ class LivingForumSeeder extends Seeder
                     $replyAuthor = $commentIndex % 2 === 0
                         ? $post->user
                         : $otherUsers[($postIndex + $commentIndex + 5) % $otherUsers->count()];
-                    $reply = PostComment::create([
+                    $reply = PostComment::updateOrCreate([
                         'post_id' => $post->id,
-                        'post_slug' => $post->slug,
                         'user_id' => $replyAuthor->id,
                         'body' => $replyTemplates[($postIndex + $commentIndex) % count($replyTemplates)],
+                        'parent_id' => $comment->id,
+                    ], [
+                        'post_slug' => $post->slug,
                         'section' => null,
                         'useful' => 0,
                         'vote_score' => 0,
-                        'parent_id' => $comment->id,
                         'moderation_status' => 'approved',
                         'is_hidden' => false,
                     ]);
@@ -198,11 +200,12 @@ class LivingForumSeeder extends Seeder
                 if ($reviewer->id === $post->user_id) {
                     $reviewer = $makers[($postIndex + 3) % $makers->count()];
                 }
-                $review = PostReview::create([
+                $review = PostReview::updateOrCreate([
                     'post_id' => $post->id,
-                    'post_slug' => $post->slug,
                     'user_id' => $reviewer->id,
                     'improve' => 'Show one comparison from before the final approach, including the option that looked promising but failed.',
+                ], [
+                    'post_slug' => $post->slug,
                     'why' => 'That evidence would help another maker understand the decision instead of copying the result blindly.',
                     'how' => 'Add a compact before-and-after block with one photograph or measurement and a sentence about the trade-off.',
                     'vote_score' => 0,
@@ -218,10 +221,11 @@ class LivingForumSeeder extends Seeder
             }
 
             if ($post->type === 'post' && $post->is_project && $postIndex % 5 === 0) {
-                $update = ProjectUpdate::create([
+                $update = ProjectUpdate::updateOrCreate([
                     'post_id' => $post->id,
-                    'user_id' => $post->user_id,
                     'title' => ['Field test completed', 'Second revision assembled', 'Documentation updated'][$postIndex % 3],
+                ], [
+                    'user_id' => $post->user_id,
                     'body' => ['The latest test confirmed the main assumption and exposed one smaller maintenance issue.', 'The new revision is easier to assemble and keeps the same measured performance.', 'Build notes now include the failed option, exact settings, and a shorter reproduction checklist.'][$postIndex % 3],
                 ]);
                 $updateAt = ($post->published_at ?? now())->copy()->addDays(2);
@@ -342,7 +346,7 @@ class LivingForumSeeder extends Seeder
             }
 
             $notificationPost = $posts[($userIndex * 7 + 3) % $posts->count()];
-            $notification = UserNotification::create([
+            $notification = UserNotification::updateOrCreate([
                 'user_id' => $user->id,
                 'type' => ['Comment', 'Review', 'Follow', 'Project update'][$userIndex % 4],
                 'text' => [
@@ -351,6 +355,7 @@ class LivingForumSeeder extends Seeder
                     'Someone whose work you saved started following your projects.',
                     "There is a new build update in “{$notificationPost->title}”.",
                 ][$userIndex % 4],
+            ], [
                 'link' => $notificationPost->type === 'question'
                     ? route('questions.show', $notificationPost->slug)
                     : route('project', $notificationPost->slug),
