@@ -3,9 +3,8 @@
     use Illuminate\Support\Str;
 
     $markdownPath = isset($path) ? base_path($path) : null;
-    $markdown = ($markdownPath && File::exists($markdownPath))
-        ? File::get($markdownPath)
-        : '# Document not found' . PHP_EOL . PHP_EOL . 'Please contact support.';
+    abort_unless($markdownPath && File::exists($markdownPath), 404);
+    $markdown = File::get($markdownPath);
     $html = Str::markdown($markdown, [
         'html_input' => 'strip',
         'allow_unsafe_links' => false,

@@ -1,4 +1,5 @@
 import { t } from '../core/i18n';
+import { rememberFocus, restoreFocus, trapModalFocus } from '../core/modal';
 
 type ModerationReasonConfig = {
     title?: string;
@@ -8,6 +9,7 @@ type ModerationReasonConfig = {
 
 let modalBound = false;
 let pendingResolve: ((value: string | null) => void) | null = null;
+let returnFocus: HTMLElement | null = null;
 
 const getElements = () => {
     const modal = document.querySelector<HTMLElement>('[data-moderation-modal]');
@@ -35,6 +37,9 @@ const resolveAndClose = (value: string | null) => {
         return;
     }
     elements.modal.hidden = true;
+    document.body.classList.remove('is-locked');
+    restoreFocus(returnFocus);
+    returnFocus = null;
     if (elements.error) {
         elements.error.hidden = true;
     }
@@ -77,6 +82,9 @@ const ensureBound = () => {
     });
 
     window.addEventListener('keydown', (event) => {
+        if (!modal.hidden) {
+            trapModalFocus(modal, event);
+        }
         if (event.key === 'Escape' && !modal.hidden) {
             closeModal();
         }
@@ -125,7 +133,9 @@ export const requestModerationReason = (config: ModerationReasonConfig = {}) => 
         const fallback = submit.dataset.defaultLabel ?? submit.textContent ?? '';
         submit.textContent = config.submitLabel ?? fallback;
     }
+    returnFocus = rememberFocus();
     modal.hidden = false;
+    document.body.classList.add('is-locked');
     requestAnimationFrame(() => {
         textarea.focus();
     });

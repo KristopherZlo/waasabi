@@ -21,6 +21,8 @@ export const setupFeedFilters = () => {
     const tags = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-feed-tag]'));
     const emptyState = document.querySelector<HTMLElement>('[data-feed-empty]');
     const loader = document.querySelector<HTMLElement>('[data-feed-loader]');
+    const resetButton = document.querySelector<HTMLButtonElement>('[data-feed-reset]');
+    const status = document.querySelector<HTMLElement>('[data-feed-status]');
     if (!filters.length) {
         if (feedFiltersUpdatedHandler) {
             document.removeEventListener('feed:updated', feedFiltersUpdatedHandler);
@@ -111,7 +113,7 @@ export const setupFeedFilters = () => {
             let show = true;
 
             if (activeTags.length) {
-                show = show && activeTags.every((tag) => hasTagMatch(cardTags, tag));
+                show = activeTags.every((tag) => hasTagMatch(cardTags, tag));
             }
             if (excludedTags.length) {
                 show = show && !excludedTags.some((tag) => hasTagMatch(cardTags, tag));
@@ -126,6 +128,9 @@ export const setupFeedFilters = () => {
 
         if (emptyState) {
             emptyState.hidden = visibleCount > 0 || isLoading();
+        }
+        if (status) {
+            status.textContent = (status.dataset.resultLabel ?? ':count').replace(':count', String(visibleCount));
         }
     };
 
@@ -159,8 +164,18 @@ export const setupFeedFilters = () => {
 
     const setActiveFilter = (name: string) => {
         filters.forEach((btn) => {
-            btn.classList.toggle('is-active', btn.dataset.feedFilter === name);
+            const active = btn.dataset.feedFilter === name;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
+    };
+
+    const updateResetButton = () => {
+        if (!resetButton) {
+            return;
+        }
+        const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
+        resetButton.hidden = activeFilter === 'all' && getActiveTags().length === 0 && getExcludedTags().length === 0;
     };
 
     const setActiveFromUrl = () => {
@@ -176,22 +191,20 @@ export const setupFeedFilters = () => {
             .split(',')
             .map((tag) => slugify(tag))
             .filter(Boolean);
-        const filteredTags = urlTags.filter((tag) => !urlExcluded.includes(tag));
-
-        filters.forEach((btn) => {
-            btn.classList.toggle('is-active', btn.dataset.feedFilter === filterName);
-        });
+        const activeTags = urlTags.filter((tag) => !urlExcluded.includes(tag));
+        setActiveFilter(filterName);
 
         tags.forEach((btn) => {
             const tagName = slugify(btn.dataset.feedTag ?? '');
-            btn.classList.toggle('is-active', filteredTags.includes(tagName));
-            btn.classList.toggle('is-excluded', urlExcluded.includes(tagName));
-            if (btn.classList.contains('is-excluded')) {
-                btn.classList.remove('is-active');
-            }
+            const active = activeTags.includes(tagName);
+            const excluded = urlExcluded.includes(tagName);
+            btn.classList.toggle('is-active', active);
+            btn.classList.toggle('is-excluded', excluded);
+            btn.setAttribute('aria-pressed', active ? 'true' : excluded ? 'mixed' : 'false');
         });
 
-        applyTagFilter(filteredTags, urlExcluded);
+        applyTagFilter(activeTags, urlExcluded);
+        updateResetButton();
     };
 
     filters.forEach((filter) => {
@@ -217,6 +230,7 @@ export const setupFeedFilters = () => {
             } else {
                 url.searchParams.delete('exclude');
             }
+            updateResetButton();
             void navigateTo(url.toString());
         });
     });
@@ -227,29 +241,35 @@ export const setupFeedFilters = () => {
         }
         tag.dataset.feedTagBound = '1';
         tag.addEventListener('click', () => {
-            tag.classList.toggle('is-active');
-            if (tag.classList.contains('is-active')) {
-                tag.classList.remove('is-excluded');
-            }
+            const wasActive = tag.classList.contains('is-active');
+            const wasExcluded = tag.classList.contains('is-excluded');
+            tag.classList.toggle('is-active', !wasActive && !wasExcluded);
+            tag.classList.toggle('is-excluded', wasActive);
+            tag.setAttribute('aria-pressed', wasActive ? 'mixed' : wasExcluded ? 'false' : 'true');
             const activeTags = getActiveTags();
             const excludedTags = getExcludedTags();
             const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
             applyTagFilter(activeTags, excludedTags);
             updateUrl(activeFilter, activeTags, excludedTags);
-        });
-        tag.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            tag.classList.toggle('is-excluded');
-            if (tag.classList.contains('is-excluded')) {
-                tag.classList.remove('is-active');
-            }
-            const activeTags = getActiveTags();
-            const excludedTags = getExcludedTags();
-            const activeFilter = filters.find((btn) => btn.classList.contains('is-active'))?.dataset.feedFilter ?? 'all';
-            applyTagFilter(activeTags, excludedTags);
-            updateUrl(activeFilter, activeTags, excludedTags);
+            updateResetButton();
+            void navigateTo(window.location.href);
         });
     });
+
+    if (resetButton && resetButton.dataset.feedResetBound !== '1') {
+        resetButton.dataset.feedResetBound = '1';
+        resetButton.addEventListener('click', () => {
+            setActiveFilter('all');
+            tags.forEach((tag) => {
+                tag.classList.remove('is-active', 'is-excluded');
+                tag.setAttribute('aria-pressed', 'false');
+            });
+            applyTagFilter([], []);
+            updateUrl('all', [], []);
+            updateResetButton();
+            void navigateTo(window.location.href);
+        });
+    }
 
     setActiveFromUrl();
 
@@ -260,6 +280,7 @@ export const setupFeedFilters = () => {
         const activeTags = getActiveTags();
         const excludedTags = getExcludedTags();
         applyTagFilter(activeTags, excludedTags);
+        updateResetButton();
     };
     document.addEventListener('feed:updated', feedFiltersUpdatedHandler);
 };
@@ -268,6 +289,7 @@ export const setupFeedTabs = () => {
     const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-feed-tab]'));
     const emptyState = document.querySelector<HTMLElement>('[data-feed-empty]');
     const loader = document.querySelector<HTMLElement>('[data-feed-loader]');
+    const status = document.querySelector<HTMLElement>('[data-feed-status]');
     if (!tabs.length) {
         if (feedTabsUpdatedHandler) {
             document.removeEventListener('feed:updated', feedTabsUpdatedHandler);
@@ -279,7 +301,6 @@ export const setupFeedTabs = () => {
     const typesByTab: Record<string, string[]> = {
         projects: ['projects', 'qa'],
         questions: ['questions'],
-        collaboration: [],
     };
 
     const getItems = () => Array.from(document.querySelectorAll<HTMLElement>('[data-feed-type]'));
@@ -293,7 +314,9 @@ export const setupFeedTabs = () => {
         const tab = typesByTab[name] ? name : 'projects';
         const allowed = typesByTab[tab] ?? ['projects'];
         tabs.forEach((btn) => {
-            btn.classList.toggle('is-active', btn.dataset.feedTab === tab);
+            const active = btn.dataset.feedTab === tab;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
 
         let visibleCount = 0;
@@ -309,10 +332,14 @@ export const setupFeedTabs = () => {
         if (emptyState) {
             emptyState.hidden = visibleCount > 0 || isLoading();
         }
+        if (status) {
+            status.textContent = (status.dataset.resultLabel ?? ':count').replace(':count', String(visibleCount));
+        }
 
         const url = new URL(window.location.href);
         url.searchParams.set('stream', tab);
         window.history.replaceState({}, '', url.toString());
+
     };
 
     const url = new URL(window.location.href);
@@ -643,6 +670,13 @@ export const setupInfiniteFeed = () => {
         url.searchParams.set('offset', String(state.offset));
         url.searchParams.set('limit', String(pageSize));
         url.searchParams.set('filter', getActiveFilter());
+        const pageUrl = new URL(window.location.href);
+        for (const key of ['tags', 'exclude']) {
+            const value = pageUrl.searchParams.get(key);
+            if (value) {
+                url.searchParams.set(key, value);
+            }
+        }
         try {
             const response = await fetch(url.toString(), {
                 headers: {
@@ -683,7 +717,7 @@ export const setupInfiniteFeed = () => {
         void fetchItems(stream);
     };
 
-    if ('IntersectionObserver' in window) {
+    if (typeof IntersectionObserver !== 'undefined') {
         sentinelObserver = new IntersectionObserver(
             (entries) => {
                 const [entry] = entries;

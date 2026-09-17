@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('title', __('ui.auth.verify_title'))
+@section('robots', 'noindex, nofollow')
 @section('page', 'verify-email')
 
 @section('content')
@@ -22,13 +23,13 @@
                 @csrf
                 <div class="honeypot-field" aria-hidden="true">
                     <label>
-                        <span>Website</span>
+                        <span>{{ __('ui.auth.website') }}</span>
                         <input type="text" name="contact_time" tabindex="-1" autocomplete="off">
                     </label>
                 </div>
-                @if (config('waasabi.captcha.enabled') && config('waasabi.captcha.actions.verification') && config('waasabi.captcha.site_key'))
+                @if (config('hub.captcha.enabled') && config('hub.captcha.actions.verification') && config('hub.captcha.site_key'))
                     <div class="captcha-field">
-                        <div class="cf-turnstile" data-sitekey="{{ config('waasabi.captcha.site_key') }}"></div>
+                        <div class="cf-turnstile" data-sitekey="{{ config('hub.captcha.site_key') }}"></div>
                     </div>
                     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
                 @endif

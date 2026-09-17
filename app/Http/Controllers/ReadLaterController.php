@@ -8,18 +8,18 @@ use App\Services\UserPayloadService;
 use App\Services\VisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 
 class ReadLaterController extends Controller
 {
-    public function index(Request $request, VisibilityService $visibility, UserPayloadService $payload): \Illuminate\View\View
+    public function index(Request $request, VisibilityService $visibility, UserPayloadService $payload): View
     {
         $user = $request->user();
         $savedItems = [];
 
-        if ($user && safeHasTable('post_saves') && safeHasTable('posts')) {
+        if ($user) {
             $savedIds = DB::table('post_saves')
                 ->where('user_id', $user->id)
                 ->pluck('post_id')
@@ -40,6 +40,7 @@ class ReadLaterController extends Controller
                             'data' => FeedService::mapPostToQuestionWithStats($post, $stats),
                         ];
                     }
+
                     return [
                         'type' => 'project',
                         'data' => FeedService::mapPostToProjectWithStats($post, $stats),
@@ -55,42 +56,40 @@ class ReadLaterController extends Controller
         ]);
     }
 
-    public function list(Request $request): JsonResponse
+    public function list(Request $request, VisibilityService $visibility): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['items' => []], 401);
         }
-        if (!safeHasTable('post_saves') || !safeHasTable('posts')) {
-            return response()->json(['items' => []], 503);
-        }
-
-        $items = DB::table('post_saves')
-            ->join('posts', 'posts.id', '=', 'post_saves.post_id')
-            ->where('post_saves.user_id', $user->id)
+        $rowsQuery = Post::query()
+            ->join('post_saves', 'posts.id', '=', 'post_saves.post_id')
+            ->where('post_saves.user_id', $user->id);
+        $visibility->applyToQuery($rowsQuery, 'posts', $user);
+        $rows = $rowsQuery
             ->orderByDesc('post_saves.created_at')
             ->limit(200)
-            ->pluck('posts.slug')
-            ->filter()
-            ->values()
-            ->all();
+            ->get(['posts.slug', 'posts.title', 'posts.type']);
+        $items = $rows->pluck('slug')->filter()->values()->all();
+        $entries = $rows->map(fn (object $row) => [
+            'slug' => $row->slug,
+            'title' => $row->title,
+            'type' => $row->type === 'question' ? 'question' : 'post',
+            'url' => $row->type === 'question' ? route('questions.show', $row->slug) : route('project', $row->slug),
+        ])->all();
 
-        return response()->json(['items' => $items]);
+        return response()->json(['items' => $items, 'entries' => $entries]);
     }
 
     public function sync(Request $request, VisibilityService $visibility): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['items' => []], 401);
         }
-        if (!safeHasTable('post_saves') || !safeHasTable('posts')) {
-            return response()->json(['items' => []], 503);
-        }
-
         $rawItems = $request->input('items', []);
-        if (!is_array($rawItems)) {
-            return response()->json(['message' => 'Invalid payload'], 422);
+        if (! is_array($rawItems)) {
+            return response()->json(['message' => __('ui.errors.invalid_payload')], 422);
         }
 
         $slugs = collect($rawItems)
@@ -150,13 +149,9 @@ class ReadLaterController extends Controller
     public function render(Request $request, VisibilityService $visibility): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['items' => [], 'slugs' => []], 401);
         }
-        if (!safeHasTable('post_saves') || !safeHasTable('posts')) {
-            return response()->json(['items' => [], 'slugs' => []], 503);
-        }
-
         $savedPostsQuery = Post::with(['user', 'editedBy'])
             ->join('post_saves', 'post_saves.post_id', '=', 'posts.id')
             ->where('post_saves.user_id', $user->id)
@@ -172,10 +167,16 @@ class ReadLaterController extends Controller
             ->map(static function (Post $post) use ($stats) {
                 if ($post->type === 'question') {
                     $question = FeedService::mapPostToQuestionWithStats($post, $stats);
-                    return view('partials.question-card', ['question' => $question])->render();
+
+                    return view('partials.read-later-item', [
+                        'item' => ['type' => 'question', 'data' => $question],
+                    ])->render();
                 }
                 $project = FeedService::mapPostToProjectWithStats($post, $stats);
-                return view('partials.project-card', ['project' => $project])->render();
+
+                return view('partials.read-later-item', [
+                    'item' => ['type' => 'project', 'data' => $project],
+                ])->render();
             })
             ->values()
             ->all();

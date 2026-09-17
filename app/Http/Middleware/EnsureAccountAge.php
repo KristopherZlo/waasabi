@@ -11,7 +11,7 @@ class EnsureAccountAge
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next, ?int $minutes = null): Response
     {
@@ -20,20 +20,20 @@ class EnsureAccountAge
         }
 
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return $next($request);
         }
 
         $minAge = $minutes !== null
             ? max(0, (int) $minutes)
-            : max(0, (int) config('waasabi.security.min_account_age_minutes', 0));
+            : max(0, (int) config('hub.security.min_account_age_minutes', 0));
 
         if ($minAge <= 0) {
             return $next($request);
         }
 
         $createdAt = $user->created_at;
-        if (!$createdAt) {
+        if (! $createdAt) {
             return $next($request);
         }
 

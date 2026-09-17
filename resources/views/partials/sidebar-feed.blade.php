@@ -1,9 +1,16 @@
 @php
-    $topProjects = $top_projects ?? [];
-    $readingNow = $reading_now ?? [];
-    $subscriptionsList = $subscriptions ?? [];
+    $sidebarData = isset($top_projects, $reading_now, $subscriptions)
+        ? []
+        : app(\App\Services\FeedViewService::class)->buildSidebarData(Auth::user());
+    $topProjects = $top_projects ?? $sidebarData['top_projects'] ?? [];
+    $readingNow = $reading_now ?? $sidebarData['reading_now'] ?? [];
+    $subscriptionsList = $subscriptions ?? $sidebarData['subscriptions'] ?? [];
 @endphp
 
+<div class="sidebar-card community-invite">
+    <a href="{{ route('people') }}"><i data-lucide="users" class="icon"></i> {{ __('waasabi.people') }} →</a>
+    <p>{{ __('waasabi.apply_hint') }}</p>
+</div>
 <div class="sidebar-card">
     <div class="sidebar-title">{{ __('ui.sidebar.top_projects') }}</div>
     <div class="sidebar-list">
@@ -24,7 +31,10 @@
         @forelse ($readingNow as $entry)
             <a class="sidebar-item" href="{{ route('project', $entry['slug']) }}">
                 <span>{{ $entry['title'] }}</span>
-                <span>{{ __('ui.sidebar.readers_count', ['count' => $entry['readers'] ?? 0]) }}</span>
+                <span class="sidebar-item__reading" aria-label="{{ __('ui.sidebar.readers_count', ['count' => $entry['readers'] ?? 0]) }}">
+                    <i data-lucide="book-open" class="icon" aria-hidden="true"></i>
+                    <span>{{ $entry['readers'] ?? 0 }}</span>
+                </span>
             </a>
         @empty
             <div class="sidebar-item muted">{{ __('ui.sidebar.reading_empty') }}</div>

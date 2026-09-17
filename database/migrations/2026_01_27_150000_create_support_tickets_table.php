@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('support_tickets')) {
+        if (! Schema::hasTable('support_tickets')) {
             Schema::create('support_tickets', function (Blueprint $table): void {
                 $table->id();
                 $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
@@ -32,4 +32,3 @@ return new class extends Migration
         Schema::dropIfExists('support_tickets');
     }
 };
-

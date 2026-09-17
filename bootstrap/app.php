@@ -1,5 +1,11 @@
 <?php
 
+use App\Http\Middleware\EnsureAccountAge;
+use App\Http\Middleware\EnsureNotBanned;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SetLocale;
+use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,12 +18,13 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->appendToGroup('web', 'throttle:web');
-        $middleware->appendToGroup('web', \App\Http\Middleware\SecurityHeaders::class);
-        $middleware->appendToGroup('web', \App\Http\Middleware\SetLocale::class);
-        $middleware->appendToGroup('web', \App\Http\Middleware\EnsureNotBanned::class);
+        $middleware->appendToGroup('web', SecurityHeaders::class);
+        $middleware->appendToGroup('web', SetLocale::class);
+        $middleware->appendToGroup('web', EnsureNotBanned::class);
+        $middleware->appendToGroup('web', HandleInertiaRequests::class);
         $middleware->alias([
-            'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
-            'account.age' => \App\Http\Middleware\EnsureAccountAge::class,
+            'verified' => EnsureEmailIsVerified::class,
+            'account.age' => EnsureAccountAge::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

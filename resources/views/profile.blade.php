@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
-@section('title', __('ui.profile.title'))
+@section('title', $profile_user['name'] ?? __('ui.profile.title'))
+@section('description', \Illuminate\Support\Str::limit(strip_tags($profile_user['bio'] ?? __('ui.app.description')), 155))
 @section('page', 'profile')
 
 @section('content')
@@ -32,9 +33,7 @@
         $canManageBadges = $viewer?->isAdmin() ?? false;
         $canModerateUser = $viewer?->hasRole('moderator') ?? false;
         $canChangeAvatar = $is_owner && !$isBanned && Auth::check();
-        $canChangeBanner = $canChangeAvatar && function_exists('safeHasColumn')
-            ? safeHasColumn('users', 'banner_url')
-            : false;
+        $canChangeBanner = $canChangeAvatar;
     @endphp
     <section class="hero">
         <div class="profile-banner-wrap">
@@ -81,7 +80,7 @@
                         @endif
                     @else
                         @if (!$is_owner)
-                            <button type="button" class="action-menu__item action-menu__item--danger" data-report-open data-report-type="content" data-report-id="{{ $profile_user['id'] ?? '' }}" data-report-url="{{ url()->current() }}">
+                            <button type="button" class="action-menu__item action-menu__item--danger" data-report-open data-report-type="profile" data-report-id="{{ $profile_user['id'] ?? '' }}" data-report-url="{{ url()->current() }}">
                                 <i data-lucide="flag" class="icon"></i>
                                 <span>{{ __('ui.report.title') }}</span>
                             </button>
@@ -151,6 +150,9 @@
         @if (!empty($profile_user['bio']))
             <p>{{ $profile_user['bio'] }}</p>
         @endif
+        @if (!empty($profile_user['skills']))<p>{{ $profile_user['skills'] }}</p>@endif
+        @if (!empty($profile_user['open_to_help']))<p class="availability-note">{{ __('waasabi.available') }}</p>@endif
+        @if (!empty($profile_user['portfolio_url']))<a href="{{ $profile_user['portfolio_url'] }}" target="_blank" rel="noopener noreferrer">{{ __('waasabi.view_portfolio') }} ↗</a>@endif
         @if ($isBanned)
             <div class="profile-banned">{{ __('ui.profile.banned_notice') }}</div>
         @endif
@@ -159,9 +161,6 @@
                 <span class="badge badge--banned">{{ __('ui.admin.banned') }}</span>
             @endif
             <span class="badge badge--{{ $roleKey }}">{{ __('ui.roles.' . $roleKey) }}</span>
-            @if (!empty($profile_user['id']))
-                <span class="chip chip--comment">{{ __('ui.profile.id_label') }} {{ $profile_user['id'] }}</span>
-            @endif
             @if ($canShowCounts)
                 <span class="chip chip--comment">{{ __('ui.profile.followers') }}: <span data-followers-count>{{ $followers_count }}</span></span>
                 <span class="chip chip--comment">{{ __('ui.profile.following') }}: <span data-following-count>{{ $following_count }}</span></span>
@@ -185,142 +184,73 @@
         </div>
     </section>
 
-    @if ($canChangeAvatar || $canChangeBanner)
-        <div class="report-modal profile-media-modal" data-profile-media-modal hidden>
-            <div class="report-card profile-media-card" data-profile-media-panel role="dialog" aria-modal="true" aria-label="{{ __('ui.profile.media_modal_title') }}">
-                <div class="report-header">
-                    <div class="report-title" data-profile-media-title>{{ __('ui.profile.media_modal_title') }}</div>
-                    <button class="icon-btn" type="button" aria-label="{{ __('ui.report.close') }}" data-profile-media-close>
-                        <i data-lucide="x" class="icon"></i>
-                    </button>
-                </div>
-                <div class="profile-media-info" data-profile-media-info></div>
-                <div class="profile-media-editor" data-profile-media-editor hidden>
-                    <div class="profile-media-editor__frame" data-profile-media-frame>
-                        <img class="profile-media-editor__image" data-profile-media-image alt="">
-                    </div>
-                    <label class="profile-media-editor__zoom">
-                        <span>{{ __('ui.profile.media_zoom') }}</span>
-                        <input class="input" type="range" min="1" max="3" step="0.01" value="1" data-profile-media-zoom>
-                        <span class="profile-media-editor__zoom-value" data-profile-media-zoom-value>100%</span>
-                    </label>
-                </div>
-                <div class="form-error" data-profile-media-error hidden></div>
-                <div class="profile-media-actions">
-                    <button type="button" class="ghost-btn ghost-btn--danger" data-profile-media-remove hidden>{{ __('ui.profile.media_remove') }}</button>
-                    <button type="button" class="ghost-btn" data-profile-media-choose>{{ __('ui.profile.media_choose') }}</button>
-                    <div class="profile-media-actions__spacer"></div>
-                    <button type="button" class="ghost-btn" data-profile-media-cancel>{{ __('ui.report.cancel') }}</button>
-                    <button type="button" class="submit-btn" data-profile-media-apply disabled>{{ __('ui.profile.media_apply') }}</button>
-                </div>
-                <div class="profile-media-loading" data-profile-media-loading hidden>
-                    <div class="profile-media-loading__spinner" aria-hidden="true"></div>
-                    <div class="profile-media-loading__text">{{ __('ui.profile.media_uploading') }}</div>
-                </div>
-            </div>
-        </div>
+    @if ($help_requests->isNotEmpty())
+        <section class="profile-contributions"><h2>{{ __('waasabi.help_requests') }}</h2>
+            @foreach ($help_requests as $helpRequest)
+                <a href="{{ route('collaboration.show', $helpRequest) }}">{{ $helpRequest->title }} <span class="helper">{{ __('ui.collaboration.status_'.($helpRequest->isOpen() ? 'open' : 'closed')) }}</span></a>
+            @endforeach
+        </section>
     @endif
-
-    @if (!empty($badges) || $canManageBadges)
-        <div class="badge-modal badge-modal--view" data-badge-view-modal hidden>
-            <div class="badge-view-card" data-badge-view-panel role="dialog" aria-modal="true" aria-label="{{ __('ui.badges.view_title') }}">
-                <button type="button" class="icon-btn badge-view-card__close" data-badge-view-close aria-label="{{ __('ui.report.close') }}">
-                    <i data-lucide="x" class="icon"></i>
-                </button>
-                <div class="badge-view-card__media">
-                    <div class="badge-view-card__glow" aria-hidden="true"></div>
-                    <div class="badge-view-card__burst" data-badge-view-burst aria-hidden="true"></div>
-                    <img class="badge-view-card__icon" data-badge-view-icon alt="">
-                </div>
-                <div class="badge-view-card__body">
-                    <div class="badge-view-card__title" data-badge-view-label></div>
-                    <div class="badge-view-card__desc" data-badge-view-description></div>
-                    <div class="badge-view-card__meta">
-                        <span class="badge-view-card__meta-label">{{ __('ui.badges.view_issued') }}</span>
-                        <span class="badge-view-card__meta-value" data-badge-view-issued>{{ __('ui.badges.view_issued_unknown') }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+    @if (($contributions ?? collect())->isNotEmpty())
+        <section class="profile-contributions"><h2>{{ __('waasabi.contributions') }}</h2>
+            @foreach ($contributions as $contribution)<a href="{{ route('project', $contribution->slug) }}">{{ $contribution->title }} <span class="helper">{{ $contribution->user->name }}</span></a>@endforeach
+        </section>
     @endif
+    @include('partials.profile-modals')
 
-    @if ($canManageBadges)
-        <script type="application/json" data-badge-catalog nonce="{{ $csp_nonce ?? '' }}">@json($badge_catalog ?? [])</script>
-        <script type="application/json" data-user-badges nonce="{{ $csp_nonce ?? '' }}">@json($badges)</script>
-
-        <div class="badge-modal" data-badge-modal hidden>
-            <div class="badge-card" data-badge-panel role="dialog" aria-modal="true" aria-label="{{ __('ui.badges.grant_title') }}">
-                <div class="badge-header">
-                    <div>
-                        <div class="badge-title">{{ __('ui.badges.grant_title') }}</div>
-                        <div class="badge-subtitle">{{ __('ui.badges.grant_subtitle') }}</div>
-                    </div>
-                    <button type="button" class="icon-btn" data-badge-close aria-label="{{ __('ui.report.close') }}">
-                        <i data-lucide="x" class="icon"></i>
-                    </button>
-                </div>
-                <div class="badge-grid" data-badge-grid></div>
-                <form class="badge-form" data-badge-form>
-                    <label>
-                        {{ __('ui.badges.custom_name') }}
-                        <input class="input" type="text" data-badge-name placeholder="{{ __('ui.badges.custom_name_placeholder') }}">
-                    </label>
-                    <label>
-                        {{ __('ui.badges.custom_description') }}
-                        <textarea class="input" rows="3" data-badge-description placeholder="{{ __('ui.badges.custom_description_placeholder') }}"></textarea>
-                    </label>
-                    <label>
-                        {{ __('ui.badges.reason') }}
-                        <input class="input" type="text" data-badge-reason placeholder="{{ __('ui.badges.reason_placeholder') }}">
-                    </label>
-                    <button type="submit" class="submit-btn" data-badge-submit>{{ __('ui.badges.grant_cta') }}</button>
-                </form>
-            </div>
+    <div class="profile-content">
+        <div class="tabs profile-tabs" data-tabs role="tablist" aria-label="{{ __('ui.profile.title') }}">
+            <button type="button" class="tab is-active" data-tab="projects" role="tab" aria-selected="true">
+                <i data-lucide="folder" class="icon" aria-hidden="true"></i>
+                <span>{{ __('ui.profile.projects') }}</span>
+                <span class="tab__count">{{ count($projects) }}</span>
+            </button>
+            <button type="button" class="tab" data-tab="questions" role="tab" aria-selected="false" tabindex="-1">
+                <i data-lucide="circle-help" class="icon" aria-hidden="true"></i>
+                <span>{{ __('ui.profile.questions') }}</span>
+                <span class="tab__count">{{ count($questions) }}</span>
+            </button>
+            <button type="button" class="tab" data-tab="comments" role="tab" aria-selected="false" tabindex="-1">
+                <i data-lucide="message-circle" class="icon" aria-hidden="true"></i>
+                <span>{{ __('ui.profile.comments') }}</span>
+                <span class="tab__count">{{ count($comments) }}</span>
+            </button>
         </div>
 
-        <div class="badge-modal" data-badge-revoke-modal hidden>
-            <div class="badge-card" data-badge-revoke-panel role="dialog" aria-modal="true" aria-label="{{ __('ui.badges.revoke_title') }}">
-                <div class="badge-header">
-                    <div>
-                        <div class="badge-title">{{ __('ui.badges.revoke_title') }}</div>
-                        <div class="badge-subtitle">{{ __('ui.badges.revoke_subtitle') }}</div>
-                    </div>
-                    <button type="button" class="icon-btn" data-badge-revoke-close aria-label="{{ __('ui.report.close') }}">
-                        <i data-lucide="x" class="icon"></i>
-                    </button>
-                </div>
-                <div class="badge-revoke-list" data-badge-revoke-list></div>
-                <div class="badge-revoke-empty" data-badge-revoke-empty hidden>{{ __('ui.badges.revoke_empty') }}</div>
-            </div>
-        </div>
-    @endif
-
-    <section class="section" style="margin-top: 24px;">
-        <div class="section-title">{{ __('ui.profile.projects') }}</div>
+    <section class="section profile-section tab-panel is-active" data-tab-panel="projects">
         <div class="list">
             @forelse ($projects as $project)
+                @if (($profile_user['featured_post_id'] ?? null) === $project['id'])<h2>{{ __('waasabi.featured') }}</h2>@endif
                 @include('partials.project-card', ['project' => $project])
             @empty
-                <div class="list-item">{{ __('ui.profile.no_posts') }}</div>
+                <div class="profile-empty">
+                    <p>{{ $is_owner ? __('ui.profile.no_posts_owner') : __('ui.profile.no_posts') }}</p>
+                    @if ($is_owner && !$isBanned)
+                        <a class="ghost-btn" href="{{ route('publish') }}">{{ __('ui.profile.publish_project') }}</a>
+                    @endif
+                </div>
             @endforelse
         </div>
     </section>
 
-    <section class="section" style="margin-top: 24px;">
-        <div class="section-title">{{ __('ui.profile.questions') }}</div>
+    <section class="section profile-section tab-panel" data-tab-panel="questions" hidden>
         <div class="list">
             @forelse ($questions as $question)
                 <div class="list-item">
                     <a href="{{ route('questions.show', $question['slug']) }}">{{ $question['title'] }}</a>
                 </div>
             @empty
-                <div class="list-item">{{ __('ui.profile.no_questions') }}</div>
+                <div class="profile-empty">
+                    <p>{{ $is_owner ? __('ui.profile.no_questions_owner') : __('ui.profile.no_questions') }}</p>
+                    @if ($is_owner && !$isBanned)
+                        <a class="ghost-btn" href="{{ route('publish') }}">{{ __('ui.profile.ask_question') }}</a>
+                    @endif
+                </div>
             @endforelse
         </div>
     </section>
 
-    <section class="section" style="margin-top: 24px;">
-        <div class="section-title">{{ __('ui.profile.comments') }}</div>
+    <section class="section profile-section tab-panel" data-tab-panel="comments" hidden>
         <div class="list">
             @forelse ($comments as $comment)
                 <div class="list-item">
@@ -356,8 +286,11 @@
                     <p class="comment-body">{{ $comment['body'] }}</p>
                 </div>
             @empty
-                <div class="list-item">{{ __('ui.profile.no_comments') }}</div>
+                <div class="profile-empty">
+                    <p>{{ __('ui.profile.no_comments') }}</p>
+                </div>
             @endforelse
         </div>
     </section>
+    </div>
 @endsection

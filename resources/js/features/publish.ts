@@ -1,4 +1,4 @@
-import { clearPublishDraft, getPublishDraft, updatePublishDraft } from '../core/storage';
+import { recoverPublishDraft, updatePublishDraft } from '../core/storage';
 
 export const setupPublishForm = () => {
     const form = document.querySelector<HTMLFormElement>('[data-publish-form]');
@@ -17,7 +17,7 @@ export const setupPublishForm = () => {
     );
     const submitButton = form.querySelector<HTMLButtonElement>('[data-publish-submit]');
     const publishLoader = form.querySelector<HTMLElement>('[data-publish-loader]');
-    const typeTabs = Array.from(form.querySelectorAll<HTMLButtonElement>('[data-publish-type-tab]'));
+    const typeTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-publish-type-tab]'));
     const typeInput = form.querySelector<HTMLInputElement>('[data-publish-type-input]');
     const publishLabels = Array.from(form.querySelectorAll<HTMLElement>('[data-publish-label]'));
     const publishHelpers = Array.from(form.querySelectorAll<HTMLElement>('[data-publish-helper]'));
@@ -84,7 +84,7 @@ export const setupPublishForm = () => {
     };
 
     const restoreDraft = () => {
-        const draft = isEditing ? null : getPublishDraft();
+        const draft = recoverPublishDraft(form);
         if (!draft?.fields) {
             return;
         }
@@ -94,25 +94,28 @@ export const setupPublishForm = () => {
                 return;
             }
             const value = draft.fields[key];
-            if (typeof value === 'string' && value.length) {
+            if (typeof value === 'string') {
                 field.value = value;
             }
         });
     };
 
+    const saveDraft = () => {
+        if (!form.isConnected) return;
+        const fields: Record<string, string> = {};
+        draftFields.forEach((field) => {
+            const key = field.dataset.draftField ?? '';
+            if (key) {
+                fields[key] = field.value;
+            }
+        });
+        updatePublishDraft({ fields });
+    };
     const scheduleDraftSave = () => {
         window.clearTimeout(draftTimer);
-        draftTimer = window.setTimeout(() => {
-            const fields: Record<string, string> = {};
-            draftFields.forEach((field) => {
-                const key = field.dataset.draftField ?? '';
-                if (key) {
-                    fields[key] = field.value;
-                }
-            });
-            updatePublishDraft({ fields });
-        }, 600);
+        draftTimer = window.setTimeout(saveDraft, 600);
     };
+    window.addEventListener('pagehide', saveDraft, { once: true });
 
     requiredFields.forEach((field) => {
         field.addEventListener('input', evaluate);
@@ -124,7 +127,9 @@ export const setupPublishForm = () => {
     });
 
     form.addEventListener('submit', () => {
-        clearPublishDraft();
+        // Keep recovery data until the server confirms a successful save.
+        window.clearTimeout(draftTimer);
+        saveDraft();
         if (submitButton) {
             submitButton.disabled = true;
             submitButton.setAttribute('aria-disabled', 'true');

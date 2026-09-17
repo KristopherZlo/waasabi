@@ -1,6 +1,7 @@
 import { appUrl, csrfToken } from '../core/config';
 import { applyScribbleAvatar } from '../core/media';
 import { t } from '../core/i18n';
+import { focusModal, rememberFocus, restoreFocus, trapModalFocus } from '../core/modal';
 import { toast } from '../core/toast';
 import { setupProfileBanner } from '../ui/profile-banner';
 
@@ -143,6 +144,7 @@ export const setupProfileMedia = () => {
         applyBtn &&
         closeBtn &&
         loadingEl;
+    let returnFocus: HTMLElement | null = null;
 
     const updateBanner = (url: string) => {
         banner.dataset.profileBannerImage = url;
@@ -501,6 +503,7 @@ export const setupProfileMedia = () => {
     };
 
     const openModal = (action: ProfileMediaAction) => {
+        returnFocus = rememberFocus();
         activeAction = action;
         activeConfig = mediaConfigs[action];
         activeInput = action === 'banner' ? bannerInput : avatarInput;
@@ -512,6 +515,8 @@ export const setupProfileMedia = () => {
         frameEl.style.setProperty('--media-aspect', `${activeConfig.targetWidth} / ${activeConfig.targetHeight}`);
         removeBtn.hidden = action === 'banner' ? !Boolean((banner.dataset.profileBannerImage ?? '').trim()) : !isCustomAvatar();
         modal.hidden = false;
+        document.body.classList.add('is-locked');
+        focusModal(modal, closeBtn);
         requestAnimationFrame(measureFrame);
     };
 
@@ -519,11 +524,14 @@ export const setupProfileMedia = () => {
         resetEditor();
         setLoading(false);
         modal.hidden = true;
+        document.body.classList.remove('is-locked');
         delete modal.dataset.profileMediaAction;
         removeBtn.hidden = true;
         activeAction = null;
         activeConfig = null;
         activeInput = null;
+        restoreFocus(returnFocus);
+        returnFocus = null;
     };
 
     const validateFile = (file: File, config: ProfileMediaConfig) => {
@@ -778,6 +786,9 @@ export const setupProfileMedia = () => {
     });
 
     document.addEventListener('keydown', (event) => {
+        if (!modal.hidden) {
+            trapModalFocus(modal, event);
+        }
         if (event.key === 'Escape' && !modal.hidden) {
             closeModal();
         }

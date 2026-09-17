@@ -13,35 +13,44 @@ class BadgeCatalogService
         }
 
         $path = resource_path('data/badges.json');
-        if (!is_file($path)) {
+        if (! is_file($path)) {
             $this->cache = [];
+
             return [];
         }
 
         $raw = json_decode((string) file_get_contents($path), true);
-        if (!is_array($raw)) {
+        if (! is_array($raw)) {
             $this->cache = [];
+
             return [];
         }
 
         $items = [];
         foreach ($raw as $entry) {
-            if (!is_array($entry)) {
+            if (! is_array($entry)) {
                 continue;
             }
             $key = trim((string) ($entry['key'] ?? ''));
             if ($key === '') {
                 continue;
             }
+            $nameKey = 'ui.badges.catalog.'.$key.'.name';
+            $descriptionKey = 'ui.badges.catalog.'.$key.'.description';
+            $name = __($nameKey);
+            $description = __($descriptionKey);
             $items[] = [
                 'key' => $key,
-                'name' => trim((string) ($entry['name'] ?? '')),
-                'description' => trim((string) ($entry['description'] ?? '')),
+                'name' => $name === $nameKey ? trim((string) ($entry['name'] ?? '')) : $name,
+                'description' => $description === $descriptionKey
+                    ? trim((string) ($entry['description'] ?? ''))
+                    : $description,
                 'icon' => trim((string) ($entry['icon'] ?? '')),
             ];
         }
 
         $this->cache = $items;
+
         return $items;
     }
 

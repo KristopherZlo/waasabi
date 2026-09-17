@@ -53,7 +53,7 @@ class RolePromotionTest extends TestCase
             'type' => 'post',
         ]);
 
-        $this->actingAs($voter)->postJson('/posts/' . $post->slug . '/upvote')->assertOk();
+        $this->actingAs($voter)->postJson('/posts/'.$post->slug.'/upvote')->assertOk();
 
         $author->refresh();
         $this->assertSame('maker', $author->roleKey());

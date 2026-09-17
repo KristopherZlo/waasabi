@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\SupportTicket>
+ * @extends Factory<SupportTicket>
  */
 class SupportTicketFactory extends Factory
 {

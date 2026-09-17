@@ -4,17 +4,62 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\ContentModerationService;
 use App\Services\ScribbleAvatar;
-use Illuminate\Foundation\Inspiring;
+use App\Services\UploadAssetService;
+use App\Services\UserSlugService;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schedule;
+use Symfony\Component\Console\Command\Command;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+Artisan::command('admin:create {email} {--name=Administrator} {--password=}', function (string $email) {
+    $email = strtolower(trim($email));
+    $name = trim((string) $this->option('name')) ?: 'Administrator';
+    $password = (string) $this->option('password');
+    if ($password === '') {
+        $password = (string) $this->secret('Password (12+ characters)');
+    }
+    if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $this->error('A valid email address is required.');
+
+        return Command::FAILURE;
+    }
+    if (strlen($password) < 12) {
+        $this->error('Password must contain at least 12 characters.');
+
+        return Command::FAILURE;
+    }
+
+    $user = User::firstOrNew(['email' => $email]);
+    $user->name = $name;
+    $user->slug ??= app(UserSlugService::class)->generate($name);
+    $user->password = Hash::make($password);
+    $user->role = 'admin';
+    $user->email_verified_at ??= now();
+    $user->save();
+
+    $this->info("Administrator {$user->email} is ready.");
+
+    return Command::SUCCESS;
+})->purpose('Create or promote an administrator explicitly');
+
+Artisan::command('uploads:prune {--hours=24}', function (UploadAssetService $assets) {
+    $count = $assets->pruneUnattached(max(1, (int) $this->option('hours')));
+    $this->info("Deleted {$count} abandoned uploads.");
+})->purpose('Delete editor uploads that were never attached to a project');
+
+Schedule::command('uploads:prune')->daily();
+Schedule::call(
+    fn () => Cache::put('system:scheduler-heartbeat', now()->toIso8601String(), now()->addMinutes(10)),
+)->everyMinute()->name('system:heartbeat');
+Schedule::call(
+    fn () => DB::table('reading_activity')->where('updated_at', '<', now()->subDays(30))->delete(),
+)->daily()->name('reading-activity:prune');
 
 Artisan::command('avatars:regenerate', function () {
     $outputDir = public_path('avatars');
-    if (!is_dir($outputDir)) {
+    if (! is_dir($outputDir)) {
         mkdir($outputDir, 0755, true);
     }
 
@@ -22,14 +67,14 @@ Artisan::command('avatars:regenerate', function () {
     foreach (User::query()->get() as $user) {
         $name = $user->name ?? 'user';
         $svg = ScribbleAvatar::createSvgFromName($name);
-        $filename = 'avatar-' . $user->id . '.svg';
-        file_put_contents($outputDir . DIRECTORY_SEPARATOR . $filename, $svg);
-        $user->avatar = '/avatars/' . $filename;
+        $filename = 'avatar-'.$user->id.'.svg';
+        file_put_contents($outputDir.DIRECTORY_SEPARATOR.$filename, $svg);
+        $user->avatar = '/avatars/'.$filename;
         $user->save();
         $count++;
     }
 
-    $this->info('Regenerated ' . $count . ' avatars.');
+    $this->info('Regenerated '.$count.' avatars.');
 })->purpose('Regenerate scribble avatars for all users');
 
 Artisan::command('moderation:scan {path}', function (string $path) {
@@ -41,7 +86,7 @@ Artisan::command('moderation:scan {path}', function (string $path) {
     $candidates[] = public_path($path);
     if (str_starts_with($trimmedPath, 'storage/')) {
         $relative = substr($trimmedPath, strlen('storage/'));
-        $candidates[] = storage_path('app/public/' . $relative);
+        $candidates[] = storage_path('app/public/'.$relative);
     }
 
     $resolved = null;
@@ -52,8 +97,9 @@ Artisan::command('moderation:scan {path}', function (string $path) {
         }
     }
 
-    if (!$resolved) {
-        $this->error('Image not found: ' . $path);
+    if (! $resolved) {
+        $this->error('Image not found: '.$path);
+
         return;
     }
 
@@ -61,14 +107,15 @@ Artisan::command('moderation:scan {path}', function (string $path) {
     $result = $service->scanImageForSexualContent($resolved);
 
     $this->info('Moderation scan result:');
-    $this->line('status: ' . ($result['status'] ?? 'unknown'));
-    $this->line('flagged: ' . ((bool) ($result['flagged'] ?? false) ? 'yes' : 'no'));
-    if (!empty($result['reason'])) {
-        $this->line('reason: ' . $result['reason']);
+    $this->line('status: '.($result['status'] ?? 'unknown'));
+    $this->line('flagged: '.((bool) ($result['flagged'] ?? false) ? 'yes' : 'no'));
+    if (! empty($result['reason'])) {
+        $this->line('reason: '.$result['reason']);
     }
     $labels = $result['labels'] ?? [];
     if (empty($labels)) {
         $this->line('labels: none');
+
         return;
     }
 
@@ -79,12 +126,12 @@ Artisan::command('moderation:scan {path}', function (string $path) {
         $confidence = $label['confidence'] ?? null;
         $text = $name !== '' ? $name : $parent;
         if ($parent !== '' && $parent !== $name) {
-            $text = $parent . ' / ' . $name;
+            $text = $parent.' / '.$name;
         }
         if (is_numeric($confidence)) {
-            $text .= ' (' . number_format((float) $confidence, 1) . '%)';
+            $text .= ' ('.number_format((float) $confidence, 1).'%)';
         }
-        $this->line('- ' . $text);
+        $this->line('- '.$text);
     }
 })->purpose('Scan a local image with Rekognition moderation labels');
 
@@ -96,31 +143,27 @@ Artisan::command('notifications:test {account} {type} {text} {--link=}', functio
 
     if ($account === '') {
         $this->error('Account identifier is required.');
+
         return;
     }
     if ($type === '') {
         $this->error('Notification type is required.');
+
         return;
     }
     if (strlen($type) > 60) {
         $this->error('Notification type must be 60 characters or less.');
+
         return;
     }
     if ($text === '') {
         $this->error('Notification text is required.');
+
         return;
     }
     if ($link !== '' && strlen($link) > 255) {
         $this->error('Link must be 255 characters or less.');
-        return;
-    }
 
-    if (!Schema::hasTable('users')) {
-        $this->error('Users table is unavailable.');
-        return;
-    }
-    if (!Schema::hasTable('user_notifications')) {
-        $this->error('Notifications table is unavailable.');
         return;
     }
 
@@ -134,33 +177,33 @@ Artisan::command('notifications:test {account} {type} {text} {--link=}', functio
         $user = User::query()->where('slug', $slug)->first();
     }
 
-    if (!$user) {
-        $this->error('User not found for account: ' . $account);
+    if (! $user) {
+        $this->error('User not found for account: '.$account);
+
         return;
     }
 
     $notification = $user->sendNotification($type, $text, $link !== '' ? $link : null);
-    if (!$notification) {
+    if (! $notification) {
         $this->error('Notification was not created.');
+
         return;
     }
 
-    if (Schema::hasTable('audit_logs')) {
-        AuditLog::create([
-            'user_id' => null,
-            'event' => 'cli.notification.test',
-            'target_type' => 'user',
-            'target_id' => (string) $user->id,
-            'ip_address' => null,
-            'user_agent' => null,
-            'meta' => [
-                'account' => $account,
-                'type' => $type,
-                'text' => $text,
-                'link' => $link !== '' ? $link : null,
-            ],
-        ]);
-    }
+    AuditLog::create([
+        'user_id' => null,
+        'event' => 'cli.notification.test',
+        'target_type' => 'user',
+        'target_id' => (string) $user->id,
+        'ip_address' => null,
+        'user_agent' => null,
+        'meta' => [
+            'account' => $account,
+            'type' => $type,
+            'text' => $text,
+            'link' => $link !== '' ? $link : null,
+        ],
+    ]);
 
-    $this->info('Notification #' . $notification->id . ' sent to user #' . $user->id . '.');
+    $this->info('Notification #'.$notification->id.' sent to user #'.$user->id.'.');
 })->purpose('Send a test notification to a specific user');

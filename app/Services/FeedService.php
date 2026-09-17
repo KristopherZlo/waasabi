@@ -4,14 +4,14 @@ namespace App\Services;
 
 use App\Models\Post;
 use App\Models\User;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class FeedService
 {
     private const TAG_SCAN_LIMIT = 200;
+
     private const LEGACY_COVERS = [
         '/images/cover-1.svg',
         '/images/cover-2.svg',
@@ -19,11 +19,11 @@ class FeedService
         '/images/cover-4.svg',
     ];
 
-    public static function buildInitialFeed(?User $viewer, int $pageSize, string $filter = 'all'): array
+    public static function buildInitialFeed(?User $viewer, int $pageSize, string $filter = 'all', string $tag = '', string $exclude = ''): array
     {
         $filter = self::normalizeFeedFilter($filter);
-        $projects = self::fetchPosts('post', 0, $pageSize, $viewer, $filter);
-        $questions = self::fetchPosts('question', 0, $pageSize, $viewer, $filter);
+        $projects = self::fetchPosts('post', 0, $pageSize, $viewer, $filter, $tag, $exclude);
+        $questions = self::fetchPosts('question', 0, $pageSize, $viewer, $filter, $tag, $exclude);
         $items = array_merge($projects, $questions);
         if ($filter === 'best') {
             usort($items, static function (array $a, array $b): int {
@@ -32,6 +32,7 @@ class FeedService
                 if ($scoreA !== $scoreB) {
                     return $scoreB <=> $scoreA;
                 }
+
                 return ($a['published_minutes'] ?? 0) <=> ($b['published_minutes'] ?? 0);
             });
         } else {
@@ -42,21 +43,21 @@ class FeedService
 
         return [
             'items' => $items,
-            'projects_total' => self::getTypeCount('post', $filter),
-            'questions_total' => self::getTypeCount('question', $filter),
+            'projects_total' => self::getTypeCount('post', $filter, $tag, $exclude, $viewer),
+            'questions_total' => self::getTypeCount('question', $filter, $tag, $exclude, $viewer),
             'projects_offset' => count($projects),
             'questions_offset' => count($questions),
         ];
     }
 
-    public static function buildFeedChunk(string $stream, int $offset, int $limit, ?User $viewer, string $filter = 'all'): array
+    public static function buildFeedChunk(string $stream, int $offset, int $limit, ?User $viewer, string $filter = 'all', string $tag = '', string $exclude = ''): array
     {
         $stream = in_array($stream, ['projects', 'questions'], true) ? $stream : 'projects';
         $type = $stream === 'questions' ? 'question' : 'post';
         $filter = self::normalizeFeedFilter($filter);
-        $items = self::fetchPosts($type, $offset, $limit, $viewer, $filter);
+        $items = self::fetchPosts($type, $offset, $limit, $viewer, $filter, $tag, $exclude);
         $nextOffset = $offset + count($items);
-        $total = self::getTypeCount($type, $filter);
+        $total = self::getTypeCount($type, $filter, $tag, $exclude, $viewer);
 
         return [
             'items' => $items,
@@ -69,96 +70,87 @@ class FeedService
 
     public static function buildFeedTags(int $limit = 15, int $scanLimit = self::TAG_SCAN_LIMIT, ?User $viewer = null): array
     {
-        $cacheKey = "feed.tags.$limit.$scanLimit." . (self::isModerator($viewer) ? 'mod' : 'public');
-        return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($limit, $scanLimit, $viewer) {
-            $rows = Post::query()
-                ->select('tags')
-                ->when(!self::isModerator($viewer), function ($query) use ($viewer) {
-                    self::applyVisibilityFilters($query, 'posts', $viewer);
-                })
-                ->whereNotNull('tags')
-                ->orderByDesc('created_at')
-                ->limit($scanLimit)
-                ->get();
+        $rows = Post::query()
+            ->select('tags')
+            ->when(! self::isModerator($viewer), function ($query) use ($viewer) {
+                self::applyVisibilityFilters($query, 'posts', $viewer);
+            })
+            ->whereNotNull('tags')
+            ->orderByDesc('created_at')
+            ->limit($scanLimit)
+            ->get();
 
-            $tagBuckets = [];
-            foreach ($rows as $row) {
-                foreach (($row->tags ?? []) as $tag) {
-                    $label = trim((string) $tag);
-                    if ($label === '') {
-                        continue;
-                    }
-                    $key = Str::slug($label);
-                    if ($key === '') {
-                        continue;
-                    }
-                    if (!isset($tagBuckets[$key])) {
-                        $tagBuckets[$key] = ['label' => $label, 'slug' => $key, 'count' => 0];
-                    }
-                    $tagBuckets[$key]['count'] += 1;
+        $tagBuckets = [];
+        foreach ($rows as $row) {
+            foreach (($row->tags ?? []) as $tag) {
+                $label = trim((string) $tag);
+                if ($label === '') {
+                    continue;
                 }
+                $key = Str::slug($label);
+                if ($key === '') {
+                    continue;
+                }
+                if (! isset($tagBuckets[$key])) {
+                    $tagBuckets[$key] = ['label' => $label, 'slug' => $key, 'count' => 0];
+                }
+                $tagBuckets[$key]['count'] += 1;
+            }
+        }
+
+        $tagEntries = array_values($tagBuckets);
+        usort($tagEntries, static function (array $a, array $b): int {
+            $countCompare = ($b['count'] ?? 0) <=> ($a['count'] ?? 0);
+            if ($countCompare !== 0) {
+                return $countCompare;
             }
 
-            $tagEntries = array_values($tagBuckets);
-            usort($tagEntries, static function (array $a, array $b): int {
-                $countCompare = ($b['count'] ?? 0) <=> ($a['count'] ?? 0);
-                if ($countCompare !== 0) {
-                    return $countCompare;
-                }
-                return strcmp($a['label'] ?? '', $b['label'] ?? '');
-            });
-
-            return array_values(array_map(
-                static fn (array $entry) => [
-                    'label' => $entry['label'] ?? '',
-                    'slug' => $entry['slug'] ?? Str::slug($entry['label'] ?? ''),
-                    'count' => (int) ($entry['count'] ?? 0),
-                ],
-                array_slice($tagEntries, 0, $limit),
-            ));
+            return strcmp($a['label'] ?? '', $b['label'] ?? '');
         });
+
+        return array_values(array_map(
+            static fn (array $entry) => [
+                'label' => $entry['label'] ?? '',
+                'slug' => $entry['slug'] ?? Str::slug($entry['label'] ?? ''),
+                'count' => (int) ($entry['count'] ?? 0),
+            ],
+            array_slice($tagEntries, 0, $limit),
+        ));
     }
 
     public static function buildQaThreads(int $limit = 12, ?User $viewer = null): array
     {
-        $cacheKey = "feed.qa_threads.$limit." . (self::isModerator($viewer) ? 'mod' : 'public');
-        return Cache::remember($cacheKey, now()->addMinutes(2), function () use ($limit, $viewer) {
-            $questions = Post::query()
-                ->where('type', 'question')
-                ->when(!self::isModerator($viewer), function ($query) use ($viewer) {
-                    self::applyVisibilityFilters($query, 'posts', $viewer);
-                })
-                ->orderByDesc('created_at')
-                ->limit($limit)
-                ->get(['id', 'slug', 'title', 'created_at']);
+        $questions = Post::query()
+            ->where('type', 'question')
+            ->when(! self::isModerator($viewer), function ($query) use ($viewer) {
+                self::applyVisibilityFilters($query, 'posts', $viewer);
+            })
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get(['id', 'slug', 'title', 'created_at']);
 
-            if ($questions->isEmpty()) {
-                return [];
-            }
+        if ($questions->isEmpty()) {
+            return [];
+        }
 
-            $postIds = $questions->pluck('id')->all();
-            $slugs = $questions->pluck('slug')->all();
+        $postIds = $questions->pluck('id')->all();
+        $slugs = $questions->pluck('slug')->all();
 
-            $upvoteCounts = self::countByColumn('post_upvotes', 'post_id', $postIds);
-            $commentCounts = self::countByColumn(
-                'post_comments',
-                'post_slug',
-                $slugs,
-                self::visibilityFiltersForTable('post_comments', $viewer),
-            );
+        $upvoteCounts = self::countByColumn('post_upvotes', 'post_id', $postIds);
+        $commentCounts = self::countVisibleCommentsBySlug($slugs, $viewer);
 
-            return $questions->map(static function (Post $post) use ($upvoteCounts, $commentCounts) {
-                $score = $upvoteCounts[$post->id] ?? 0;
-                return [
-                    'slug' => $post->slug,
-                    'title' => $post->title,
-                    'time' => $post->created_at?->diffForHumans() ?? '',
-                    'minutes' => $post->created_at?->diffInMinutes() ?? 0,
-                    'replies' => $commentCounts[$post->slug] ?? 0,
-                    'delta' => '+' . (int) $score,
-                ];
-            })->values()->all();
-        });
+        return $questions->map(static function (Post $post) use ($upvoteCounts, $commentCounts) {
+            $score = $upvoteCounts[$post->id] ?? 0;
+
+            return [
+                'slug' => $post->slug,
+                'title' => $post->title,
+                'time' => $post->created_at?->diffForHumans() ?? '',
+                'minutes' => $post->created_at?->diffInMinutes() ?? 0,
+                'replies' => $commentCounts[$post->slug] ?? 0,
+                'delta' => '+'.(int) $score,
+            ];
+        })->values()->all();
     }
 
     public static function preparePostStats(iterable $posts, ?User $viewer): array
@@ -170,6 +162,7 @@ class FeedService
             if ($post instanceof Post) {
                 $postIds[] = $post->id;
                 $slugs[] = $post->slug;
+
                 continue;
             }
             if (is_array($post)) {
@@ -197,30 +190,23 @@ class FeedService
             'content_reports',
             'content_id',
             array_map(static fn ($id) => (string) $id, $postIds),
+            ['content_type' => ['post', 'question'], 'resolved_status' => 'pending'],
         );
-        $reportCountsBySlug = self::countByColumn('content_reports', 'content_id', $slugs);
-        $hasWeightedReports = self::safeHasColumn('content_reports', 'weight');
-        $reportWeightsById = $hasWeightedReports
-            ? self::sumByColumn(
-                'content_reports',
-                'content_id',
-                'weight',
-                array_map(static fn ($id) => (string) $id, $postIds),
-            )
-            : $reportCountsById;
-        $reportWeightsBySlug = $hasWeightedReports
-            ? self::sumByColumn('content_reports', 'content_id', 'weight', $slugs)
-            : $reportCountsBySlug;
+        $reportFilters = ['content_type' => ['post', 'question'], 'resolved_status' => 'pending'];
+        $reportCountsBySlug = self::countByColumn('content_reports', 'content_id', $slugs, $reportFilters);
+        $reportWeightsById = self::sumByColumn(
+            'content_reports',
+            'content_id',
+            'weight',
+            array_map(static fn ($id) => (string) $id, $postIds),
+            $reportFilters,
+        );
+        $reportWeightsBySlug = self::sumByColumn('content_reports', 'content_id', 'weight', $slugs, $reportFilters);
 
         return [
             'upvotes' => self::countByColumn('post_upvotes', 'post_id', $postIds),
             'saves' => self::countByColumn('post_saves', 'post_id', $postIds),
-            'comments' => self::countByColumn(
-                'post_comments',
-                'post_slug',
-                $slugs,
-                self::visibilityFiltersForTable('post_comments', $viewer),
-            ),
+            'comments' => self::countVisibleCommentsBySlug($slugs, $viewer),
             'user_upvoted_ids' => $viewer ? self::idsForUser('post_upvotes', 'post_id', $viewer->id, $postIds) : [],
             'user_saved_ids' => $viewer ? self::idsForUser('post_saves', 'post_id', $viewer->id, $postIds) : [],
             'report_counts_by_id' => $reportCountsById,
@@ -230,11 +216,13 @@ class FeedService
         ];
     }
 
-    private static function fetchPosts(string $type, int $offset, int $limit, ?User $viewer, string $filter = 'all'): array
+    private static function fetchPosts(string $type, int $offset, int $limit, ?User $viewer, string $filter = 'all', string $tag = '', string $exclude = ''): array
     {
         $filter = self::normalizeFeedFilter($filter);
         $query = Post::with(['user', 'editedBy'])->where('type', $type);
         self::applyVisibilityFilters($query, 'posts', $viewer);
+        self::applyTagFilters($query, $tag, $exclude, $viewer);
+        self::applyCommunityFilter($query, $filter, $viewer);
 
         if ($filter === 'fresh') {
             $query->where('created_at', '>=', now()->subMinutes(180));
@@ -244,7 +232,7 @@ class FeedService
             $query->where('read_time_minutes', '>=', 8);
         }
 
-        if ($filter === 'best' && self::safeHasTable('post_upvotes')) {
+        if ($filter === 'best') {
             $query->orderByDesc(
                 DB::table('post_upvotes')
                     ->selectRaw('count(*)')
@@ -252,7 +240,7 @@ class FeedService
             );
             $query->orderByDesc('created_at');
         } else {
-            $query->orderByDesc('created_at');
+            $query->orderByRaw('coalesce(activity_at, created_at) desc')->orderByDesc('id');
         }
 
         $posts = $query->skip($offset)->take($limit)->get();
@@ -287,6 +275,7 @@ class FeedService
                         $reportWeightsById,
                         $reportWeightsBySlug,
                     );
+
                     return [
                         'type' => 'question',
                         'data' => $data,
@@ -306,6 +295,7 @@ class FeedService
                     $reportWeightsById,
                     $reportWeightsBySlug,
                 );
+
                 return [
                     'type' => 'project',
                     'data' => $data,
@@ -347,7 +337,7 @@ class FeedService
         $author = $post->user;
         $editedAt = $post->updated_at;
         $createdAt = $post->created_at;
-        $wasEdited = !empty($post->edited_by) && $editedAt && $createdAt && $editedAt->gt($createdAt);
+        $wasEdited = ! empty($post->edited_by) && $editedAt && $createdAt && $editedAt->gt($createdAt);
         $editor = $post->editedBy;
         $editedBy = null;
         $editedAtLabel = null;
@@ -373,7 +363,7 @@ class FeedService
         $subtitle = $post->subtitle ?: Str::limit(strip_tags($bodyMarkdown), 420);
         $album = self::normalizeAlbum($post->album_urls);
         $cover = self::normalizeCover($post->cover_url);
-        if (empty($post->cover_url) && !empty($album)) {
+        if (empty($post->cover_url) && ! empty($album)) {
             $cover = $album[0];
         }
 
@@ -389,14 +379,26 @@ class FeedService
             'id' => $post->id,
             'slug' => $post->slug,
             'title' => $post->title,
+            'category' => $post->category,
+            'category_label' => $post->category
+                ? __(config('projects.categories.'.$post->category, $post->category))
+                : '',
+            'feedback_mode' => $post->feedback_mode,
+            'media_type' => $post->media_type ?? 'mixed',
+            'media_type_label' => __(config('projects.media_types.'.($post->media_type ?? 'mixed'), $post->media_type)),
+            'license' => $post->license ?? 'all-rights-reserved',
+            'license_label' => __(config('projects.licenses.'.($post->license ?? 'all-rights-reserved'), $post->license)),
+            'external_url' => $post->external_url,
+            'repository_url' => $post->repository_url,
+            'visibility' => $post->visibility ?? 'public',
             'subtitle' => $subtitle,
             'context' => $subtitle,
             'published' => $post->created_at?->diffForHumans() ?? __('ui.project.today'),
-            'published_minutes' => $post->created_at?->diffInMinutes() ?? 0,
+            'published_minutes' => ($post->activity_at ?? $post->created_at)?->diffInMinutes() ?? 0,
             'score' => $upvoteCounts[$post->id] ?? 0,
             'returns' => 0,
             'saves' => $saveCounts[$post->id] ?? 0,
-            'read_time' => $readMinutes . ' min',
+            'read_time' => $readMinutes.' min',
             'read_time_minutes' => $readMinutes,
             'cover' => $cover,
             'album' => $album,
@@ -430,6 +432,27 @@ class FeedService
             'sections' => [],
             'body_html' => '',
             'body_markdown' => $bodyMarkdown,
+            'attachments' => $post->relationLoaded('attachments')
+                ? $post->attachments->map(fn ($attachment) => [
+                    'id' => $attachment->id,
+                    'name' => $attachment->original_name,
+                    'mime_type' => $attachment->mime_type,
+                    'size' => $attachment->size,
+                    'kind' => $attachment->kind,
+                    'url' => Storage::disk('public')->url($attachment->path),
+                ])->all()
+                : [],
+            'updates' => $post->relationLoaded('updates')
+                ? $post->updates->map(fn ($update) => [
+                    'id' => $update->id,
+                    'user_id' => $update->user_id,
+                    'title' => $update->title,
+                    'body' => $update->body,
+                    'is_hidden' => $update->is_hidden,
+                    'time' => $update->created_at?->diffForHumans(),
+                    'author' => $update->user?->name ?? __('ui.project.anonymous'),
+                ])->all()
+                : [],
             'is_db' => true,
             'is_upvoted' => in_array($post->id, $userUpvotedIds, true),
             'is_saved' => in_array($post->id, $userSavedIds, true),
@@ -469,7 +492,7 @@ class FeedService
         $author = $post->user;
         $editedAt = $post->updated_at;
         $createdAt = $post->created_at;
-        $wasEdited = !empty($post->edited_by) && $editedAt && $createdAt && $editedAt->gt($createdAt);
+        $wasEdited = ! empty($post->edited_by) && $editedAt && $createdAt && $editedAt->gt($createdAt);
         $editor = $post->editedBy;
         $editedBy = null;
         $editedAtLabel = null;
@@ -502,7 +525,7 @@ class FeedService
             'title' => $post->title,
             'time' => $created->format('H:i'),
             'published_minutes' => $created->diffInMinutes(),
-            'delta' => '+' . (int) $score,
+            'delta' => '+'.(int) $score,
             'tags' => $post->tags ?? [],
             'nsfw' => (bool) ($post->nsfw ?? false),
             'is_hidden' => (bool) ($post->is_hidden ?? false),
@@ -543,6 +566,7 @@ class FeedService
         if (in_array($key, ['paused', 'pause'], true)) {
             return 'paused';
         }
+
         return 'in-progress';
     }
 
@@ -558,6 +582,7 @@ class FeedService
         }
         $normalized = preg_replace('/<\s*br\s*\/?>/i', "\n", $html);
         $normalized = preg_replace('/<\/\s*p\s*>/i', "\n", $normalized ?? $html);
+
         return trim(strip_tags($normalized ?? $html));
     }
 
@@ -567,10 +592,11 @@ class FeedService
         if (Str::startsWith($cover, ['http://', 'https://'])) {
             return $cover;
         }
-        $coverKey = '/' . ltrim((string) $cover, '/');
+        $coverKey = '/'.ltrim((string) $cover, '/');
         if (in_array($coverKey, self::LEGACY_COVERS, true)) {
             return '/images/cover-gradient.svg';
         }
+
         return $coverKey;
     }
 
@@ -581,7 +607,7 @@ class FeedService
             $album = is_array($decoded) ? $decoded : preg_split('/\r\n|\n|\r/', $album);
         }
 
-        if (!is_array($album)) {
+        if (! is_array($album)) {
             return [];
         }
 
@@ -593,27 +619,32 @@ class FeedService
             }
             if (Str::startsWith($value, ['http://', 'https://', '/'])) {
                 $items[] = $value;
+
                 continue;
             }
             if (Str::startsWith($value, ['storage/', 'uploads/'])) {
-                $items[] = '/' . ltrim($value, '/');
+                $items[] = '/'.ltrim($value, '/');
             }
         }
 
         $items = array_values(array_unique($items));
+
         return array_slice($items, 0, 12);
     }
 
     private static function countByColumn(string $table, string $column, array $values, array $filters = []): array
     {
-        if (empty($values) || !self::safeHasTable($table)) {
+        if (empty($values)) {
             return [];
         }
 
         $query = DB::table($table)->whereIn($column, $values);
         foreach ($filters as $filterColumn => $filterValue) {
-            $query->where($filterColumn, $filterValue);
+            is_array($filterValue)
+                ? $query->whereIn($filterColumn, $filterValue)
+                : $query->where($filterColumn, $filterValue);
         }
+
         return $query
             ->select($column, DB::raw('count(*) as total'))
             ->groupBy($column)
@@ -623,17 +654,19 @@ class FeedService
 
     private static function sumByColumn(string $table, string $column, string $sumColumn, array $values, array $filters = []): array
     {
-        if (empty($values) || !self::safeHasTable($table) || !self::safeHasColumn($table, $sumColumn)) {
+        if (empty($values)) {
             return [];
         }
 
         $query = DB::table($table)->whereIn($column, $values);
         foreach ($filters as $filterColumn => $filterValue) {
-            $query->where($filterColumn, $filterValue);
+            is_array($filterValue)
+                ? $query->whereIn($filterColumn, $filterValue)
+                : $query->where($filterColumn, $filterValue);
         }
 
         return $query
-            ->select($column, DB::raw('coalesce(sum(' . $sumColumn . '), 0) as total'))
+            ->select($column, DB::raw('coalesce(sum('.$sumColumn.'), 0) as total'))
             ->groupBy($column)
             ->pluck('total', $column)
             ->map(static fn ($value) => (float) $value)
@@ -642,7 +675,7 @@ class FeedService
 
     private static function idsForUser(string $table, string $column, int $userId, array $values): array
     {
-        if (empty($values) || !self::safeHasTable($table)) {
+        if (empty($values)) {
             return [];
         }
 
@@ -656,44 +689,85 @@ class FeedService
             ->toArray();
     }
 
-    private static function getTypeCount(string $type, string $filter = 'all'): int
+    private static function getTypeCount(string $type, string $filter = 'all', string $tag = '', string $exclude = '', ?User $viewer = null): int
     {
         $filter = self::normalizeFeedFilter($filter);
-        $key = "feed.count.$type.$filter.public";
-        return (int) Cache::remember($key, now()->addMinutes(2), function () use ($type, $filter) {
-            $query = Post::where('type', $type);
-            self::applyVisibilityFilters($query, 'posts', null);
-            if ($filter === 'fresh') {
-                $query->where('created_at', '>=', now()->subMinutes(180));
+        $query = Post::where('type', $type);
+        self::applyVisibilityFilters($query, 'posts', $viewer);
+        self::applyTagFilters($query, $tag, $exclude, $viewer);
+        self::applyCommunityFilter($query, $filter, $viewer);
+        if ($filter === 'fresh') {
+            $query->where('created_at', '>=', now()->subMinutes(180));
+        }
+        if ($filter === 'reading') {
+            $query->where('read_time_minutes', '>=', 8);
+        }
+
+        return $query->count();
+    }
+
+    private static function countVisibleCommentsBySlug(array $slugs, ?User $viewer): array
+    {
+        if ($slugs === []) {
+            return [];
+        }
+
+        $query = DB::table('post_comments')->whereIn('post_slug', $slugs);
+        if (! self::isModerator($viewer)) {
+            $query
+                ->where('is_hidden', false)
+                ->where('moderation_status', 'approved')
+                ->whereNotIn('user_id', function ($sub): void {
+                    $sub->select('id')->from('users')->where('is_banned', true);
+                });
+        }
+
+        return $query
+            ->select('post_slug', DB::raw('count(*) as total'))
+            ->groupBy('post_slug')
+            ->pluck('total', 'post_slug')
+            ->toArray();
+    }
+
+    private static function applyCommunityFilter($query, string $filter, ?User $viewer): void
+    {
+        if ($filter === 'quiet') {
+            $query->whereDoesntHave('comments', fn ($q) => $q->where('is_hidden', false)->where('moderation_status', 'approved')
+                ->whereHas('user', fn ($u) => $u->where('is_banned', false)));
+        }
+        if ($filter === 'following') {
+            if (! $viewer) {
+                $query->whereRaw('1 = 0');
+
+                return;
             }
-            if ($filter === 'reading') {
-                $query->where('read_time_minutes', '>=', 8);
-            }
-            return $query->count();
-        });
+            $query->where(fn ($q) => $q->whereIn('user_id', $viewer->following()->select('users.id'))
+                ->orWhereHas('followers', fn ($u) => $u->where('users.id', $viewer->id)));
+        }
     }
 
     private static function normalizeFeedFilter(?string $filter): string
     {
         $value = strtolower((string) $filter);
-        return in_array($value, ['best', 'fresh', 'reading'], true) ? $value : 'all';
+
+        return in_array($value, ['best', 'fresh', 'reading', 'following', 'quiet'], true) ? $value : 'all';
     }
 
-    private static function safeHasTable(string $table): bool
+    private static function applyTagFilters($query, string $included, string $excluded, ?User $viewer): void
     {
-        try {
-            return Schema::hasTable($table);
-        } catch (\Throwable $e) {
-            return false;
+        if ($included === '' && $excluded === '') {
+            return;
         }
-    }
-
-    private static function safeHasColumn(string $table, string $column): bool
-    {
-        try {
-            return Schema::hasColumn($table, $column);
-        } catch (\Throwable $e) {
-            return false;
+        $labels = collect(self::buildFeedTags(500, 2000, $viewer))->keyBy('slug');
+        foreach (array_filter(explode(',', $included)) as $slug) {
+            $label = $labels->get($slug)['label'] ?? null;
+            $label ? $query->whereJsonContains('tags', $label) : $query->whereRaw('1 = 0');
+        }
+        foreach (array_filter(explode(',', $excluded)) as $slug) {
+            $label = $labels->get($slug)['label'] ?? null;
+            if ($label) {
+                $query->whereJsonDoesntContain('tags', $label);
+            }
         }
     }
 
@@ -708,24 +782,23 @@ class FeedService
             return [];
         }
 
-        $filters = [];
-        if (self::safeHasColumn($table, 'is_hidden')) {
-            $filters['is_hidden'] = false;
-        }
-        if (self::safeHasColumn($table, 'moderation_status')) {
-            $filters['moderation_status'] = 'approved';
-        }
-        return $filters;
+        return [
+            'is_hidden' => false,
+            'moderation_status' => 'approved',
+        ];
     }
 
     private static function applyVisibilityFilters($query, string $table, ?User $viewer): void
     {
-        if ($table === 'posts' && self::safeHasColumn('users', 'is_banned')) {
-            $query->whereNotIn($table . '.user_id', function ($sub) {
+        if ($table === 'posts') {
+            $query->whereNotIn($table.'.user_id', function ($sub) {
                 $sub->select('id')
                     ->from('users')
                     ->where('is_banned', true);
             });
+        }
+        if ($table === 'posts') {
+            $query->where('visibility', 'public');
         }
         $filters = self::visibilityFiltersForTable($table, $viewer);
         if (empty($filters)) {

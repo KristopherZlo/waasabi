@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('title', __('ui.auth.register_title'))
+@section('robots', 'noindex, nofollow')
 @section('page', 'register')
 
 @section('content')
@@ -11,21 +12,6 @@
 
     <section class="section" style="margin-top: 24px;">
         <div class="card auth-card">
-            <div>
-                <div class="section-title">{{ __('ui.auth.register_provider_title') }}</div>
-                <div class="helper">{{ __('ui.auth.register_provider_helper') }}</div>
-            </div>
-            <div class="auth-grid">
-                <a class="provider-btn provider-btn--google" href="#" data-auth="Google">
-                    <span>{{ __('ui.auth.register_google') }}</span>
-                    <span class="helper">{{ __('ui.auth.register_google_helper') }}</span>
-                </a>
-                <a class="provider-btn provider-btn--discord" href="#" data-auth="Discord">
-                    <span>{{ __('ui.auth.register_discord') }}</span>
-                    <span class="helper">{{ __('ui.auth.register_discord_helper') }}</span>
-                </a>
-            </div>
-            <div class="auth-divider"><span>{{ __('ui.auth.email_divider_register') }}</span></div>
             @if ($errors->any())
                 <div class="form-error">{{ $errors->first() }}</div>
             @endif
@@ -33,7 +19,7 @@
                 @csrf
                 <div class="honeypot-field" aria-hidden="true">
                     <label>
-                        <span>Website</span>
+                        <span>{{ __('ui.auth.website') }}</span>
                         <input type="text" name="contact_time" tabindex="-1" autocomplete="off">
                     </label>
                 </div>
@@ -56,13 +42,13 @@
                 <label class="legal-check">
                     <input type="checkbox" name="accept_legal" value="1" required @checked(old('accept_legal'))>
                     <span>
-                        I agree to the <a href="{{ route('legal.terms') }}" target="_blank" rel="noopener noreferrer">Terms of Service</a>
-                        and acknowledge the <a href="{{ route('legal.privacy') }}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+                        {{ __('ui.auth.legal_agree') }} <a href="{{ route('legal.terms') }}" target="_blank" rel="noopener noreferrer">{{ __('ui.footer.terms') }}</a>
+                        {{ __('ui.auth.legal_acknowledge') }} <a href="{{ route('legal.privacy') }}" target="_blank" rel="noopener noreferrer">{{ __('ui.footer.privacy') }}</a>.
                     </span>
                 </label>
-                @if (config('waasabi.captcha.enabled') && config('waasabi.captcha.actions.register') && config('waasabi.captcha.site_key'))
+                @if (config('hub.captcha.enabled') && config('hub.captcha.actions.register') && config('hub.captcha.site_key'))
                     <div class="captcha-field">
-                        <div class="cf-turnstile" data-sitekey="{{ config('waasabi.captcha.site_key') }}"></div>
+                        <div class="cf-turnstile" data-sitekey="{{ config('hub.captcha.site_key') }}"></div>
                     </div>
                     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
                 @endif

@@ -516,7 +516,7 @@ system is the one users barely notice, until they need it.
 MARKDOWN
     ],
     [
-        'user_key' => 'admin',
+        'user_key' => 'katya',
         'type' => 'post',
         'slug' => 'moderation-workflow-playbook',
         'title' => 'Moderation workflow playbook for a growing community',
@@ -613,7 +613,7 @@ and keeping people safe. A playbook makes that possible at scale.
 MARKDOWN
     ],
     [
-        'user_key' => 'admin',
+        'user_key' => 'katya',
         'type' => 'post',
         'slug' => 'safe-role-promotion',
         'title' => 'Safe role promotion: letting trust grow without breaking security',
@@ -987,7 +987,7 @@ and the app predictable.
 MARKDOWN
     ],
     [
-        'user_key' => 'admin',
+        'user_key' => 'katya',
         'type' => 'post',
         'slug' => 'secure-report-pipeline',
         'title' => 'Secure report pipeline: from a user report to a resolved case',
@@ -1398,7 +1398,7 @@ A knowledge base is a product. Treat it with care and it will keep paying back.
 MARKDOWN
     ],
     [
-        'user_key' => 'admin',
+        'user_key' => 'katya',
         'type' => 'post',
         'slug' => 'security-by-default-community',
         'title' => 'Security by default for community platforms',

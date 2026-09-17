@@ -1,14 +1,16 @@
 import { appUrl } from '../core/config';
 import { t } from '../core/i18n';
-import { getSearchIndex } from '../core/search';
 import { getReadLaterList, setReadLaterList } from '../core/storage';
-import type { SearchItem } from '../core/types';
 import { updateCardsProgress } from '../features/reading';
 import { setupIcons, setupImageFallbacks, setupScribbleAvatars } from '../core/media';
 import { setupPostJumpButtons } from './post-jump';
 import { setupNsfwReveal } from './nsfw';
 import { setupCarousels } from './carousels';
 import { setupIconTooltips } from './tooltips';
+import { bindActionMenus } from './action-menus';
+import { bindActionToggles } from './action-toggles';
+import { setupReportModal } from './report';
+import { setupAuthorActions } from './admin';
 
 let readLaterMenuBound = false;
 let readLaterPageRefreshPending = false;
@@ -26,8 +28,12 @@ const updateReadLaterPageEmptyState = () => {
     }
     const cards = Array.from(list.querySelectorAll<HTMLElement>('[data-feed-card]'));
     const emptyState = list.querySelector<HTMLElement>('[data-read-later-page-empty]');
+    const count = document.querySelector<HTMLElement>('[data-read-later-page-count]');
     if (emptyState) {
         emptyState.hidden = cards.length > 0;
+    }
+    if (count) {
+        count.textContent = String(cards.length);
     }
 };
 
@@ -39,14 +45,6 @@ const hydrateReadLaterPage = async (list: HTMLElement) => {
     setupNsfwReveal(list);
     setupCarousels(list);
     setupIconTooltips(list);
-
-    const [{ bindActionMenus }, { bindActionToggles }, { setupReportModal }, { setupAuthorActions }] =
-        await Promise.all([
-            import('./action-menus'),
-            import('./action-toggles'),
-            import('./report'),
-            import('./admin'),
-        ]);
 
     bindActionMenus(list);
     bindActionToggles(list);
@@ -93,7 +91,7 @@ const refreshReadLaterPageFromServer = async () => {
         const slugs = Array.isArray(data.slugs) ? data.slugs : [];
         setReadLaterList(slugs);
 
-        const emptyHtml = `<div class="list-item" data-read-later-page-empty hidden>${emptyText}</div>`;
+        const emptyHtml = `<div class="saved-library__empty" data-read-later-page-empty hidden>${emptyText}</div>`;
         list.innerHTML = items.join('') + emptyHtml;
         await hydrateReadLaterPage(list);
         updateReadLaterPageEmptyState();
@@ -104,7 +102,7 @@ const refreshReadLaterPageFromServer = async () => {
     }
 };
 
-export const renderReadLaterMenu = () => {
+export const renderReadLaterMenu = async () => {
     const menu = document.querySelector<HTMLElement>('[data-read-later-menu]');
     if (!menu) {
         return;
@@ -115,7 +113,21 @@ export const renderReadLaterMenu = () => {
         return;
     }
 
-    const saved = getReadLaterList();
+    let saved = getReadLaterList();
+    let entries: Array<{ slug: string; title: string; type: 'post' | 'question'; url: string }> = [];
+    if (document.body.dataset.authState === '1') {
+        try {
+            const response = await fetch(`${appUrl}/read-later/list`, { headers: { Accept: 'application/json' } });
+            if (response.ok) {
+                const payload = (await response.json()) as { items?: string[]; entries?: typeof entries };
+                saved = payload.items ?? saved;
+                entries = payload.entries ?? [];
+                setReadLaterList(saved);
+            }
+        } catch {
+            // Keep the local fallback while offline.
+        }
+    }
     const recent = saved.slice(-5).reverse();
     list.innerHTML = '';
 
@@ -128,17 +140,7 @@ export const renderReadLaterMenu = () => {
     empty.hidden = true;
     list.hidden = false;
 
-    const index = getSearchIndex();
-    const indexMap = new Map<string, SearchItem>();
-    index.forEach((item) => {
-        if (!item.slug) {
-            return;
-        }
-        if (item.type !== 'post' && item.type !== 'question') {
-            return;
-        }
-        indexMap.set(item.slug, item);
-    });
+    const indexMap = new Map(entries.map((entry) => [entry.slug, entry]));
 
     recent.forEach((slug) => {
         const entry = indexMap.get(slug);
@@ -169,7 +171,7 @@ export const renderReadLaterMenu = () => {
 };
 
 export const renderReadLaterList = (options: { refreshPage?: boolean } = {}) => {
-    renderReadLaterMenu();
+    void renderReadLaterMenu();
     if (document.body.dataset.page !== 'read-later') {
         return;
     }
@@ -205,7 +207,7 @@ export const setupReadLaterMenu = () => {
 
     const toggleMenu = () => {
         if (menu.hidden) {
-            renderReadLaterMenu();
+            void renderReadLaterMenu();
         }
         setOpen(menu.hidden);
     };

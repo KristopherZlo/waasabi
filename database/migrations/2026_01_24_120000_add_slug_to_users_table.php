@@ -17,7 +17,7 @@ return new class extends Migration
 
         $users = DB::table('users')->select('id', 'name', 'slug')->orderBy('id')->get();
         foreach ($users as $user) {
-            if (!empty($user->slug)) {
+            if (! empty($user->slug)) {
                 continue;
             }
             $base = Str::slug((string) $user->name);
@@ -27,7 +27,7 @@ return new class extends Migration
             $slug = $base;
             $counter = 2;
             while (DB::table('users')->where('slug', $slug)->exists()) {
-                $slug = $base . '-' . $counter;
+                $slug = $base.'-'.$counter;
                 $counter += 1;
             }
             DB::table('users')->where('id', $user->id)->update(['slug' => $slug]);

@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('title', $question['title'])
+@section('description', \Illuminate\Support\Str::limit(strip_tags($question['body'] ?? ''), 155))
 @section('page', 'question')
 
 @section('content')
@@ -230,3 +231,6 @@
     </section>
 @endsection
 
+@section('sidebar')
+    @include('partials.sidebar-feed')
+@endsection

@@ -2,7 +2,6 @@ import { appUrl, csrfToken } from '../core/config';
 import { t } from '../core/i18n';
 import { setupIcons, setupImageFallbacks, setupScribbleAvatars, applyScribbleAvatar } from '../core/media';
 import { getRoleKey } from '../core/roles';
-import { normalizeCommentVote } from '../core/votes';
 import { toast } from '../core/toast';
 import { bindActionMenus } from '../ui/action-menus';
 import { bindActionToggles } from '../ui/action-toggles';
@@ -30,17 +29,6 @@ type CommentNodeOptions = {
 
 let commentChunksUpdatedHandler: (() => void) | null = null;
 
-const parseJson = <T>(value: string | null, fallback: T) => {
-    if (!value) {
-        return fallback;
-    }
-    try {
-        return JSON.parse(value) as T;
-    } catch {
-        return fallback;
-    }
-};
-
 const applyCommentSort = (list: HTMLElement, mode: string) => {
     const items = Array.from(list.querySelectorAll<HTMLElement>('[data-comment-item]'));
     if (!items.length) {
@@ -61,26 +49,13 @@ const applyCommentSort = (list: HTMLElement, mode: string) => {
     list.dataset.commentSort = mode;
 };
 
-const getCommentVoteKey = (slug: string) => `commentVotes:${slug}`;
-const getCommentVoteMap = (slug: string) =>
-    parseJson<Record<string, number>>(localStorage.getItem(getCommentVoteKey(slug)), {});
-const setCommentVoteMap = (slug: string, map: Record<string, number>) => {
-    localStorage.setItem(getCommentVoteKey(slug), JSON.stringify(map));
-};
-
-const applyCommentVoteState = (commentEl: HTMLElement, voteValue: number) => {
+const applyCommentVoteState = (commentEl: HTMLElement, voteValue: number, score: number) => {
     const countEl = commentEl.querySelector<HTMLElement>('.vote-count');
     if (!countEl) {
         return;
     }
-    const base =
-        countEl.dataset.baseCount !== undefined ? Number(countEl.dataset.baseCount) : Number(countEl.textContent ?? 0);
-    if (countEl.dataset.baseCount === undefined) {
-        countEl.dataset.baseCount = String(base);
-    }
-    const nextCount = base + voteValue;
-    countEl.textContent = String(nextCount);
-    commentEl.dataset.commentUseful = String(nextCount);
+    countEl.textContent = String(score);
+    commentEl.dataset.commentUseful = String(score);
     const upBtn = commentEl.querySelector<HTMLButtonElement>('[data-comment-vote="up"]');
     const downBtn = commentEl.querySelector<HTMLButtonElement>('[data-comment-vote="down"]');
     if (upBtn) {
@@ -93,19 +68,50 @@ const applyCommentVoteState = (commentEl: HTMLElement, voteValue: number) => {
     }
 };
 
-const syncThreadedCommentState = (list: HTMLElement, slug: string) => {
-    if (!slug) {
-        return;
-    }
-    const votes = getCommentVoteMap(slug);
-    const commentItems = Array.from(list.querySelectorAll<HTMLElement>('.comment'));
-    commentItems.forEach((commentEl) => {
-        const anchor = commentEl.dataset.commentAnchor ?? commentEl.id ?? '';
-        if (!anchor) {
+export const setupCommentVotes = () => {
+    document.querySelectorAll<HTMLElement>('[data-comment-list][data-threaded="true"]').forEach((list) => {
+        if (list.dataset.commentVotesBound === '1') {
             return;
         }
-        const voteValue = normalizeCommentVote(votes[anchor]);
-        applyCommentVoteState(commentEl, voteValue);
+        list.dataset.commentVotesBound = '1';
+        list.addEventListener('click', async (event) => {
+            const target = event.target as HTMLElement;
+            const voteButton = target.closest<HTMLButtonElement>('[data-comment-vote]');
+            if (!voteButton) {
+                return;
+            }
+            const commentEl = voteButton.closest<HTMLElement>('.comment');
+            const commentId = commentEl?.dataset.commentId ?? '';
+            if (!commentEl || !commentId || !csrfToken) {
+                return;
+            }
+
+            voteButton.disabled = true;
+            try {
+                const response = await fetch(`${appUrl}/comments/${commentId}/vote`, {
+                    method: 'PUT',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: JSON.stringify({ value: voteButton.dataset.commentVote === 'down' ? -1 : 1 }),
+                });
+                if (!response.ok) {
+                    toast.show(t('vote_failed', 'Sign in to vote.'));
+                    return;
+                }
+                const result = (await response.json()) as { score: number; vote: number };
+                applyCommentVoteState(commentEl, result.vote, result.score);
+                if (list.dataset.commentSort === 'best') {
+                    applyCommentSort(list, 'best');
+                }
+            } catch {
+                toast.show(t('vote_failed', 'Unable to vote right now.'));
+            } finally {
+                voteButton.disabled = false;
+            }
+        });
     });
 };
 
@@ -256,9 +262,6 @@ export const setupCommentChunks = () => {
                     bindActionMenus(list);
                     bindActionToggles(list);
                     setupReportModal(list);
-                    if (list.dataset.threaded === 'true') {
-                        syncThreadedCommentState(list, list.dataset.projectSlug ?? '');
-                    }
                     applyCommentSort(list, list.dataset.commentSort ?? 'new');
                 }
                 if (typeof data.total === 'number') {
@@ -451,8 +454,6 @@ export const setupCommentForms = () => {
             applyCommentSort(list, mode);
         };
 
-        const getActiveSort = () => list.dataset.commentSort ?? 'new';
-
         const clearReply = () => {
             replyTargetEl = null;
             delete form.dataset.replyId;
@@ -463,9 +464,6 @@ export const setupCommentForms = () => {
         };
 
         const isBound = form.dataset.commentFormBound === '1';
-        if (threaded) {
-            syncThreadedCommentState(list, slug);
-        }
         if (isBound) {
             return;
         }
@@ -479,34 +477,8 @@ export const setupCommentForms = () => {
             commentEl.closest<HTMLElement>('.comment--threaded') ?? commentEl;
 
         if (threaded) {
-            list.addEventListener('click', (event) => {
+            list.addEventListener('click', async (event) => {
                 const target = event.target as HTMLElement;
-                const voteButton = target.closest<HTMLButtonElement>('[data-comment-vote]');
-                if (voteButton) {
-                    const commentEl = voteButton.closest<HTMLElement>('.comment');
-                    if (!commentEl) {
-                        return;
-                    }
-                    const anchor = commentEl.dataset.commentAnchor ?? commentEl.id ?? '';
-                    if (!anchor) {
-                        return;
-                    }
-                    const direction = voteButton.dataset.commentVote === 'down' ? -1 : 1;
-                    const votes = getCommentVoteMap(slug);
-                    const current = normalizeCommentVote(votes[anchor]);
-                    const nextVote = current === direction ? 0 : direction;
-                    if (nextVote === 0) {
-                        delete votes[anchor];
-                    } else {
-                        votes[anchor] = nextVote;
-                    }
-                    setCommentVoteMap(slug, votes);
-                    applyCommentVoteState(commentEl, nextVote);
-                    if (getActiveSort() === 'best') {
-                        applySort('best');
-                    }
-                    return;
-                }
                 const replyButton = target.closest<HTMLButtonElement>('[data-comment-reply]');
                 if (replyButton) {
                     const commentEl = replyButton.closest<HTMLElement>('.comment');
@@ -660,9 +632,8 @@ export const setupCommentForms = () => {
                 if (threaded) {
                     setupIcons(node);
                     clearReply();
-                    syncThreadedCommentState(list, slug);
                 }
-                toast.show(t('comment_sent', 'Comment sent (demo).'));
+                toast.show(t('comment_sent', 'Comment sent.'));
             } catch {
                 // ignore
             }

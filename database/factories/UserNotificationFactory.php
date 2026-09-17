@@ -7,7 +7,7 @@ use App\Models\UserNotification;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\UserNotification>
+ * @extends Factory<UserNotification>
  */
 class UserNotificationFactory extends Factory
 {

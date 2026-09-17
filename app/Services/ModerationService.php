@@ -6,17 +6,12 @@ use App\Models\ModerationLog;
 use App\Models\Post;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 
 class ModerationService
 {
     public function logAction(Request $request, User $moderator, string $action, string $contentType, ?string $contentId, ?string $contentUrl, ?string $notes = null, array $meta = []): void
     {
-        if (!$this->safeHasTable('moderation_logs')) {
-            return;
-        }
-
-        if (!$moderator->hasRole('moderator')) {
+        if (! $moderator->hasRole('moderator')) {
             return;
         }
 
@@ -38,10 +33,6 @@ class ModerationService
 
     public function logSystemAction(Request $request, string $action, string $contentType, ?string $contentId, ?string $contentUrl, ?string $notes = null, array $meta = []): void
     {
-        if (!$this->safeHasTable('moderation_logs')) {
-            return;
-        }
-
         ModerationLog::create([
             'moderator_id' => null,
             'moderator_name' => 'system',
@@ -60,11 +51,9 @@ class ModerationService
 
     public function resolvePostUrl(string $slug): string
     {
-        if ($this->safeHasTable('posts')) {
-            $post = Post::where('slug', $slug)->first();
-            if ($post?->type === 'question') {
-                return route('questions.show', $slug);
-            }
+        $post = Post::where('slug', $slug)->first();
+        if ($post?->type === 'question') {
+            return route('questions.show', $slug);
         }
 
         return route('project', $slug);
@@ -103,18 +92,9 @@ class ModerationService
         }
 
         if ($country && $region) {
-            return $country . '-' . $region;
+            return $country.'-'.$region;
         }
 
         return $country ?: $region;
-    }
-
-    private function safeHasTable(string $table): bool
-    {
-        try {
-            return Schema::hasTable($table);
-        } catch (\Throwable $e) {
-            return false;
-        }
     }
 }

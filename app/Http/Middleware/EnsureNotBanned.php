@@ -11,16 +11,16 @@ class EnsureNotBanned
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        if (!$user || empty($user->is_banned)) {
+        if (! $user || empty($user->is_banned)) {
             return $next($request);
         }
 
-        if ($request->routeIs('logout')) {
+        if ($request->routeIs('logout', 'account.destroy', 'account.password.update')) {
             return $next($request);
         }
 

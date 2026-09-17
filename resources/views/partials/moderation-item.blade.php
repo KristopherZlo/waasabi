@@ -104,6 +104,11 @@
                             <i data-lucide="eye" class="icon"></i>
                         </button>
                     @endif
+                    @if ($reportCount > 0)
+                        <button type="button" class="icon-btn icon-btn--sm" data-admin-dismiss data-admin-url="{{ route('moderation.reports.dismiss', ['type' => 'comment', 'id' => $data['id']]) }}" aria-label="{{ __('ui.admin.dismiss_report') }}" title="{{ __('ui.admin.dismiss_report') }}">
+                            <i data-lucide="shield-check" class="icon"></i>
+                        </button>
+                    @endif
                     @if (!$isSelfContent)
                         <button type="button" class="icon-btn icon-btn--sm icon-btn--danger" data-admin-flag data-report-type="comment" data-report-id="{{ $data['id'] }}" data-report-url="{{ $postUrl ?? url()->current() }}" aria-label="{{ __('ui.report.flag') }}">
                             <i data-lucide="flag" class="icon"></i>
@@ -220,6 +225,11 @@
                             <i data-lucide="eye" class="icon"></i>
                         </button>
                     @endif
+                    @if ($reportCount > 0)
+                        <button type="button" class="icon-btn icon-btn--sm" data-admin-dismiss data-admin-url="{{ route('moderation.reports.dismiss', ['type' => 'review', 'id' => $data['id']]) }}" aria-label="{{ __('ui.admin.dismiss_report') }}" title="{{ __('ui.admin.dismiss_report') }}">
+                            <i data-lucide="shield-check" class="icon"></i>
+                        </button>
+                    @endif
                     @if (!$isSelfContent)
                         <button type="button" class="icon-btn icon-btn--sm icon-btn--danger" data-admin-flag data-report-type="review" data-report-id="{{ $data['id'] }}" data-report-url="{{ $postUrl ?? url()->current() }}" aria-label="{{ __('ui.report.flag') }}">
                             <i data-lucide="flag" class="icon"></i>
@@ -227,6 +237,60 @@
                     @endif
                 </div>
             @endif
+        </div>
+    </article>
+@elseif (in_array($type, ['collaboration', 'collaboration_comment'], true))
+    @php
+        $author = $data['author'] ?? null;
+        $authorRole = $author?->roleKey() ?? 'user';
+        $canModerate = Auth::user()?->isAdmin() || $authorRole !== 'admin';
+        $reportCount = (int) ($data['report_count'] ?? 0);
+        $reportPoints = round((float) ($data['report_points'] ?? $reportCount), 1);
+        $targetUrl = $data['url'] ?? route('admin', ['tab' => 'collaborations']);
+    @endphp
+    <article class="comment-card admin-collaboration-report">
+        <div class="comment-card__body">
+            <div class="comment-meta">
+                <span class="admin-status admin-status--pending">
+                    {{ $type === 'collaboration' ? __('ui.admin.collaboration_item') : __('ui.admin.collaboration_comment') }}
+                </span>
+                @if ($author)
+                    <a href="{{ route('profile.show', $author->slug) }}">{{ $author->name }}</a>
+                @endif
+                <span class="admin-report-count" title="{{ __('ui.admin.report_count') }}">
+                    <i data-lucide="flag" class="icon"></i>{{ $reportCount }}
+                </span>
+                <span class="admin-report-count admin-report-count--points" title="{{ __('ui.admin.report_points') }}">
+                    <i data-lucide="gauge" class="icon"></i>{{ $reportPoints }}
+                </span>
+            </div>
+            <h3><a href="{{ $targetUrl }}">{{ $data['title'] ?? __('ui.admin.collaboration_item') }}</a></h3>
+            <p>{{ $data['text'] ?? '' }}</p>
+            <div class="admin-controls">
+                <a class="ghost-btn ghost-btn--compact" href="{{ $targetUrl }}">{{ __('ui.admin.open_public_page') }}</a>
+                <a class="ghost-btn ghost-btn--compact" href="{{ route('admin', ['tab' => 'collaborations', 'request' => $type === 'collaboration' ? $data['id'] : ($data['request_id'] ?? null)]) }}">{{ __('ui.admin.inspect') }}</a>
+                @if ($canModerate && ! empty($data['id']))
+                    <form method="POST" action="{{ $type === 'collaboration' ? route('admin.collaborations.reports.dismiss', $data['id']) : route('admin.collaboration-comments.reports.dismiss', $data['id']) }}">
+                        @csrf
+                        <button class="ghost-btn ghost-btn--compact" type="submit">{{ __('ui.admin.dismiss_report') }}</button>
+                    </form>
+                    <form method="POST"
+                        action="{{ $type === 'collaboration' ? route('admin.collaborations.bulk') : route('admin.collaboration-comments.delete', $data['id']) }}"
+                        data-moderation-reason-form data-moderation-action="delete">
+                        @csrf
+                        @if ($type === 'collaboration')
+                            <input type="hidden" name="request_ids[]" value="{{ $data['id'] }}">
+                            <input type="hidden" name="action" value="delete">
+                        @else
+                            @method('DELETE')
+                        @endif
+                        <input type="hidden" name="reason" value="">
+                        <button class="icon-btn icon-btn--sm icon-btn--danger" type="submit" aria-label="{{ __('ui.admin.delete') }}">
+                            <i data-lucide="trash-2" class="icon"></i>
+                        </button>
+                    </form>
+                @endif
+            </div>
         </div>
     </article>
 @endif

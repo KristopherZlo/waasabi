@@ -310,8 +310,15 @@ function pointsToPathD(pts: Array<{ x: number; y: number }>, smooth: number): st
 }
 
 function buildSVG(p: AvatarParams, pathD: string, seed: number): string {
-  const bg = p.invert ? "#fff" : "#000";
-  const stroke = p.invert ? "#000" : "#fff";
+  const palette = [
+    ["#48243d", "#ffb4cf"],
+    ["#203d32", "#9aefc4"],
+    ["#4a2f19", "#ffd08a"],
+    ["#33275a", "#c9b9ff"],
+    ["#5a2726", "#ffb0a2"],
+    ["#16424a", "#9ee8e8"],
+  ];
+  const [bg, stroke] = p.invert ? ["#f7f4ee", "#191919"] : palette[seed % palette.length];
 
   const opacity = clamp(p.alpha, 0.05, 1);
   const cap = p.roundCaps ? "round" : "butt";

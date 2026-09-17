@@ -24,11 +24,18 @@
     $publishedMinutes = (int) ($question['published_minutes'] ?? 0);
     $published = $question['time']
         ?? ($publishedMinutes ? now()->subMinutes($publishedMinutes)->diffForHumans() : __('ui.project.today'));
+    $publishedAt = now()->subMinutes($publishedMinutes);
+    $publishedDate = $publishedAt->translatedFormat('j M Y');
     $score = (int) ($question['score'] ?? 0);
     $replies = (int) ($question['replies'] ?? count($question['answers'] ?? []));
-    $body = $question['body'] ?? $question['body_html'] ?? '';
-    $preview = trim(strip_tags((string) $body));
-    $preview = $preview !== '' ? \Illuminate\Support\Str::limit($preview, 600) : '';
+    $body = (string) ($question['body_html'] ?? '');
+    if (trim($body) === '') {
+        $body = app(\App\Services\MarkdownService::class)->render((string) ($question['body'] ?? ''));
+    }
+    $preview = html_entity_decode(strip_tags($body), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $preview = trim((string) preg_replace('/\s+/', ' ', $preview));
+    $previewSummary = $preview !== '' ? \Illuminate\Support\Str::limit($preview, 650) : '';
+    $previewExpandable = \Illuminate\Support\Str::length($preview) > 650;
     $reportCount = (int) ($question['report_count'] ?? 0);
     $reportPoints = (int) ($question['report_points'] ?? $reportCount);
     $edited = !empty($question['edited']);
@@ -40,16 +47,17 @@
     $isHidden = !empty($question['is_hidden']);
     $moderationNsfwPending = !empty($question['moderation_nsfw_pending']);
 @endphp
-<article class="card post-card question-card" data-feed-card data-feed-type="questions" data-feed-key="question:{{ $question['slug'] }}" data-project-slug="{{ $question['slug'] }}" data-score="{{ $score }}" data-published="{{ $publishedMinutes }}" data-read-min="0" data-tags="{{ collect($questionTags)->map(fn ($tag) => \Illuminate\Support\Str::slug($tag))->join(',') }}" data-moderation-scope data-moderation-status="{{ $moderationStatus }}" data-moderation-type="post">
+<article class="card post-card post-card--jump question-card" data-feed-card data-feed-type="questions" data-feed-key="question:{{ $question['slug'] }}" data-project-slug="{{ $question['slug'] }}" data-score="{{ $score }}" data-published="{{ $publishedMinutes }}" data-read-min="0" data-tags="{{ collect($questionTags)->map(fn ($tag) => \Illuminate\Support\Str::slug($tag))->join(',') }}" data-moderation-scope data-moderation-status="{{ $moderationStatus }}" data-moderation-type="post">
     <button class="post-jump" type="button" data-post-jump aria-label="{{ __('ui.card.jump_next') }}">
         <i data-lucide="arrow-down" class="icon"></i>
     </button>
+    <div class="post-card__content">
     <div class="post-meta">
         <img class="avatar" src="{{ $avatarUrl }}" alt="{{ $authorName }}" @if ($avatarIsDefault) data-avatar-auto="1" data-avatar-name="{{ $authorName }}" @endif>
         <a class="post-author" href="{{ route('profile.show', $authorSlug) }}">{{ $authorName }}</a>
         <span class="badge badge--{{ $authorRoleKey }}">{{ $authorRoleLabel }}</span>
         <span class="dot">&bull;</span>
-        <span>{{ $published }}</span>
+        <time datetime="{{ $publishedAt->toDateString() }}" title="{{ $published }}">{{ $publishedDate }} · {{ $published }}</time>
         @if ($showEdited)
             <span class="dot">&bull;</span>
             <span class="post-edited">{{ __('ui.project.edited', ['time' => $editedAt, 'user' => $editedByName]) }}</span>
@@ -136,6 +144,11 @@
                             <i data-lucide="eye" class="icon"></i>
                         </button>
                     @endif
+                    @if ($reportCount > 0)
+                        <button type="button" class="icon-btn icon-btn--sm" data-admin-dismiss data-admin-url="{{ route('moderation.reports.dismiss', ['type' => 'post', 'id' => $question['id']]) }}" aria-label="{{ __('ui.admin.dismiss_report') }}" title="{{ __('ui.admin.dismiss_report') }}">
+                            <i data-lucide="shield-check" class="icon"></i>
+                        </button>
+                    @endif
                     @if ($moderationNsfwPending)
                         <button type="button" class="icon-btn icon-btn--sm icon-btn--danger icon-btn--label" data-admin-nsfw data-admin-type="post" data-admin-id="{{ $question['id'] }}" data-admin-url="{{ route('moderation.posts.nsfw', $question['id']) }}" aria-label="{{ __('ui.moderation.nsfw') }}" title="{{ __('ui.moderation.nsfw') }}">
                             NSFW
@@ -153,7 +166,19 @@
     <h3 class="post-title">
         <a href="{{ route('questions.show', $question['slug']) }}">{{ $question['title'] }}</a>
     </h3>
-    @if (!empty($preview))
+    @if ($previewExpandable)
+        <details class="post-excerpt">
+            <summary class="post-excerpt__summary">
+                <span class="post-excerpt__preview">{{ $previewSummary }}</span>
+                <span class="post-excerpt__toggle">
+                    <span class="post-excerpt__more">{{ __('ui.card.show_text') }}</span>
+                    <span class="post-excerpt__less">{{ __('ui.card.hide_text') }}</span>
+                    <i data-lucide="chevron-down" class="icon" aria-hidden="true"></i>
+                </span>
+            </summary>
+            <p class="post-excerpt__body">{{ $preview }}</p>
+        </details>
+    @elseif (!empty($preview))
         <p class="post-context">{{ $preview }}</p>
     @endif
     @if (!empty($visibleTags))
@@ -173,8 +198,9 @@
     @endif
     <div class="post-actions">
         <div class="action-icons">
-            <button type="button" class="icon-action {{ !empty($question['is_upvoted']) ? 'is-active' : '' }}" data-action="upvote" data-project-slug="{{ $question['slug'] }}" data-upvoted="{{ !empty($question['is_upvoted']) ? '1' : '0' }}" aria-label="{{ __('ui.project.upvote') }}">
+            <button type="button" class="icon-action {{ !empty($question['is_upvoted']) ? 'is-active' : '' }}" data-action="upvote" data-project-slug="{{ $question['slug'] }}" data-upvoted="{{ !empty($question['is_upvoted']) ? '1' : '0' }}" data-base-count="{{ $score }}" aria-label="{{ __('ui.project.upvote') }}">
                 <i data-lucide="arrow-up" class="icon"></i>
+                <span class="action-count">{{ $score }}</span>
             </button>
             <a class="icon-action" href="{{ route('questions.show', $question['slug']) }}" aria-label="{{ __('ui.qa.answers_title') }}">
                 <i data-lucide="message-circle" class="icon"></i>
@@ -188,5 +214,5 @@
     </div>
     <div class="read-mark" data-read-progress-label hidden>{{ __('ui.card.read_mark') }}</div>
     <div class="read-progress" data-read-progress hidden></div>
+    </div>
 </article>
-

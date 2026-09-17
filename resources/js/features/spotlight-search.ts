@@ -1,5 +1,6 @@
+import { appUrl } from '../core/config';
 import { t } from '../core/i18n';
-import { normalizeQuery } from '../core/search';
+import { rememberFocus, restoreFocus, trapModalFocus } from '../core/modal';
 import type { SearchItem } from '../core/types';
 import { navigateTo } from './spa';
 
@@ -8,34 +9,16 @@ let spotlightSearchBound = false;
 export const setupSpotlightSearch = () => {
     const modal = document.querySelector<HTMLElement>('[data-search-modal]');
     const openButtons = Array.from(document.querySelectorAll<HTMLElement>('[data-search-open]'));
-    if (!modal || !openButtons.length) {
+    if (!modal || !openButtons.length || spotlightSearchBound || modal.dataset.searchModalBound === '1') {
         return;
     }
-    if (spotlightSearchBound) {
-        return;
-    }
-    if (modal.dataset.searchModalBound === '1') {
+    const input = modal.querySelector<HTMLInputElement>('[data-search-input]');
+    const results = modal.querySelector<HTMLElement>('[data-search-results]');
+    if (!input || !results) {
         return;
     }
     modal.dataset.searchModalBound = '1';
     spotlightSearchBound = true;
-
-    const input = modal.querySelector<HTMLInputElement>('[data-search-input]');
-    const results = modal.querySelector<HTMLElement>('[data-search-results]');
-    const closeButtons = Array.from(modal.querySelectorAll<HTMLElement>('[data-search-close]'));
-    if (!input || !results) {
-        return;
-    }
-
-    const rawIndex = (window as unknown as { APP_SEARCH_INDEX?: SearchItem[] }).APP_SEARCH_INDEX ?? [];
-    const index = rawIndex.map((item) => {
-        const text = normalizeQuery(
-            [item.title, item.subtitle, item.slug, item.author, item.keywords, item.type]
-                .filter(Boolean)
-                .join(' '),
-        );
-        return { ...item, _searchText: text };
-    }) as Array<SearchItem & { _searchText: string }>;
 
     const typeLabels: Record<SearchItem['type'], string> = {
         post: t('search_type_post', 'Post'),
@@ -43,198 +26,211 @@ export const setupSpotlightSearch = () => {
         user: t('search_type_user', 'User'),
         tag: t('search_type_tag', 'Tag'),
     };
+    let currentItems: SearchItem[] = [];
+    let controller: AbortController | null = null;
+    let timer: number | undefined;
+    let returnFocus: HTMLElement | null = null;
+    let resultLinks: HTMLAnchorElement[] = [];
+    let selectedIndex = -1;
 
-    const scoreToken = (token: string, text: string) => {
-        if (!token) {
-            return 0;
+    const setSelectedIndex = (nextIndex: number) => {
+        if (!resultLinks.length) {
+            selectedIndex = -1;
+            input.removeAttribute('aria-activedescendant');
+            return;
         }
-        const directIndex = text.indexOf(token);
-        let score = directIndex >= 0 ? 6 + Math.max(0, 4 - directIndex) : 0;
-        let lastIndex = -1;
-        let streak = 0;
-        for (const char of token) {
-            const idx = text.indexOf(char, lastIndex + 1);
-            if (idx === -1) {
-                return 0;
-            }
-            if (idx === lastIndex + 1) {
-                streak += 1;
-                score += 2 + streak;
-            } else {
-                streak = 0;
-                score += 1;
-            }
-            lastIndex = idx;
-        }
-        return score;
+        selectedIndex = (nextIndex + resultLinks.length) % resultLinks.length;
+        resultLinks.forEach((link, index) => {
+            const selected = index === selectedIndex;
+            link.classList.toggle('is-selected', selected);
+            link.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+        const selected = resultLinks[selectedIndex];
+        input.setAttribute('aria-activedescendant', selected.id);
+        selected.scrollIntoView({ block: 'nearest' });
     };
 
-    const scoreItem = (query: string, text: string) => {
-        if (!query) {
-            return 0;
+    const appendHighlightedText = (element: HTMLElement, value: string, query: string) => {
+        const start = value.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
+        if (start < 0) {
+            element.textContent = value;
+            return;
         }
-        const tokens = query.split(/\s+/).filter(Boolean);
-        let score = 0;
-        for (const token of tokens) {
-            const tokenScore = scoreToken(token, text);
-            if (!tokenScore) {
-                return 0;
-            }
-            score += tokenScore;
-        }
-        return score;
+        element.append(document.createTextNode(value.slice(0, start)));
+        const mark = document.createElement('mark');
+        mark.textContent = value.slice(start, start + query.length);
+        element.append(mark, document.createTextNode(value.slice(start + query.length)));
     };
 
-    const setResultsVisible = (visible: boolean) => {
-        results.hidden = !visible;
-    };
-
-    const renderEmpty = (message: string) => {
+    const showMessage = (message: string) => {
         results.innerHTML = '';
+        resultLinks = [];
+        setSelectedIndex(-1);
         const empty = document.createElement('div');
         empty.className = 'search-spotlight__empty';
         empty.textContent = message;
         results.appendChild(empty);
+        results.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
     };
 
-    const renderResults = (items: SearchItem[], query: string) => {
+    const render = (items: SearchItem[]) => {
         results.innerHTML = '';
+        resultLinks = [];
+        selectedIndex = -1;
         if (!items.length) {
-            renderEmpty(
-                query
-                    ? t('search_empty', 'No results.')
-                    : t('search_hint', 'Type to search posts, questions, people, and tags.'),
-            );
+            showMessage(t('search_empty', 'No results.'));
             return;
         }
         const fragment = document.createDocumentFragment();
-        items.forEach((item) => {
-            const link = document.createElement('a');
-            link.className = 'search-spotlight__item';
-            link.href = item.url;
+        const query = input.value.trim();
+        const itemTypes: SearchItem['type'][] = ['post', 'question', 'user', 'tag'];
+        for (const type of itemTypes) {
+            const groupItems = items.filter((item) => item.type === type);
+            if (!groupItems.length) continue;
 
-            const title = document.createElement('div');
-            title.className = 'search-spotlight__item-title';
-            title.textContent = item.title;
+            const group = document.createElement('div');
+            const heading = document.createElement('div');
+            const headingId = 'search-group-' + type;
+            group.className = 'search-spotlight__group';
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-labelledby', headingId);
+            heading.className = 'search-spotlight__group-title';
+            heading.id = headingId;
+            heading.textContent = typeLabels[type];
+            group.appendChild(heading);
 
-            link.appendChild(title);
-
-            if (item.subtitle) {
-                const subtitle = document.createElement('div');
-                subtitle.className = 'search-spotlight__item-subtitle';
-                subtitle.textContent = item.subtitle;
-                link.appendChild(subtitle);
+            for (const item of groupItems) {
+                const link = document.createElement('a');
+                const index = resultLinks.length;
+                link.className = 'search-spotlight__item';
+                link.id = 'search-result-' + index;
+                link.href = item.url;
+                link.tabIndex = -1;
+                link.setAttribute('role', 'option');
+                link.setAttribute('aria-selected', 'false');
+                const title = document.createElement('div');
+                title.className = 'search-spotlight__item-title';
+                appendHighlightedText(title, item.title, query);
+                link.appendChild(title);
+                if (item.subtitle) {
+                    const subtitle = document.createElement('div');
+                    subtitle.className = 'search-spotlight__item-subtitle';
+                    subtitle.textContent = item.subtitle;
+                    link.appendChild(subtitle);
+                }
+                const meta = document.createElement('div');
+                meta.className = 'search-spotlight__item-meta';
+                meta.textContent = [typeLabels[item.type], item.author].filter(Boolean).join(' · ');
+                link.appendChild(meta);
+                link.addEventListener('mousemove', () => setSelectedIndex(index));
+                link.addEventListener('focus', () => setSelectedIndex(index));
+                link.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    close();
+                    void navigateTo(item.url);
+                });
+                resultLinks.push(link);
+                group.appendChild(link);
             }
-
-            const meta = document.createElement('div');
-            meta.className = 'search-spotlight__item-meta';
-
-            const type = document.createElement('span');
-            type.className = 'search-spotlight__item-type';
-            type.textContent = typeLabels[item.type];
-            meta.appendChild(type);
-
-            if (item.author) {
-                const author = document.createElement('span');
-                author.textContent = item.author;
-                meta.appendChild(author);
-            }
-
-            link.appendChild(meta);
-            fragment.appendChild(link);
-        });
-
+            fragment.appendChild(group);
+        }
         results.appendChild(fragment);
+        results.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        setSelectedIndex(0);
     };
 
-    let lastResults: SearchItem[] = [];
-    const runSearch = (raw: string) => {
-        const query = normalizeQuery(raw);
-        if (!query) {
-            lastResults = [];
-            results.innerHTML = '';
-            setResultsVisible(false);
+    const search = async () => {
+        const query = input.value.trim();
+        if (query.length < 2) {
+            currentItems = [];
+            resultLinks = [];
+            setSelectedIndex(-1);
+            results.hidden = true;
+            input.setAttribute('aria-expanded', 'false');
             return;
         }
-        setResultsVisible(true);
-        const scored = index
-            .map((item) => ({
-                item,
-                score: scoreItem(query, item._searchText),
-            }))
-            .filter((entry) => entry.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 10)
-            .map((entry) => entry.item);
-        lastResults = scored;
-        renderResults(scored, query);
-    };
-
-    let searchTimer: number | undefined;
-    const scheduleSearch = () => {
-        window.clearTimeout(searchTimer);
-        searchTimer = window.setTimeout(() => {
-            runSearch(input.value);
-        }, 120);
-    };
-
-    const open = () => {
-        modal.hidden = false;
-        document.body.classList.add('is-locked');
-        input.placeholder = t('search_placeholder', 'Search posts, questions, people, tags');
-        input.value = '';
-        results.innerHTML = '';
-        setResultsVisible(false);
-        window.setTimeout(() => input.focus(), 0);
+        controller?.abort();
+        controller = new AbortController();
+        const url = new URL(`${appUrl}/search`, window.location.origin);
+        url.searchParams.set('q', query);
+        try {
+            const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+            if (!response.ok) {
+                showMessage(t('search_empty', 'No results.'));
+                return;
+            }
+            const payload = (await response.json()) as { items?: SearchItem[] };
+            currentItems = payload.items ?? [];
+            render(currentItems);
+        } catch (error) {
+            if ((error as DOMException).name !== 'AbortError') {
+                showMessage(t('search_empty', 'No results.'));
+            }
+        }
     };
 
     const close = () => {
+        controller?.abort();
         modal.hidden = true;
         document.body.classList.remove('is-locked');
-        results.innerHTML = '';
-        setResultsVisible(false);
+        results.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        setSelectedIndex(-1);
+        restoreFocus(returnFocus);
+        returnFocus = null;
+    };
+    const open = () => {
+        returnFocus = rememberFocus();
+        modal.hidden = false;
+        document.body.classList.add('is-locked');
+        input.value = '';
+        input.placeholder = t('search_placeholder', 'Search posts, questions, people, tags');
+        results.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        window.setTimeout(() => input.focus(), 0);
     };
 
-    openButtons.forEach((button) => {
-        if (button.dataset.searchOpenBound === '1') {
-            return;
-        }
-        button.dataset.searchOpenBound = '1';
-        button.addEventListener('click', open);
+    openButtons.forEach((button) => button.addEventListener('click', open));
+    modal.querySelectorAll<HTMLElement>('[data-search-close]').forEach((button) => button.addEventListener('click', close));
+    input.addEventListener('input', () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(search, 180);
     });
-
-    closeButtons.forEach((button) => {
-        button.addEventListener('click', close);
-    });
-
-    modal.addEventListener('click', (event) => {
-        if (event.target === modal) {
-            close();
-        }
-    });
-
-    input.addEventListener('input', scheduleSearch);
     input.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-            close();
-            return;
+        if (event.key === 'Escape') close();
+        if (event.key === 'ArrowDown' && resultLinks.length) {
+            event.preventDefault();
+            setSelectedIndex(selectedIndex + 1);
         }
-        if (event.key === 'Enter' && lastResults.length) {
+        if (event.key === 'ArrowUp' && resultLinks.length) {
+            event.preventDefault();
+            setSelectedIndex(selectedIndex - 1);
+        }
+        if (event.key === 'Home' && resultLinks.length) {
+            event.preventDefault();
+            setSelectedIndex(0);
+        }
+        if (event.key === 'End' && resultLinks.length) {
+            event.preventDefault();
+            setSelectedIndex(resultLinks.length - 1);
+        }
+        const selected = resultLinks[selectedIndex];
+        if (event.key === 'Enter' && selected) {
+            event.preventDefault();
             close();
-            void navigateTo(lastResults[0].url);
+            void navigateTo(selected.getAttribute('href') ?? selected.href);
         }
     });
-
     document.addEventListener('keydown', (event) => {
+        if (!modal.hidden) {
+            trapModalFocus(modal, event);
+        }
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
             event.preventDefault();
-            if (modal.hidden) {
-                open();
-            } else {
-                close();
-            }
-        }
-        if (event.key === 'Escape' && !modal.hidden) {
+            modal.hidden ? open() : close();
+        } else if (event.key === 'Escape' && !modal.hidden) {
             close();
         }
     });

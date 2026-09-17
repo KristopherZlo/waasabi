@@ -14,6 +14,15 @@ class AdminUserController extends Controller
     public function updateRole(AdminRoleRequest $request, User $user): RedirectResponse
     {
         $data = $request->validated();
+        if (
+            $user->isAdmin()
+            && ! $user->is_banned
+            && $data['role'] !== 'admin'
+            && User::where('role', 'admin')->where('is_banned', false)->count() <= 1
+        ) {
+            return back()->withErrors(['role' => __('ui.profile_settings.last_admin')]);
+        }
+
         $oldRole = $user->role;
         $user->update(['role' => $data['role']]);
 
@@ -22,13 +31,13 @@ class AdminUserController extends Controller
             'to' => $data['role'],
         ], 'user', (string) $user->id);
 
-        return redirect()->route('admin');
+        return redirect()->route('admin', ['tab' => 'users', 'user' => $user->id]);
     }
 
     public function toggleBan(AdminBanRequest $request, User $user, ModerationService $moderation): RedirectResponse
     {
         $moderator = $request->user();
-        if (!$moderator) {
+        if (! $moderator) {
             return redirect()->route('login');
         }
 
@@ -42,15 +51,11 @@ class AdminUserController extends Controller
             abort(403);
         }
 
-        $wasBanned = (bool) ($user->is_banned ?? false);
-        if (safeHasColumn('users', 'is_banned')) {
-            $user->is_banned = !$user->is_banned;
-            $user->role = $user->is_banned ? 'BANNED' : 'user';
-            $user->save();
-        }
-        $nowBanned = (bool) ($user->is_banned ?? false);
+        $wasBanned = (bool) $user->is_banned;
+        $user->update(['is_banned' => ! $wasBanned]);
+        $nowBanned = (bool) $user->is_banned;
         $action = $nowBanned ? 'ban' : 'unban';
-        $contentUrl = !empty($user->slug) ? route('profile.show', $user->slug) : null;
+        $contentUrl = ! empty($user->slug) ? route('profile.show', $user->slug) : null;
 
         $moderation->logAction(
             $request,

@@ -1,31 +1,42 @@
+@php
+    $spaFragment = request()->header('X-SPA-Fragment') === '1';
+    $metaTitle = trim($__env->yieldContent('title', config('app.name')));
+    $fullTitle = str_contains(strtolower($metaTitle), strtolower(config('app.name')))
+        ? $metaTitle
+        : $metaTitle.' — '.config('app.name');
+    $metaDescription = trim($__env->yieldContent('description', __('ui.app.description')));
+    $metaImage = trim($__env->yieldContent('image', asset('images/cover.png')));
+@endphp
+@if ($spaFragment)
+    @include('layouts.main')
+@else
 <!doctype html>
 <html lang="{{ app()->getLocale() }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Waasabi')</title>
+    @include('partials.theme-preference')
+    <title>{{ $fullTitle }}</title>
+    <meta name="description" content="{{ $metaDescription }}">
+    <meta name="robots" content="@yield('robots', 'index, follow')">
+    <link rel="canonical" href="{{ url()->current() }}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ config('app.name') }}">
+    <meta property="og:title" content="{{ $fullTitle }}">
+    <meta property="og:description" content="{{ $metaDescription }}">
+    <meta property="og:url" content="{{ url()->current() }}">
+    <meta property="og:image" content="{{ $metaImage }}">
+    <meta name="twitter:card" content="summary_large_image">
     @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
-        @vite(['resources/js/site-loader.ts', 'resources/css/app.css', 'resources/js/app.ts'])
+        @vite(['resources/css/app.css', 'resources/js/app.ts'])
     @endif
     <script nonce="{{ $csp_nonce ?? '' }}">
         window.APP_I18N = @json(trans('ui.js'));
-        window.APP_SEARCH_INDEX = @json($searchIndex ?? []);
     </script>
 </head>
-<body class="app-shell" data-page="@yield('page', 'feed')" data-app-url="{{ url('/') }}" data-locale="{{ app()->getLocale() }}" data-placeholder="{{ asset('images/placeholder.svg') }}" data-auth-state="{{ Auth::check() && !(Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-banned="{{ Auth::check() && (Auth::user()?->is_banned ?? false) ? '1' : '0' }}" @if (session('toast')) data-toast-message="{{ session('toast') }}" @endif>
-    <div class="site-loader" data-site-loader>
-        <div class="site-loader__layer site-loader__layer--main">
-            <div class="site-loader__content">
-                <div class="site-loader__avatar" data-site-loader-avatar aria-hidden="true"></div>
-            </div>
-        </div>
-        <div class="site-loader__layer site-loader__layer--trail site-loader__layer--trail-one"></div>
-        <div class="site-loader__layer site-loader__layer--trail site-loader__layer--trail-two"></div>
-    </div>
-    <div class="bg-orb"></div>
-    <div class="bg-orb bg-orb--two"></div>
-    <div class="bg-noise"></div>
+<body data-user-id="{{ Auth::id() ?? 'guest' }}" class="app-shell" data-page="@yield('page', 'feed')" data-app-url="{{ url('/') }}" data-locale="{{ app()->getLocale() }}" data-placeholder="{{ asset('images/placeholder.svg') }}" data-auth-state="{{ Auth::check() && !(Auth::user()?->is_banned ?? false) ? '1' : '0' }}" data-banned="{{ Auth::check() && (Auth::user()?->is_banned ?? false) ? '1' : '0' }}" @if (session('toast')) data-toast-message="{{ session('toast') }}" @endif>
+    <a class="skip-link" href="#main-content">{{ __('ui.app.skip_to_content') }}</a>
 
     <header class="topbar">
         <div class="topbar__inner">
@@ -36,12 +47,12 @@
                     </div>
                     <div class="brand">{{ __('ui.app.name') }}</div>
                 </a>
-                <a class="top-link" href="{{ route('feed') }}">{{ __('ui.app.all_streams') }}</a>
             </div>
             @if (!empty($topbar_promo))
                 <a class="topbar-promo" href="{{ route('promos.click', $topbar_promo['id']) }}" target="_blank" rel="noreferrer noopener">{{ $topbar_promo['label'] }}</a>
             @endif
             <div class="top-actions">
+                <a class="community-people-link" href="{{ route('people') }}">{{ __('waasabi.people') }}</a>
                 <button class="icon-btn" type="button" aria-label="{{ __('ui.topbar.search') }}" data-search-open><i data-lucide="search" class="icon"></i></button>
                 <div class="read-later">
                     <button class="icon-btn read-later__trigger" type="button" aria-label="{{ __('ui.topbar.read_later') }}" aria-haspopup="menu" aria-expanded="false" data-read-later-toggle>
@@ -54,7 +65,6 @@
                         <a class="read-later-menu__footer" href="{{ route('read-later') }}">{{ __('ui.read_later.dropdown_all') }}</a>
                     </div>
                 </div>
-                <button class="icon-btn" type="button" aria-label="{{ __('ui.topbar.settings') }}" data-settings-open><i data-lucide="sliders-horizontal" class="icon"></i></button>
                 <div class="notifications">
                     <button class="icon-btn notifications-trigger" type="button" aria-label="{{ __('ui.topbar.notifications') }}" aria-haspopup="menu" aria-expanded="false" aria-controls="notifications-menu" data-notifications-toggle>
                         <i data-lucide="bell" class="icon"></i>
@@ -90,6 +100,7 @@
                         <a class="notifications-menu__footer" href="{{ route('notifications') }}">{{ __('ui.notifications.dropdown_all') }}</a>
                     </div>
                 </div>
+                <a class="icon-btn top-settings" href="{{ route('settings') }}" aria-label="{{ __('ui.topbar.settings') }}"><i data-lucide="sliders-horizontal" class="icon"></i></a>
                 @can('moderate')
                     <button class="ghost-btn" type="button" data-admin-toggle>
                         <i data-lucide="edit-3" class="icon"></i>
@@ -175,100 +186,44 @@
         </div>
     </header>
 
-    <main class="page">
-        @hasSection('sidebar')
-            <div class="layout">
-                <div class="content">
-                    @yield('content')
-                </div>
-                <aside class="sidebar">
-                    @yield('sidebar')
-                </aside>
-            </div>
-        @else
-            <div class="layout layout--single">
-                <div class="content">
-                    @yield('content')
-                </div>
-            </div>
-        @endif
-    </main>
+    @include('layouts.main')
 
     @include('partials.nav')
-
-    <div class="settings-modal" data-settings-modal hidden>
-        <div class="settings-card" data-settings-panel>
-            <div class="settings-header">
-                <div class="settings-header__meta">
-                    <div class="settings-title">{{ __('ui.settings.title') }}</div>
-                    <div class="settings-subtitle">{{ __('ui.settings.subtitle') }}</div>
-                </div>
-                <button class="icon-btn" type="button" aria-label="{{ __('ui.settings.close') }}" data-settings-close>
-                    <i data-lucide="x" class="icon"></i>
-                </button>
-            </div>
-            <div class="settings-body">
-                <div class="settings-section settings-section--locale">
-                    <div class="settings-label">{{ __('ui.settings.language') }}</div>
-                    <div class="settings-locale">
-                        <a class="settings-option {{ app()->getLocale() === 'en' ? 'is-active' : '' }}" href="{{ route('locale', 'en') }}">English</a>
-                        <a class="settings-option {{ app()->getLocale() === 'fi' ? 'is-active' : '' }}" href="{{ route('locale', 'fi') }}">Suomi</a>
-                    </div>
-                </div>
-                <div class="settings-section">
-                    <div class="settings-label">{{ __('ui.settings.publications') }}</div>
-                    <div class="settings-stack">
-                        <label class="settings-option"><input type="checkbox" data-setting="publications" value="en" checked>English</label>
-                        <label class="settings-option"><input type="checkbox" data-setting="publications" value="fi">Suomi</label>
-                    </div>
-                </div>
-                <div class="settings-section">
-                    <div class="settings-label">{{ __('ui.settings.feed_view') }}</div>
-                    <div class="settings-stack">
-                        <label class="settings-option"><input type="radio" name="feed-view" data-setting="feed_view" value="classic" checked>{{ __('ui.settings.feed_classic') }}</label>
-                        <label class="settings-option"><input type="radio" name="feed-view" data-setting="feed_view" value="compact">{{ __('ui.settings.feed_compact') }}</label>
-                    </div>
-                </div>
-                <div class="settings-section">
-                    <div class="settings-label">{{ __('ui.settings.theme') }}</div>
-                    <div class="settings-stack">
-                        <label class="settings-option"><input type="radio" name="theme" data-setting="theme" value="dark">{{ __('ui.settings.theme_dark') }}</label>
-                        <label class="settings-option"><input type="radio" name="theme" data-setting="theme" value="light">{{ __('ui.settings.theme_light') }}</label>
-                        <label class="settings-option"><input type="radio" name="theme" data-setting="theme" value="system" checked>{{ __('ui.settings.theme_system') }}</label>
-                    </div>
-                </div>
-                <div class="settings-section">
-                    <div class="settings-label">{{ __('ui.support.title') }}</div>
-                    <div class="settings-stack">
-                        <a class="settings-option" href="{{ route('support') }}">
-                            <i data-lucide="life-buoy" class="icon"></i>
-                            <span>{{ __('ui.profile_settings.support_cta') }}</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
-            <button type="button" class="submit-btn" data-settings-save>{{ __('ui.settings.save') }}</button>
-        </div>
-    </div>
 
     <div class="search-spotlight" data-search-modal hidden>
         <div class="search-spotlight__panel" role="dialog" aria-modal="true" aria-label="{{ __('ui.topbar.search') }}">
             <div class="search-spotlight__input">
                 <i data-lucide="search" class="icon"></i>
-                <input type="text" data-search-input>
+                <input
+                    type="search"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-controls="spotlight-search-results"
+                    aria-expanded="false"
+                    data-search-input
+                    aria-label="{{ __('ui.topbar.search') }}"
+                    autocomplete="off"
+                >
                 <button class="icon-btn" type="button" aria-label="{{ __('ui.settings.close') }}" data-search-close>
                     <i data-lucide="x" class="icon"></i>
                 </button>
             </div>
-            <div class="search-spotlight__results" data-search-results hidden></div>
+            <div
+                class="search-spotlight__results"
+                id="spotlight-search-results"
+                role="listbox"
+                aria-live="polite"
+                data-search-results
+                hidden
+            ></div>
         </div>
         <button class="search-spotlight__backdrop" type="button" aria-label="{{ __('ui.settings.close') }}" data-search-close></button>
     </div>
 
     <div class="report-modal" data-report-modal hidden>
-        <div class="report-card" data-report-panel>
+        <div class="report-card" data-report-panel role="dialog" aria-modal="true" aria-labelledby="report-dialog-title">
             <div class="report-header">
-                <div class="report-title">{{ __('ui.report.title') }}</div>
+                <div class="report-title" id="report-dialog-title">{{ __('ui.report.title') }}</div>
                 <button class="icon-btn" type="button" aria-label="{{ __('ui.report.close') }}" data-report-close>
                     <i data-lucide="x" class="icon"></i>
                 </button>
@@ -320,19 +275,18 @@
         </div>
     </div>
 
-    <div class="cookie-banner" data-cookie-banner hidden role="dialog" aria-live="polite" aria-label="Cookie notice">
+    <div class="cookie-banner" data-cookie-banner hidden role="dialog" aria-live="polite" aria-label="{{ __('ui.cookies.notice') }}">
         <div class="cookie-banner__card">
             <div class="cookie-banner__text">
-                <div class="cookie-banner__title">This site uses cookies</div>
+                <div class="cookie-banner__title">{{ __('ui.cookies.title') }}</div>
                 <p>
-                    We use essential cookies to keep you signed in and protect the forum.
-                    We do not use analytics or marketing cookies at this time.
-                    See our <a href="{{ route('legal.cookies') }}">Cookie Policy</a> and <a href="{{ route('legal.privacy') }}">Privacy Policy</a>.
+                    {{ __('ui.cookies.body') }}
+                    <a href="{{ route('legal.cookies') }}">{{ __('ui.cookies.policy') }}</a>
                 </p>
             </div>
             <div class="cookie-banner__actions">
-                <button type="button" class="ghost-btn" data-cookie-essential>Only essential</button>
-                <button type="button" class="submit-btn" data-cookie-accept>Accept</button>
+                <button type="button" class="ghost-btn" data-cookie-essential>{{ __('ui.cookies.essential') }}</button>
+                <button type="button" class="submit-btn" data-cookie-accept>{{ __('ui.cookies.accept') }}</button>
             </div>
         </div>
     </div>
@@ -374,25 +328,24 @@
                     <div class="footer-title">{{ __('ui.footer.sections') }}</div>
                     <a href="{{ route('feed') }}" class="footer-link">{{ __('ui.nav.feed') }}</a>
                     <a href="{{ route('feed', ['stream' => 'questions']) }}" class="footer-link">{{ __('ui.feed.tab_questions') }}</a>
-                    <a href="{{ route('showcase') }}" class="footer-link">{{ __('ui.nav.showcase') }}</a>
                     <a href="{{ route('read-later') }}" class="footer-link">{{ __('ui.nav.read_later') }}</a>
                     <a href="{{ route('profile') }}" class="footer-link">{{ __('ui.nav.profile') }}</a>
                 </div>
                 <div class="footer-col">
-                    <div class="footer-title">Legal</div>
-                    <a href="{{ route('legal.terms') }}" class="footer-link">Terms of Service</a>
-                    <a href="{{ route('legal.privacy') }}" class="footer-link">Privacy Policy</a>
-                    <a href="{{ route('legal.cookies') }}" class="footer-link">Cookie Policy</a>
-                    <a href="{{ route('legal.guidelines') }}" class="footer-link">Community Guidelines</a>
-                    <a href="{{ route('legal.notice') }}" class="footer-link">Notice &amp; Action</a>
-                    <a href="{{ route('legal.legal-notice') }}" class="footer-link">Legal Notice</a>
-                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">Contact</a>
+                    <div class="footer-title">{{ __('ui.footer.legal') }}</div>
+                    <a href="{{ route('legal.terms') }}" class="footer-link">{{ __('ui.footer.terms') }}</a>
+                    <a href="{{ route('legal.privacy') }}" class="footer-link">{{ __('ui.footer.privacy') }}</a>
+                    <a href="{{ route('legal.cookies') }}" class="footer-link">{{ __('ui.footer.cookies') }}</a>
+                    <a href="{{ route('legal.guidelines') }}" class="footer-link">{{ __('ui.footer.guidelines') }}</a>
+                    <a href="{{ route('legal.notice') }}" class="footer-link">{{ __('ui.footer.notice') }}</a>
+                    <a href="{{ route('legal.legal-notice') }}" class="footer-link">{{ __('ui.footer.legal_notice') }}</a>
+                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">{{ __('ui.footer.contact') }}</a>
                 </div>
                 <div class="footer-col">
                     <div class="footer-title">{{ __('ui.footer.services') }}</div>
                     <a href="{{ route('publish') }}" class="footer-link">{{ __('ui.publish.title') }}</a>
                     <a href="{{ route('read-later') }}" class="footer-link">{{ __('ui.read_later.title') }}</a>
-                    <a href="{{ route('showcase') }}" class="footer-link">{{ __('ui.showcase.title') }}</a>
+                    <a href="{{ route('collaboration') }}" class="footer-link">{{ __('ui.feed.tab_collaboration') }}</a>
                     <a href="{{ route('notifications') }}" class="footer-link">{{ __('ui.notifications.title') }}</a>
                     <a href="{{ route('support') }}" class="footer-link">{{ __('ui.support.title') }}</a>
                 </div>
@@ -407,13 +360,10 @@
                 @endphp
                 <div class="footer-copy">{{ __('ui.footer.copyright', ['year' => $footerYearRange]) }}</div>
                 <div class="footer-links">
-                    <a href="{{ route('legal.terms') }}" class="footer-link">Terms</a>
-                    <a href="{{ route('legal.privacy') }}" class="footer-link">Privacy</a>
-                    <a href="{{ route('legal.cookies') }}" class="footer-link">Cookies</a>
-                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">Contact</a>
-                </div>
-                <div class="footer-social">
-                    <a class="social-chip" href="https://github.com" target="_blank" rel="noreferrer noopener">{{ __('ui.footer.github') }}</a>
+                    <a href="{{ route('legal.terms') }}" class="footer-link">{{ __('ui.footer.terms') }}</a>
+                    <a href="{{ route('legal.privacy') }}" class="footer-link">{{ __('ui.footer.privacy') }}</a>
+                    <a href="{{ route('legal.cookies') }}" class="footer-link">{{ __('ui.footer.cookies') }}</a>
+                    <a href="mailto:zloydeveloper.info@gmail.com" class="footer-link">{{ __('ui.footer.contact') }}</a>
                 </div>
             </div>
         </div>
@@ -422,3 +372,4 @@
     <div class="toast" data-toast></div>
 </body>
 </html>
+@endif

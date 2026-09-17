@@ -39,7 +39,7 @@ class NotificationsTest extends TestCase
             'link' => '/support',
         ]);
 
-        $response = $this->actingAs($user)->postJson('/notifications/' . $notification->id . '/read');
+        $response = $this->actingAs($user)->postJson('/notifications/'.$notification->id.'/read');
 
         $response->assertOk()->assertJson(['ok' => true]);
         $this->assertDatabaseMissing('user_notifications', [

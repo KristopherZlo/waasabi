@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SupportTicket;
 use App\Services\SupportArticleService;
+use App\Services\UserPayloadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -13,20 +14,16 @@ class SupportController extends Controller
 {
     public function index(Request $request, SupportArticleService $supportArticleService)
     {
-        $ticketsReady = safeHasTable('support_tickets');
         $user = Auth::user();
-        $isBanned = false;
-        if ($user && safeHasColumn('users', 'is_banned')) {
-            $isBanned = (bool) $user->is_banned;
-        }
+        $isBanned = (bool) ($user?->is_banned ?? false);
         $isStaff = $user && $user->can('support');
 
         $supportTickets = collect();
         $threads = [];
         $activeTicket = null;
-        if ($ticketsReady && ($user || $isStaff)) {
+        if ($user) {
             $ticketQuery = SupportTicket::query()->with(['respondedBy', 'resolvedBy', 'user']);
-            if (!$isStaff) {
+            if (! $isStaff) {
                 $ticketQuery->where('user_id', $user?->id ?? 0);
             }
 
@@ -35,7 +32,7 @@ class SupportController extends Controller
                 ->get();
 
             $formatDate = static function ($value): string {
-                if (!$value) {
+                if (! $value) {
                     return '';
                 }
                 try {
@@ -46,7 +43,7 @@ class SupportController extends Controller
             };
 
             $toTimestamp = static function ($value): ?int {
-                if (!$value) {
+                if (! $value) {
                     return null;
                 }
                 try {
@@ -105,7 +102,7 @@ class SupportController extends Controller
                             break;
                         }
                     }
-                    if (!$responseAlreadyPresent) {
+                    if (! $responseAlreadyPresent) {
                         $push([
                             'author_type' => 'support',
                             'author_id' => $ticket->responded_by,
@@ -120,6 +117,7 @@ class SupportController extends Controller
                 usort($messages, static fn ($a, $b) => ($a['_sort'] <=> $b['_sort']) ?: ($a['_seq'] <=> $b['_seq']));
                 $messages = array_map(static function (array $message): array {
                     unset($message['_sort'], $message['_seq'], $message['created_at_raw']);
+
                     return $message;
                 }, $messages);
 
@@ -130,7 +128,7 @@ class SupportController extends Controller
             if ($activeTicketId > 0) {
                 $activeTicket = $supportTickets->firstWhere('id', $activeTicketId);
             }
-            if (!$activeTicket && $request->query('tab') === 'tickets' && $isStaff) {
+            if (! $activeTicket && $request->query('tab') === 'tickets' && $isStaff) {
                 $activeTicket = $supportTickets->first();
             }
         }
@@ -144,8 +142,7 @@ class SupportController extends Controller
 
         return view('support.index', [
             'support_tickets' => $supportTickets,
-            'support_tickets_ready' => $ticketsReady,
-            'support_can_open_ticket' => (bool) ($user && !$isBanned && $ticketsReady),
+            'support_can_open_ticket' => (bool) ($user && ! $isBanned),
             'support_is_banned' => $isBanned,
             'support_is_staff' => (bool) $isStaff,
             'support_threads' => $threads,
@@ -153,7 +150,7 @@ class SupportController extends Controller
             'support_articles' => $supportArticleEntries,
             'support_kb_sections' => $supportKbSectionsResolved,
             'support_legal_articles' => $supportLegalArticles,
-            'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(),
+            'current_user' => app(UserPayloadService::class)->currentUserPayload(),
         ]);
     }
 
@@ -161,14 +158,14 @@ class SupportController extends Controller
     {
         $slug = Str::slug($slug);
         $article = $supportArticleService->findArticle($slug, 'kb');
-        if (!$article) {
+        if (! $article) {
             abort(404);
         }
 
         [$title, $summary] = $supportArticleService->resolveTitleSummary($article);
 
         $markdownPath = $supportArticleService->resolveKnowledgePath($slug);
-        if (!$markdownPath) {
+        if (! $markdownPath) {
             abort(404);
         }
 
@@ -187,7 +184,7 @@ class SupportController extends Controller
             'document_back_url' => route('support', ['tab' => 'home']),
             'markdown_path' => $markdownPath,
             'document_nav_sections' => $supportKbSectionsResolved,
-            'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(),
+            'current_user' => app(UserPayloadService::class)->currentUserPayload(),
         ]);
     }
 
@@ -195,14 +192,14 @@ class SupportController extends Controller
     {
         $slug = Str::slug($slug);
         $article = $supportArticleService->findArticle($slug, 'legal');
-        if (!$article) {
+        if (! $article) {
             abort(404);
         }
 
         [$title, $summary] = $supportArticleService->resolveTitleSummary($article);
 
         $markdownPath = $article['markdown'] ?? null;
-        if (!$markdownPath || !file_exists(base_path($markdownPath))) {
+        if (! $markdownPath || ! file_exists(base_path($markdownPath))) {
             abort(404);
         }
 
@@ -228,7 +225,7 @@ class SupportController extends Controller
             'document_back_url' => route('support', ['tab' => 'home']),
             'markdown_path' => $markdownPath,
             'document_nav_sections' => $documentNavSections,
-            'current_user' => app(\App\Services\UserPayloadService::class)->currentUserPayload(),
+            'current_user' => app(UserPayloadService::class)->currentUserPayload(),
         ]);
     }
 

@@ -11,7 +11,7 @@ export const toast = (() => {
         window.clearTimeout(timeout);
         timeout = window.setTimeout(() => {
             element.classList.remove('is-visible');
-        }, 1800);
+        }, 4200);
     };
 
     return { show };

@@ -14,10 +14,10 @@ class StoreReportRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'content_type' => ['required', 'string', 'max:40', 'in:post,comment,question,review,content'],
-            'content_id' => ['nullable', 'string', 'max:190'],
-            'content_url' => ['nullable', 'url', 'max:255'],
-            'reason' => ['required', 'string', 'max:80', 'in:spam,abuse,offtopic,other,admin_flag'],
+            'content_type' => ['required', 'string', 'max:40', 'in:post,comment,question,review,profile,collaboration,collaboration_comment'],
+            'content_id' => ['required', 'string', 'max:190'],
+            'content_url' => ['exclude'],
+            'reason' => ['required', 'string', 'max:80', 'in:spam,abuse,offtopic,other'],
             'details' => ['nullable', 'string', 'max:1000'],
         ];
     }

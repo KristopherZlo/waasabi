@@ -6,7 +6,6 @@
 @section('content')
     @php
         $supportTickets = collect($support_tickets ?? []);
-        $ticketsReady = (bool) ($support_tickets_ready ?? false);
         $canOpenTicket = (bool) ($support_can_open_ticket ?? false);
         $isBanned = (bool) ($support_is_banned ?? false);
         $isLoggedIn = Auth::check();
@@ -66,7 +65,7 @@
                                             <div class="support-kb__summary-text">{{ $section['summary'] }}</div>
                                         @endif
                                     </div>
-                                    <span class="support-kb__chevron"></span>
+                                    <i data-lucide="chevron-down" class="icon support-kb__chevron" aria-hidden="true"></i>
                                 </summary>
                                 <div class="support-kb__items">
                                     @foreach (($section['items'] ?? []) as $article)
@@ -118,11 +117,7 @@
                     <h2>{{ __('ui.support.portal_nav_tickets') }}</h2>
                 </div>
 
-                @if (!$ticketsReady)
-                    <div class="support-empty card">
-                        <div class="support-empty__title">{{ __('ui.support.portal_tickets_unavailable') }}</div>
-                    </div>
-                @elseif (!$isLoggedIn && !$isStaff)
+                @if (!$isLoggedIn && !$isStaff)
                     <div class="support-empty card">
                         <div class="support-empty__title">{{ __('ui.support.portal_tickets_login') }}</div>
                         <a class="ghost-btn" href="{{ route('login') }}">{{ __('ui.topbar.login') }}</a>
@@ -322,11 +317,7 @@
                     <h2>{{ __('ui.support.portal_nav_new') }}</h2>
                 </div>
 
-                @if (!$ticketsReady)
-                    <div class="support-empty card">
-                        <div class="support-empty__title">{{ __('ui.support.portal_new_unavailable') }}</div>
-                    </div>
-                @elseif ($isBanned)
+                @if ($isBanned)
                     <div class="support-empty card">
                         <div class="support-empty__title">{{ __('ui.support.portal_new_banned') }}</div>
                     </div>

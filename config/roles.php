@@ -15,9 +15,7 @@ return [
             'save',
             'vote',
         ],
-        'maker' => [
-            'publish',
-        ],
+        'maker' => [],
         'support' => [
             'support',
         ],
@@ -41,6 +39,5 @@ return [
         'require_visible' => true,
         'require_approved' => true,
         'type' => 'post',
-        'cache_minutes' => 10,
     ],
 ];

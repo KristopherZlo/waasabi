@@ -1,13 +1,11 @@
 import { setupIcons, setupImageFallbacks, setupScribbleAvatars } from '../core/media';
 import { toast } from '../core/toast';
 import { setupPublishForm } from './publish';
-import { setupArticleEditor } from './editor';
-import { setupCommentForms, setupCommentSorts, setupCommentChunks } from './comments';
+import { setupCommentForms, setupCommentSorts, setupCommentChunks, setupCommentVotes } from './comments';
 import { setupReviewForms, setupReviewVotes } from './reviews';
 import { setupSpotlightSearch } from './spotlight-search';
 import { setupFeedTabs, setupFeedFilters, setupInfiniteFeed, insertFeedQaBlocks, setupQaBlocks } from './feed';
 import { setupReadingExperience, updateCardsProgress } from './reading';
-import { setupAuthButtons } from '../ui/auth';
 import { setupNotificationsMenu, setupNotificationReads, setupNotificationsPage } from '../ui/notifications';
 import { setupReadLaterMenu, renderReadLaterList } from '../ui/read-later';
 import { setupActionMenus } from '../ui/action-menus';
@@ -15,7 +13,7 @@ import { setupSettingsModal } from '../ui/settings-modal';
 import { setupProfileSettingsForm, setupProfileSettingsPage } from '../ui/profile-settings';
 import { setupShareButtons } from '../ui/share';
 import { setupReportModal } from '../ui/report';
-import { setupAdminModeToggle, setupAdminControls, setupConfirmActions, setupAuthorActions, setupModerationReasonForms } from '../ui/admin';
+import { setupAdminInterface, setupAdminModeToggle, setupAdminControls, setupConfirmActions, setupAuthorActions, setupModerationReasonForms } from '../ui/admin';
 import { setupTabs } from '../ui/tabs';
 import { setupPostJumpButtons } from '../ui/post-jump';
 import { setupNsfwReveal } from '../ui/nsfw';
@@ -23,7 +21,6 @@ import { setupActionToggles } from '../ui/action-toggles';
 import { setupFollowButtons } from '../ui/follow';
 import { setupCarousels } from '../ui/carousels';
 import { setupNavFooterOffset } from '../ui/nav-footer';
-import { setupNotFoundPage } from '../ui/not-found';
 import { setupProfileBanner } from '../ui/profile-banner';
 import { setupProfileBadges } from './profile-badges';
 import { setupIconTooltips } from '../ui/tooltips';
@@ -33,8 +30,15 @@ import { setupCookieConsent } from '../ui/cookie-consent';
 import { setupScrollTopRail } from '../ui/scroll-top';
 import { setupMediaViewer } from '../ui/media-viewer';
 import { setupSupportFaq } from './support';
+import { clearPublishDraft } from '../core/storage';
+import { setupNotFoundGame } from './not-found-game';
 
 export const hydratePage = () => {
+    const savedDraft = document.querySelector<HTMLElement>('[data-clear-draft]');
+    if (savedDraft?.dataset.clearDraft) {
+        clearPublishDraft(savedDraft.dataset.clearDraft);
+        delete savedDraft.dataset.clearDraft;
+    }
     setupIcons();
     setupImageFallbacks();
     setupScribbleAvatars();
@@ -46,9 +50,11 @@ export const hydratePage = () => {
     setupBannedGuard();
     setupCookieConsent();
     setupPublishForm();
-    setupAuthButtons();
-    setupArticleEditor();
+    if (document.querySelector('[data-editor]')) {
+        void import('./editor').then(({ setupArticleEditor }) => setupArticleEditor());
+    }
     setupCommentForms();
+    setupCommentVotes();
     setupCommentSorts();
     setupCommentChunks();
     setupReviewForms();
@@ -68,6 +74,7 @@ export const hydratePage = () => {
     setupProfileBanner();
     setupProfileBadges();
     setupProfileMedia();
+    setupAdminInterface();
     setupAdminModeToggle();
     setupAdminControls();
     setupModerationReasonForms();
@@ -89,7 +96,7 @@ export const hydratePage = () => {
     setupIconTooltips();
     setupNavFooterOffset();
     setupScrollTopRail();
-    setupNotFoundPage();
+    setupNotFoundGame();
     renderReadLaterList();
     updateCardsProgress();
 };

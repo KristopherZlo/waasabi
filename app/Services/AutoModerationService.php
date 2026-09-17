@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\CollaborationComment;
+use App\Models\CollaborationRequest;
 use App\Models\ContentReport;
 use App\Models\ContentReportScore;
 use App\Models\ModerationLog;
@@ -10,19 +12,14 @@ use App\Models\PostComment;
 use App\Models\PostReview;
 use App\Models\User;
 use App\Models\UserReportProfile;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class AutoModerationService
 {
     public function handleReport(Request $request, array $data): array
     {
-        if (!$this->safeHasTable('content_reports')) {
-            return ['ok' => true, 'skipped' => true];
-        }
-
         $reporter = $request->user();
         $contentType = (string) ($data['content_type'] ?? '');
         $providedContentId = $data['content_id'] ?? null;
@@ -32,6 +29,10 @@ class AutoModerationService
         $identifiers = $resolved['identifiers'];
         $model = $resolved['model'];
         $slug = $resolved['slug'];
+
+        if (! $model) {
+            return ['ok' => false, 'missing' => true];
+        }
 
         if ($reporter && $canonicalId !== '' && $this->hasExistingReport($reporter, $contentType, $identifiers)) {
             return ['ok' => true, 'duplicate' => true];
@@ -45,31 +46,33 @@ class AutoModerationService
             'slug' => $slug,
         ];
 
-        $report = ContentReport::create([
-            'user_id' => $reporter?->id,
-            'reporter_role' => $weights['role_key'],
-            'role_weight' => $weights['role_weight'],
-            'reporter_weight' => $weights['reporter_weight'],
-            'reporter_trust' => $weights['trust_score'],
-            'weight' => $weights['report_weight'],
-            'content_type' => $contentType,
-            'content_id' => $canonicalId !== '' ? $canonicalId : ($providedContentId ?? null),
-            'content_url' => $data['content_url'] ?? $request->fullUrl(),
-            'reason' => $data['reason'],
-            'details' => $data['details'] ?? null,
-            'resolved_status' => 'pending',
-            'meta' => $reportMeta,
-        ]);
+        try {
+            $report = ContentReport::create([
+                'user_id' => $reporter?->id,
+                'reporter_role' => $weights['role_key'],
+                'role_weight' => $weights['role_weight'],
+                'reporter_weight' => $weights['reporter_weight'],
+                'reporter_trust' => $weights['trust_score'],
+                'weight' => $weights['report_weight'],
+                'content_type' => $contentType,
+                'content_id' => $canonicalId !== '' ? $canonicalId : ($providedContentId ?? null),
+                'content_url' => $this->resolveContentUrl($contentType, $model, $slug),
+                'reason' => $data['reason'],
+                'details' => $data['details'] ?? null,
+                'resolved_status' => 'pending',
+                'meta' => $reportMeta,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            return ['ok' => true, 'duplicate' => true];
+        }
 
         if ($reporter && $weights['profile'] instanceof UserReportProfile) {
             $weights['profile']->increment('reports_submitted');
         }
 
-        $siteScale = $this->calculateSiteScale(true);
-        if ($this->safeHasColumn('content_reports', 'meta')) {
-            $report->meta = array_merge((array) $report->meta, ['site_scale' => $siteScale]);
-            $report->save();
-        }
+        $siteScale = $this->calculateSiteScale();
+        $report->meta = array_merge((array) $report->meta, ['site_scale' => $siteScale]);
+        $report->save();
         $threshold = $this->computeAutoHideThreshold($contentType, $siteScale);
         $score = $this->recomputeScore($contentType, $canonicalId, $identifiers, $slug, $threshold, $siteScale);
         $autoHidden = $this->maybeAutoHide($request, $model, $contentType, $canonicalId, $identifiers, $slug, $score, $threshold);
@@ -88,8 +91,6 @@ class AutoModerationService
         mixed $model,
         string $resolution,
         string $action,
-        ?string $reason = null,
-        ?User $actor = null
     ): void {
         $contentType = $this->modelContentType($model);
         if ($contentType === null) {
@@ -104,10 +105,44 @@ class AutoModerationService
         $identifiers = $this->identifiersForModel($model);
         $slug = $model instanceof Post ? (string) ($model->slug ?? '') : null;
 
-        $siteScale = $this->calculateSiteScale(true);
+        $siteScale = $this->calculateSiteScale();
         $threshold = $this->computeAutoHideThreshold($contentType, $siteScale);
-        $this->resolveReportsForContent($contentType, $canonicalId, $identifiers, $resolution, $action, $reason);
+        $this->resolveReportsForContent($contentType, $canonicalId, $identifiers, $resolution, $action);
         $this->recomputeScore($contentType, $canonicalId, $identifiers, $slug, $threshold, $siteScale);
+    }
+
+    public function withdrawReportsForUser(User $user): void
+    {
+        $posts = $user->posts()->get();
+        $postIds = $posts->pluck('id')->all();
+        $posts->each(fn (Post $post) => $this->resolveReportsForModel($post, 'withdrawn', 'source_removed'));
+
+        PostComment::query()
+            ->where('user_id', $user->id)
+            ->when($postIds !== [], fn ($query) => $query->orWhereIn('post_id', $postIds))
+            ->get()
+            ->each(fn (PostComment $comment) => $this->resolveReportsForModel($comment, 'withdrawn', 'source_removed'));
+        PostReview::query()
+            ->where('user_id', $user->id)
+            ->when($postIds !== [], fn ($query) => $query->orWhereIn('post_id', $postIds))
+            ->get()
+            ->each(fn (PostReview $review) => $this->resolveReportsForModel($review, 'withdrawn', 'source_removed'));
+
+        $this->resolveReportsForContent(
+            'profile',
+            (string) $user->id,
+            array_values(array_filter([(string) $user->id, (string) $user->slug])),
+            'withdrawn',
+            'source_removed',
+        );
+    }
+
+    public function withdrawReportsForPostInteractions(Post $post): void
+    {
+        $post->comments()->get()
+            ->each(fn (PostComment $comment) => $this->resolveReportsForModel($comment, 'withdrawn', 'source_removed'));
+        $post->reviews()->get()
+            ->each(fn (PostReview $review) => $this->resolveReportsForModel($review, 'withdrawn', 'source_removed'));
     }
 
     private function resolveReportsForContent(
@@ -116,9 +151,8 @@ class AutoModerationService
         array $identifiers,
         string $resolution,
         string $action,
-        ?string $reason
     ): void {
-        if (!$this->safeHasTable('content_reports') || empty($identifiers)) {
+        if (empty($identifiers)) {
             return;
         }
 
@@ -126,11 +160,9 @@ class AutoModerationService
             ->where('content_type', $contentType)
             ->whereIn('content_id', $identifiers);
 
-        if ($this->safeHasColumn('content_reports', 'resolved_status')) {
-            $query->where(function ($sub): void {
-                $sub->whereNull('resolved_status')->orWhere('resolved_status', 'pending');
-            });
-        }
+        $query->where(function ($sub): void {
+            $sub->whereNull('resolved_status')->orWhere('resolved_status', 'pending');
+        });
 
         $reports = $query->get(['id', 'user_id']);
         if ($reports->isEmpty()) {
@@ -140,21 +172,19 @@ class AutoModerationService
         $ids = $reports->pluck('id')->all();
         $countsByUser = [];
         foreach ($reports as $report) {
-            if (!$report->user_id) {
+            if (! $report->user_id) {
                 continue;
             }
             $countsByUser[$report->user_id] = ($countsByUser[$report->user_id] ?? 0) + 1;
         }
 
-        if ($this->safeHasColumn('content_reports', 'resolved_status')) {
-            ContentReport::query()
-                ->whereIn('id', $ids)
-                ->update([
-                    'resolved_status' => $resolution,
-                    'resolved_at' => now(),
-                    'auto_action' => $action,
-                ]);
-        }
+        ContentReport::query()
+            ->whereIn('id', $ids)
+            ->update([
+                'resolved_status' => $resolution,
+                'resolved_at' => now(),
+                'auto_action' => $action,
+            ]);
 
         $this->updateProfilesForResolution($countsByUser, $resolution);
     }
@@ -169,11 +199,11 @@ class AutoModerationService
         ?ContentReportScore $score,
         float $threshold
     ): bool {
-        if (!$model || !$score) {
+        if (! $model || ! $score) {
             return false;
         }
 
-        if (!in_array($contentType, ['post', 'question'], true)) {
+        if (! in_array($contentType, ['post', 'question'], true)) {
             return false;
         }
 
@@ -195,16 +225,12 @@ class AutoModerationService
 
         $model->is_hidden = true;
         $model->moderation_status = 'hidden';
-        if ($this->safeHasColumn('posts', 'hidden_at')) {
-            $model->hidden_at = now();
-        }
-        if ($this->safeHasColumn('posts', 'hidden_by')) {
-            $model->hidden_by = null;
-        }
+        $model->hidden_at = now();
+        $model->hidden_by = null;
         $model->save();
 
         $siteScale = (float) ($score->site_scale ?? 1);
-        $this->resolveReportsForContent($contentType, $canonicalId, $identifiers, 'auto_hidden', 'auto_hide', null);
+        $this->resolveReportsForContent($contentType, $canonicalId, $identifiers, 'auto_hidden', 'auto_hide');
         $score->auto_hidden_at = now();
         $score->weight_threshold = $threshold;
         $score->site_scale = $siteScale;
@@ -244,15 +270,6 @@ class AutoModerationService
         $slug = null;
         $model = null;
 
-        if (!$this->safeHasTable('posts') && in_array($contentType, ['post', 'question'], true)) {
-            return [
-                'canonical_id' => $canonicalId,
-                'identifiers' => $identifiers,
-                'slug' => $slug,
-                'model' => $model,
-            ];
-        }
-
         if ($contentType === 'post' || $contentType === 'question') {
             $type = $contentType === 'question' ? 'question' : 'post';
             $query = Post::query()->where('type', $type);
@@ -269,7 +286,7 @@ class AutoModerationService
                 $slug = (string) ($model->slug ?? '');
                 $identifiers = array_values(array_unique(array_filter([$canonicalId, $slug])));
             }
-        } elseif ($contentType === 'comment' && $this->safeHasTable('post_comments')) {
+        } elseif ($contentType === 'comment') {
             if (is_string($contentId) && ctype_digit($contentId)) {
                 $model = PostComment::with('user')->find((int) $contentId);
             } elseif (is_numeric($contentId)) {
@@ -279,11 +296,39 @@ class AutoModerationService
                 $canonicalId = (string) $model->id;
                 $identifiers = [$canonicalId];
             }
-        } elseif ($contentType === 'review' && $this->safeHasTable('post_reviews')) {
+        } elseif ($contentType === 'review') {
             if (is_string($contentId) && ctype_digit($contentId)) {
                 $model = PostReview::with('user')->find((int) $contentId);
             } elseif (is_numeric($contentId)) {
                 $model = PostReview::with('user')->find((int) $contentId);
+            }
+            if ($model) {
+                $canonicalId = (string) $model->id;
+                $identifiers = [$canonicalId];
+            }
+        } elseif ($contentType === 'profile') {
+            if (is_string($contentId) && ctype_digit($contentId)) {
+                $model = User::find((int) $contentId);
+            } elseif (is_numeric($contentId)) {
+                $model = User::find((int) $contentId);
+            } elseif (is_string($contentId) && trim($contentId) !== '') {
+                $model = User::where('slug', $contentId)->first();
+            }
+            if ($model) {
+                $canonicalId = (string) $model->id;
+                $identifiers = array_values(array_filter([$canonicalId, (string) $model->slug]));
+            }
+        } elseif ($contentType === 'collaboration') {
+            if ((is_string($contentId) && ctype_digit($contentId)) || is_numeric($contentId)) {
+                $model = CollaborationRequest::with('user')->find((int) $contentId);
+            }
+            if ($model) {
+                $canonicalId = (string) $model->id;
+                $identifiers = [$canonicalId];
+            }
+        } elseif ($contentType === 'collaboration_comment') {
+            if ((is_string($contentId) && ctype_digit($contentId)) || is_numeric($contentId)) {
+                $model = CollaborationComment::with(['user', 'collaborationRequest'])->find((int) $contentId);
             }
             if ($model) {
                 $canonicalId = (string) $model->id;
@@ -318,7 +363,7 @@ class AutoModerationService
         $roleWeights = (array) config('moderation.reports.role_weights', []);
         $roleWeight = (float) ($roleWeights[$roleKey] ?? 1.0);
 
-        if (!$reporter) {
+        if (! $reporter) {
             return [
                 'role_key' => $roleKey,
                 'role_weight' => $roleWeight,
@@ -382,44 +427,32 @@ class AutoModerationService
         $userId = $reporter->id;
         $points = 0.0;
 
-        if ($this->safeHasTable('posts')) {
-            $postsCount = (int) DB::table('posts')
-                ->where('user_id', $userId)
-                ->whereIn('type', ['post', 'question'])
-                ->count();
-            $points += $postsCount * $postPoints;
-        }
+        $postsCount = (int) DB::table('posts')
+            ->where('user_id', $userId)
+            ->whereIn('type', ['post', 'question'])
+            ->count();
+        $points += $postsCount * $postPoints;
 
-        if ($this->safeHasTable('post_comments')) {
-            $commentsCount = (int) DB::table('post_comments')->where('user_id', $userId)->count();
-            $points += $commentsCount * $commentPoints;
-        }
+        $commentsCount = (int) DB::table('post_comments')->where('user_id', $userId)->count();
+        $points += $commentsCount * $commentPoints;
 
-        if ($this->safeHasTable('post_reviews')) {
-            $reviewsCount = (int) DB::table('post_reviews')->where('user_id', $userId)->count();
-            $points += $reviewsCount * $reviewPoints;
-        }
+        $reviewsCount = (int) DB::table('post_reviews')->where('user_id', $userId)->count();
+        $points += $reviewsCount * $reviewPoints;
 
-        if ($this->safeHasTable('user_follows')) {
-            $followsCount = (int) DB::table('user_follows')
-                ->where('follower_id', $userId)
-                ->count();
-            $points += $followsCount * $followPoints;
-        }
+        $followsCount = (int) DB::table('user_follows')
+            ->where('follower_id', $userId)
+            ->count();
+        $points += $followsCount * $followPoints;
 
-        if ($this->safeHasTable('post_upvotes')) {
-            $upvotesCount = (int) DB::table('post_upvotes')
-                ->where('user_id', $userId)
-                ->count();
-            $points += $upvotesCount * $upvotePoints;
-        }
+        $upvotesCount = (int) DB::table('post_upvotes')
+            ->where('user_id', $userId)
+            ->count();
+        $points += $upvotesCount * $upvotePoints;
 
-        if ($this->safeHasTable('post_saves')) {
-            $savesCount = (int) DB::table('post_saves')
-                ->where('user_id', $userId)
-                ->count();
-            $points += $savesCount * $savePoints;
-        }
+        $savesCount = (int) DB::table('post_saves')
+            ->where('user_id', $userId)
+            ->count();
+        $points += $savesCount * $savePoints;
 
         $ageDays = 0;
         if ($reporter->created_at) {
@@ -453,39 +486,27 @@ class AutoModerationService
 
         $multiplier = 1.0 + $boost - $penalty;
         $maxMultiplier = 1.0 + $boostMax;
+
         return $this->clamp($multiplier, $minMultiplier, $maxMultiplier);
     }
 
-    private function calculateSiteScale(bool $forceRefresh = false): float
+    private function calculateSiteScale(): float
     {
-        if (!$this->safeHasTable('content_reports')) {
-            return 1.0;
-        }
-
         $config = (array) config('moderation.reports.site_scale', []);
-        $cacheSeconds = (int) ($config['cache_seconds'] ?? 300);
-        $cacheKey = 'moderation.site_scale.v1';
+        $windowDays = max(1, (int) ($config['window_days'] ?? 7));
+        $baseReportsPerDay = max(1.0, (float) ($config['base_reports_per_day'] ?? 12.0));
+        $sensitivity = (float) ($config['sensitivity'] ?? 0.35);
+        $minScale = (float) ($config['min_scale'] ?? 0.75);
+        $maxScale = (float) ($config['max_scale'] ?? 1.6);
 
-        if ($forceRefresh) {
-            Cache::forget($cacheKey);
-        }
+        $recentCount = (int) ContentReport::query()
+            ->where('created_at', '>=', now()->subDays($windowDays))
+            ->count();
+        $reportsPerDay = $recentCount / $windowDays;
+        $deltaRatio = ($reportsPerDay - $baseReportsPerDay) / $baseReportsPerDay;
+        $scale = 1.0 + ($deltaRatio * $sensitivity);
 
-        return Cache::remember($cacheKey, max(30, $cacheSeconds), function () use ($config): float {
-            $windowDays = max(1, (int) ($config['window_days'] ?? 7));
-            $baseReportsPerDay = max(1.0, (float) ($config['base_reports_per_day'] ?? 12.0));
-            $sensitivity = (float) ($config['sensitivity'] ?? 0.35);
-            $minScale = (float) ($config['min_scale'] ?? 0.75);
-            $maxScale = (float) ($config['max_scale'] ?? 1.6);
-
-            $recentCount = (int) ContentReport::query()
-                ->where('created_at', '>=', now()->subDays($windowDays))
-                ->count();
-            $reportsPerDay = $recentCount / $windowDays;
-            $deltaRatio = ($reportsPerDay - $baseReportsPerDay) / $baseReportsPerDay;
-            $scale = 1.0 + ($deltaRatio * $sensitivity);
-
-            return $this->clamp($scale, $minScale, $maxScale);
-        });
+        return $this->clamp($scale, $minScale, $maxScale);
     }
 
     private function computeAutoHideThreshold(string $contentType, float $siteScale): float
@@ -507,7 +528,7 @@ class AutoModerationService
         float $threshold,
         float $siteScale
     ): ?ContentReportScore {
-        if (!$this->safeHasTable('content_report_scores') || $canonicalId === '') {
+        if ($canonicalId === '') {
             return null;
         }
 
@@ -539,7 +560,7 @@ class AutoModerationService
 
     private function aggregateReports(string $contentType, array $identifiers): array
     {
-        if (!$this->safeHasTable('content_reports') || empty($identifiers)) {
+        if (empty($identifiers)) {
             return [
                 'reports_count' => 0,
                 'reporters_count' => 0,
@@ -548,14 +569,10 @@ class AutoModerationService
             ];
         }
 
-        $weightSelect = $this->safeHasColumn('content_reports', 'weight')
-            ? 'coalesce(sum(weight), 0) as weight_total'
-            : 'count(*) as weight_total';
-
         $row = DB::table('content_reports')
             ->selectRaw(
                 'count(*) as reports_count, count(distinct coalesce(user_id, id)) as reporters_count, max(created_at) as last_report_at, '
-                . $weightSelect
+                .'coalesce(sum(weight), 0) as weight_total'
             )
             ->where('content_type', $contentType)
             ->whereIn('content_id', $identifiers)
@@ -571,16 +588,16 @@ class AutoModerationService
 
     private function updateProfilesForResolution(array $countsByUser, string $resolution): void
     {
-        if (empty($countsByUser) || !$this->safeHasTable('user_report_profiles')) {
+        if (empty($countsByUser) || ! in_array($resolution, ['rejected', 'auto_hidden', 'confirmed'], true)) {
             return;
         }
 
         foreach ($countsByUser as $userId => $count) {
-            if (!is_int($userId) || $userId <= 0 || $count <= 0) {
+            if (! is_int($userId) || $userId <= 0 || $count <= 0) {
                 continue;
             }
             $user = User::find($userId);
-            if (!$user) {
+            if (! $user) {
                 continue;
             }
             $profile = $this->getOrCreateProfile($user);
@@ -588,7 +605,7 @@ class AutoModerationService
                 $profile->reports_rejected += $count;
             } elseif ($resolution === 'auto_hidden') {
                 $profile->reports_auto_hidden += $count;
-            } else {
+            } elseif ($resolution === 'confirmed') {
                 $profile->reports_confirmed += $count;
             }
 
@@ -648,6 +665,13 @@ class AutoModerationService
         if ($model instanceof PostReview) {
             return 'review';
         }
+        if ($model instanceof CollaborationRequest) {
+            return 'collaboration';
+        }
+        if ($model instanceof CollaborationComment) {
+            return 'collaboration_comment';
+        }
+
         return null;
     }
 
@@ -656,6 +680,7 @@ class AutoModerationService
         if (isset($model->id)) {
             return (string) $model->id;
         }
+
         return '';
     }
 
@@ -665,9 +690,10 @@ class AutoModerationService
         if (isset($model->id)) {
             $ids[] = (string) $model->id;
         }
-        if ($model instanceof Post && !empty($model->slug)) {
+        if ($model instanceof Post && ! empty($model->slug)) {
             $ids[] = (string) $model->slug;
         }
+
         return array_values(array_unique(array_filter($ids, static fn ($id) => $id !== '')));
     }
 
@@ -681,12 +707,24 @@ class AutoModerationService
         }
         if ($contentType === 'comment' && $model instanceof PostComment && $model->post_slug) {
             $base = $this->resolvePostUrlFromSlug($model->post_slug);
-            return $base ? ($base . '#comment-' . $model->id) : null;
+
+            return $base ? ($base.'#comment-'.$model->id) : null;
         }
         if ($contentType === 'review' && $model instanceof PostReview && $model->post_slug) {
             $base = $this->resolvePostUrlFromSlug($model->post_slug);
-            return $base ? ($base . '#review-' . $model->id) : null;
+
+            return $base ? ($base.'#review-'.$model->id) : null;
         }
+        if ($contentType === 'profile' && $model instanceof User && $model->slug) {
+            return route('profile.show', $model->slug);
+        }
+        if ($contentType === 'collaboration' && $model instanceof CollaborationRequest) {
+            return route('collaboration.show', $model);
+        }
+        if ($contentType === 'collaboration_comment' && $model instanceof CollaborationComment && $model->collaborationRequest) {
+            return route('collaboration.show', $model->collaborationRequest).'#comment-'.$model->id;
+        }
+
         return null;
     }
 
@@ -697,10 +735,6 @@ class AutoModerationService
         ?string $contentUrl,
         array $meta
     ): void {
-        if (!$this->safeHasTable('moderation_logs')) {
-            return;
-        }
-
         ModerationLog::create([
             'moderator_id' => null,
             'moderator_name' => 'system:auto-moderation',
@@ -709,7 +743,7 @@ class AutoModerationService
             'content_type' => $contentType,
             'content_id' => $contentId,
             'content_url' => $contentUrl,
-            'notes' => 'Auto-hidden after report weight threshold reached.',
+            'notes' => __('ui.moderation.auto_hidden_note'),
             'ip_address' => $request->ip(),
             'location' => $this->resolveLocation($request),
             'user_agent' => $request->userAgent(),
@@ -724,11 +758,9 @@ class AutoModerationService
             return null;
         }
 
-        if ($this->safeHasTable('posts')) {
-            $type = DB::table('posts')->where('slug', $slug)->value('type');
-            if ($type === 'question') {
-                return route('questions.show', $slug);
-            }
+        $type = DB::table('posts')->where('slug', $slug)->value('type');
+        if ($type === 'question') {
+            return route('questions.show', $slug);
         }
 
         return route('project', $slug);
@@ -749,28 +781,10 @@ class AutoModerationService
         }
 
         if ($country && $region) {
-            return $country . '-' . $region;
+            return $country.'-'.$region;
         }
 
         return $country ?: $region;
-    }
-
-    private function safeHasTable(string $table): bool
-    {
-        try {
-            return Schema::hasTable($table);
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    private function safeHasColumn(string $table, string $column): bool
-    {
-        try {
-            return Schema::hasColumn($table, $column);
-        } catch (\Throwable) {
-            return false;
-        }
     }
 
     private function clamp(float $value, float $min, float $max): float
@@ -778,7 +792,7 @@ class AutoModerationService
         if ($min > $max) {
             return $value;
         }
+
         return max($min, min($max, $value));
     }
-
 }

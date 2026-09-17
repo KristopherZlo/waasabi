@@ -69,7 +69,7 @@ class SupportTicketsTest extends TestCase
             'meta' => [],
         ]);
 
-        $response = $this->actingAs($user)->post('/support/tickets/' . $ticket->id . '/messages', [
+        $response = $this->actingAs($user)->post('/support/tickets/'.$ticket->id.'/messages', [
             'message' => 'Here is more detail.',
         ]);
 
@@ -94,7 +94,7 @@ class SupportTicketsTest extends TestCase
             'meta' => [],
         ]);
 
-        $response = $this->actingAs($other)->post('/support/tickets/' . $ticket->id . '/messages', [
+        $response = $this->actingAs($other)->post('/support/tickets/'.$ticket->id.'/messages', [
             'message' => 'Trying to reply.',
         ]);
 

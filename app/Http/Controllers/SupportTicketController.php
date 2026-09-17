@@ -12,13 +12,9 @@ class SupportTicketController extends Controller
     public function store(Request $request, SupportStaffService $supportStaff)
     {
         $user = $request->user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
+        if (! $user) {
+            return response()->json(['message' => __('ui.errors.unauthorized')], 401);
         }
-        if (!safeHasTable('support_tickets')) {
-            abort(503);
-        }
-
         $data = $request->validate([
             'kind' => ['required', Rule::in(['question', 'bug', 'complaint'])],
             'subject' => ['required', 'string', 'max:190'],
@@ -58,17 +54,14 @@ class SupportTicketController extends Controller
     public function storeMessage(Request $request, SupportTicket $ticket, SupportStaffService $supportStaff)
     {
         $user = $request->user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        if (!safeHasTable('support_tickets')) {
-            abort(503);
+        if (! $user) {
+            return response()->json(['message' => __('ui.errors.unauthorized')], 401);
         }
         $isStaff = $user->can('support');
-        if (!$isStaff && safeHasColumn('users', 'is_banned') && $user->is_banned) {
+        if (! $isStaff && $user->is_banned) {
             abort(403);
         }
-        if (!$isStaff && $ticket->user_id !== $user->id) {
+        if (! $isStaff && $ticket->user_id !== $user->id) {
             abort(403);
         }
 

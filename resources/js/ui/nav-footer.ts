@@ -25,7 +25,10 @@ export const setupNavFooterOffset = () => {
         if (topbar) {
             const topbarRect = topbar.getBoundingClientRect();
             const height = Math.max(0, Math.round(topbarRect.height));
-            document.documentElement.style.setProperty('--topbar-height', `${height}px`);
+            const nextHeight = `${height}px`;
+            if (document.documentElement.style.getPropertyValue('--topbar-height') !== nextHeight) {
+                document.documentElement.style.setProperty('--topbar-height', nextHeight);
+            }
         }
     };
 

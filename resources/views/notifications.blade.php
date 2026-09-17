@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('title', __('ui.notifications.title'))
+@section('robots', 'noindex, nofollow')
 @section('page', 'notifications')
 
 @section('content')

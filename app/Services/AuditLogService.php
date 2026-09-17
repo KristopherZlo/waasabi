@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\User;
-use App\Support\SchemaGuard;
 use Illuminate\Http\Request;
 
 class AuditLogService
@@ -17,10 +16,6 @@ class AuditLogService
         ?string $targetType = null,
         ?string $targetId = null
     ): void {
-        if (!SchemaGuard::hasTable('audit_logs')) {
-            return;
-        }
-
         $userId = $actor?->id ?? $request->user()?->id;
         $userAgent = substr((string) $request->userAgent(), 0, 255);
 

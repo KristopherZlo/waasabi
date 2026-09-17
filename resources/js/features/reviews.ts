@@ -2,7 +2,6 @@ import { appUrl, csrfToken } from '../core/config';
 import { t } from '../core/i18n';
 import { setupIcons, applyScribbleAvatar } from '../core/media';
 import { getRoleKey } from '../core/roles';
-import { normalizeCommentVote } from '../core/votes';
 import { toast } from '../core/toast';
 
 type ReviewEntry = {
@@ -21,37 +20,13 @@ type ReviewEntry = {
     id?: number | string;
 };
 
-const parseJson = <T>(value: string | null, fallback: T) => {
-    if (!value) {
-        return fallback;
-    }
-    try {
-        return JSON.parse(value) as T;
-    } catch {
-        return fallback;
-    }
-};
-
-const getReviewVoteKey = (slug: string) => `reviewVotes:${slug}`;
-const getReviewVoteMap = (slug: string) =>
-    parseJson<Record<string, number>>(localStorage.getItem(getReviewVoteKey(slug)), {});
-const setReviewVoteMap = (slug: string, map: Record<string, number>) => {
-    localStorage.setItem(getReviewVoteKey(slug), JSON.stringify(map));
-};
-
-const applyReviewVoteState = (reviewEl: HTMLElement, voteValue: number) => {
+const applyReviewVoteState = (reviewEl: HTMLElement, voteValue: number, score: number) => {
     const countEl = reviewEl.querySelector<HTMLElement>('.vote-count');
     if (!countEl) {
         return;
     }
-    const base =
-        countEl.dataset.baseCount !== undefined ? Number(countEl.dataset.baseCount) : Number(countEl.textContent ?? 0);
-    if (countEl.dataset.baseCount === undefined) {
-        countEl.dataset.baseCount = String(base);
-    }
-    const nextCount = base + voteValue;
-    countEl.textContent = String(nextCount);
-    reviewEl.dataset.reviewUseful = String(nextCount);
+    countEl.textContent = String(score);
+    reviewEl.dataset.reviewUseful = String(score);
     const upBtn = reviewEl.querySelector<HTMLButtonElement>('[data-review-vote="up"]');
     const downBtn = reviewEl.querySelector<HTMLButtonElement>('[data-review-vote="down"]');
     if (upBtn) {
@@ -62,22 +37,6 @@ const applyReviewVoteState = (reviewEl: HTMLElement, voteValue: number) => {
         downBtn.classList.toggle('is-active', voteValue === -1);
         downBtn.setAttribute('aria-pressed', voteValue === -1 ? 'true' : 'false');
     }
-};
-
-const syncReviewVoteState = (list: HTMLElement, slug: string) => {
-    if (!slug) {
-        return;
-    }
-    const votes = getReviewVoteMap(slug);
-    const reviewItems = Array.from(list.querySelectorAll<HTMLElement>('[data-review-item]'));
-    reviewItems.forEach((reviewEl) => {
-        const anchor = reviewEl.dataset.reviewAnchor ?? reviewEl.dataset.reviewId ?? '';
-        if (!anchor) {
-            return;
-        }
-        const voteValue = normalizeCommentVote(votes[anchor]);
-        applyReviewVoteState(reviewEl, voteValue);
-    });
 };
 
 const buildReviewNode = (entry: ReviewEntry, avatarUrl: string, labels: Record<string, string>) => {
@@ -275,14 +234,13 @@ export const setupReviewForms = () => {
                 node.dataset.reviewCreated = String(entry.createdAt);
                 list.appendChild(node);
                 setupIcons(node);
-                syncReviewVoteState(list, slug);
                 if (empty) {
                     empty.remove();
                 }
                 improve.value = '';
                 why.value = '';
                 how.value = '';
-                toast.show(t('review_sent', 'Review sent (demo).'));
+                toast.show(t('review_sent', 'Review sent.'));
             } catch {
                 // ignore
             }
@@ -306,9 +264,7 @@ export const setupReviewVotes = () => {
         }
         list.dataset.reviewVotesBound = '1';
 
-        syncReviewVoteState(list, slug);
-
-        list.addEventListener('click', (event) => {
+        list.addEventListener('click', async (event) => {
             const target = event.target as HTMLElement;
             const voteButton = target.closest<HTMLButtonElement>('[data-review-vote]');
             if (!voteButton) {
@@ -318,21 +274,31 @@ export const setupReviewVotes = () => {
             if (!reviewEl) {
                 return;
             }
-            const anchor = reviewEl.dataset.reviewAnchor ?? reviewEl.dataset.reviewId ?? '';
-            if (!anchor) {
+            const reviewId = reviewEl.dataset.reviewId ?? '';
+            if (!reviewId || !csrfToken) {
                 return;
             }
             const direction = voteButton.dataset.reviewVote === 'down' ? -1 : 1;
-            const votes = getReviewVoteMap(slug);
-            const current = normalizeCommentVote(votes[anchor]);
-            const nextVote = current === direction ? 0 : direction;
-            if (nextVote === 0) {
-                delete votes[anchor];
-            } else {
-                votes[anchor] = nextVote;
+            voteButton.disabled = true;
+            try {
+                const response = await fetch(`${appUrl}/reviews/${reviewId}/vote`, {
+                    method: 'PUT',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: JSON.stringify({ value: direction }),
+                });
+                if (!response.ok) {
+                    toast.show(t('vote_failed', 'Sign in to vote.'));
+                    return;
+                }
+                const result = (await response.json()) as { score: number; vote: number };
+                applyReviewVoteState(reviewEl, result.vote, result.score);
+            } finally {
+                voteButton.disabled = false;
             }
-            setReviewVoteMap(slug, votes);
-            applyReviewVoteState(reviewEl, nextVote);
         });
     });
 };

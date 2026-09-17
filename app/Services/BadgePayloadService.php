@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Models\UserBadge;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class BadgePayloadService
@@ -30,10 +29,6 @@ class BadgePayloadService
 
     public function forUser(User $user, array $badgeCatalog): array
     {
-        if (!$this->safeHasTable('user_badges')) {
-            return [];
-        }
-
         $catalogMap = collect($badgeCatalog)->keyBy('key')->all();
 
         return $user->badges()
@@ -43,14 +38,5 @@ class BadgePayloadService
             ->map(fn (UserBadge $badge) => $this->payload($badge, $catalogMap))
             ->values()
             ->all();
-    }
-
-    private function safeHasTable(string $table): bool
-    {
-        try {
-            return Schema::hasTable($table);
-        } catch (\Throwable $e) {
-            return false;
-        }
     }
 }

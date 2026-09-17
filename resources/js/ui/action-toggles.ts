@@ -34,7 +34,9 @@ const updateSaveButton = (button: HTMLButtonElement, saved: boolean) => {
     button.dataset.saved = saved ? '1' : '0';
     const label = button.querySelector<HTMLElement>('.action-label');
     if (label) {
-        label.textContent = saved ? t('saved', 'Saved') : t('save', 'Save');
+        label.textContent = saved
+            ? button.dataset.savedLabel ?? t('saved', 'Saved')
+            : t('save', 'Save');
     }
 };
 
@@ -164,7 +166,7 @@ export const bindActionToggles = (root: ParentNode = document) => {
     }
     const isAuthed = document.body.dataset.authState === '1';
     let savedList = getReadLaterList();
-    let upvoteList = getUpvoteList();
+    let upvoteList = isAuthed ? getUpvoteList() : [];
 
     const requestAction = async (action: string, slug: string) => {
         const token = resolveCsrfToken();

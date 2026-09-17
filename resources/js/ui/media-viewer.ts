@@ -1,5 +1,6 @@
 import { tFormat } from '../core/i18n';
 import { setupIcons } from '../core/media';
+import { focusModal, rememberFocus, restoreFocus, trapModalFocus } from '../core/modal';
 
 type ViewerImage = {
     src: string;
@@ -19,6 +20,7 @@ let refs: ViewerRefs | null = null;
 let images: ViewerImage[] = [];
 let currentIndex = 0;
 let keydownBound = false;
+let returnFocus: HTMLElement | null = null;
 
 const clampIndex = (index: number) => Math.max(0, Math.min(index, images.length - 1));
 
@@ -32,6 +34,8 @@ const closeViewer = () => {
     document.body.classList.remove('is-locked');
     images = [];
     currentIndex = 0;
+    restoreFocus(returnFocus);
+    returnFocus = null;
 };
 
 const setActiveThumb = (index: number) => {
@@ -99,17 +103,20 @@ const openViewer = (nextImages: ViewerImage[], startIndex: number) => {
         return;
     }
     images = nextImages;
+    returnFocus = rememberFocus();
     currentIndex = clampIndex(startIndex);
     rebuildThumbs();
     refs.viewer.hidden = false;
     document.body.classList.add('is-locked');
     renderViewer();
+    focusModal(refs.viewer, refs.closes[0]);
 };
 
 const handleKeydown = (event: KeyboardEvent) => {
     if (!refs || refs.viewer.hidden) {
         return;
     }
+    trapModalFocus(refs.viewer, event);
     if (event.key === 'Escape') {
         event.preventDefault();
         closeViewer();
