@@ -57,4 +57,4 @@ npm audit
 
 See [deployment](docs/DEPLOYMENT.md), [architecture](docs/ARCHITECTURE.md), and [the rebuild notes](docs/WAASABI.md) for more information.
 
-Waasabi uses the license from The Hub. See [LICENSE](LICENSE).
+See [LICENSE](LICENSE) for the license terms.
