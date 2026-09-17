@@ -209,7 +209,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 0; 
 .opening-facts span:first-child { color: var(--pink); }
 .opening-facts span:last-child { color: var(--mint); }
 .feed-sidebar .person-line { margin: 14px 0; }
-.sidebar-more { margin-top: 10px; }
 .sidebar-footer { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
 .empty { margin: 32px 0; padding: 40px 20px; border-block: 1px solid var(--border); text-align: center; color: var(--muted); }
 .empty .button { margin-top: 10px; }

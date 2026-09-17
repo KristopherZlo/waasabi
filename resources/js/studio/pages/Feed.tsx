@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowRight, Plus, SlidersHorizontal } from 'lucide-react';
+import { Plus, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 import { Empty, InfinitePage, OpeningCard, PersonLine, WorkCard, date, useShared } from '../components';
@@ -95,7 +95,7 @@ export default function Feed({works, openings, people, wallPosts, filter, sort, 
                 {!works.data.length && <Empty action={<Link className="button primary" href={filter === 'following' ? '/' : '/create'}>{filter === 'following' ? t.browse : t.share}</Link>}>{q ? t.empty_search : filter === 'following' ? t.empty_following : t.empty_feed}</Empty>}
             </InfinitePage>
         </section><aside className="feed-sidebar">
-            <section><div className="section-heading"><h2>{t.find_help}</h2><Link href="/collaboration/create" aria-label={t.create}><Plus size={18}/></Link></div>{openings.map(opening => <OpeningCard key={opening.id} opening={opening} compact/>)}<Link className="button primary small sidebar-more" href="/collaboration">{t.view_all}<ArrowRight size={15}/></Link></section>
+            <section><div className="section-heading"><h2>{t.find_help}</h2><Link href="/collaboration/create" aria-label={t.create}><Plus size={18}/></Link></div>{openings.map(opening => <OpeningCard key={opening.id} opening={opening} compact/>)}<Link className="text-link" href="/collaboration">{t.view_all} →</Link></section>
             <section><h2>{t.people}</h2>{people.map(person => <PersonLine key={person.id} person={person} detail={person.skills || undefined}/>)}<Link className="text-link" href="/people">{t.people} →</Link></section>
             <div className="sidebar-footer"><a href="/support">Help & rules</a><span>waasabi</span></div>
         </aside></div>
