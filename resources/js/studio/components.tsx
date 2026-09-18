@@ -80,7 +80,7 @@ export function Shell({children}: {children: ReactNode}) {
 export function Errors() {
     const {errors, copy: t} = useShared();
     if (!Object.keys(errors).length) return null;
-    return <div className="notice error" role="alert"><strong>{t.errors}</strong><ul>{Object.entries(errors).map(([key, message]) => <li key={key}>{message}</li>)}</ul></div>;
+    return <div className="toast error-toast" role="alert"><div><strong>{t.errors}</strong><ul>{Object.entries(errors).map(([key, message]) => <li key={key}>{message}</li>)}</ul></div></div>;
 }
 
 export function Form({action, method = 'post', children, className = '', reset = false, json = false, reloadData, scrollToResult = false, confirmMessage, preventEnterSubmit = false, onSuccess}: {action: string; method?: 'post' | 'put' | 'patch' | 'delete'; children: ReactNode; className?: string; reset?: boolean; json?: boolean; reloadData?: string | string[]; scrollToResult?: boolean | string; confirmMessage?: string; preventEnterSubmit?: boolean; onSuccess?: () => void}) {

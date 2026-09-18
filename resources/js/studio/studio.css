@@ -208,6 +208,9 @@ body[data-page='not-found'] .static-page { width: 100%; padding: 0; }
 .toast { position: fixed; z-index: 120; left: 50%; bottom: 88px; width: min(440px, calc(100% - 32px)); min-height: 46px; padding: 10px 10px 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--surface) 96%, transparent); color: var(--text); box-shadow: 0 12px 34px rgba(0,0,0,.3); backdrop-filter: blur(12px); transform: translateX(-50%); animation: toast-in 280ms cubic-bezier(.2,.8,.2,1); }
 .toast button { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
 .toast button:hover { background: var(--surface-2); color: var(--text); }
+.error-toast { max-height: min(50vh, 320px); overflow-y: auto; border-color: var(--danger); align-items: flex-start; }
+.error-toast strong { color: var(--danger); }
+.error-toast ul { margin: 4px 0 0; padding-left: 18px; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 18px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .bottom-nav { position: fixed; z-index: 70; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: 0 4px 14px rgba(0,0,0,.18); backdrop-filter: blur(12px); }
 .bottom-nav a { position: relative; width: 44px; min-width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 999px; color: var(--muted); white-space: nowrap; }
@@ -455,6 +458,7 @@ body[data-page='not-found'] .static-page { width: 100%; padding: 0; }
 .showcase-readme .prose h3 { margin: 18px 0 10px; font-size: 16px; }
 .showcase-readme .prose p, .showcase-readme .prose ul, .showcase-readme .prose ol { margin: 0 0 12px; }
 .showcase-readme .prose img { max-height: 420px; margin: 12px auto; }
+.showcase-readme .prose p img { display: inline-block; width: auto; margin: 2px 4px 2px 0; vertical-align: middle; background: transparent; cursor: inherit; }
 .showcase-readme .prose pre { padding: 12px; font-size: 12px; }
 .profile-tabs, .collaboration-scopes { display: flex; gap: 24px; overflow-x: auto; border-bottom: 1px solid var(--border); }
 .profile-tabs a, .collaboration-scopes a { padding: 10px 0; flex: 0 0 auto; border-bottom: 2px solid transparent; color: var(--muted); }
