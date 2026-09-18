@@ -7,3 +7,4 @@
 .external-link-dialog__body > div { display: flex; justify-content: flex-end; gap: 8px; }
 .external-link-dialog__body button, .external-link-dialog__continue { min-height: 36px; padding: 7px 12px; display: inline-flex; align-items: center; border: 1px solid var(--border, #3b3b3b); border-radius: 7px; background: transparent; color: inherit; }
 .external-link-dialog__continue { border-color: var(--accent, #d68b77); background: var(--accent, #d68b77); color: #171717; }
+.external-link-dialog__continue:hover { color: #171717; }
