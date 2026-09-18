@@ -75,7 +75,7 @@ class SecurityHeaders
             "default-src 'self'",
             'script-src '.implode(' ', array_unique($scriptSrc)),
             'style-src '.implode(' ', array_unique($styleSrc)),
-            "img-src 'self' data: https:",
+            "img-src 'self' data: blob: https:",
             'font-src '.implode(' ', $fontSrc),
             'connect-src '.implode(' ', array_unique($connectSrc)),
             'frame-src '.implode(' ', array_unique($frameSrc)),
