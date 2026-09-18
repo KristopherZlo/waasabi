@@ -58,6 +58,8 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     /**
@@ -78,6 +80,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'connections_allow_follow' => 'boolean',
             'connections_show_follow_counts' => 'boolean',
             'security_login_alerts' => 'boolean',
+            'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
             'is_banned' => 'boolean',
             'open_to_help' => 'boolean',
         ];

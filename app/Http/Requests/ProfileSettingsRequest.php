@@ -36,7 +36,7 @@ class ProfileSettingsRequest extends FormRequest
                 }
             }],
             'showcase_project_ids' => ['nullable', 'array', 'max:6'],
-            'showcase_project_ids.*' => ['integer', 'distinct', Rule::exists('posts', 'id')->where('user_id', $this->user()->id)->where('type', 'post')->where('is_project', true)],
+            'showcase_project_ids.*' => ['integer', 'distinct', Rule::exists('posts', 'id')->where('user_id', $this->user()->id)->where('type', 'post')],
             'showcase_project_ids_present' => ['nullable', 'boolean'],
             'wall_mode' => ['nullable', Rule::in(['everyone', 'owner'])],
             'privacy_allow_mentions' => ['nullable', 'boolean'],

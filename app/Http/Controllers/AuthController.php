@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\TwoFactorService;
 use App\Services\UserPayloadService;
 use App\Services\UserSlugService;
 use Illuminate\Auth\Events\Registered;
@@ -68,11 +69,44 @@ class AuthController extends Controller
             return back()->withErrors(['email' => __('ui.auth.banned')])->onlyInput('email');
         }
 
+        if ($user?->two_factor_confirmed_at) {
+            $request->session()->put('login.two_factor', ['user_id' => $user->id, 'remember' => $request->boolean('remember')]);
+            Auth::logout();
+
+            return redirect()->route('two-factor.challenge');
+        }
+
         if ($user) {
             logAuditEvent($request, 'auth.login', $user, [
                 'email_hash' => hash('sha256', strtolower($user->email)),
             ]);
         }
+
+        return redirect()->route('feed');
+    }
+
+    public function twoFactorForm(Request $request): Response|RedirectResponse
+    {
+        if (! $request->session()->has('login.two_factor.user_id')) {
+            return redirect()->route('login');
+        }
+
+        return Inertia::render('Auth', ['mode' => 'two-factor']);
+    }
+
+    public function twoFactorChallenge(Request $request, TwoFactorService $twoFactor): RedirectResponse
+    {
+        $data = $request->validate(['code' => ['required', 'string', 'max:32']]);
+        $pending = (array) $request->session()->get('login.two_factor', []);
+        $user = User::find($pending['user_id'] ?? 0);
+        if (! $user || $user->is_banned || ! $user->two_factor_confirmed_at || ! $twoFactor->verify($user, $data['code'])) {
+            return back()->withErrors(['code' => __('studio.two_factor_invalid')]);
+        }
+
+        Auth::login($user, (bool) ($pending['remember'] ?? false));
+        $request->session()->forget('login.two_factor');
+        $request->session()->regenerate();
+        logAuditEvent($request, 'auth.login', $user, ['two_factor' => true]);
 
         return redirect()->route('feed');
     }

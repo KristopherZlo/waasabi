@@ -13,6 +13,7 @@ use App\Services\BadgePayloadService;
 use App\Services\CollaborationService;
 use App\Services\GitHubReadmeService;
 use App\Services\MarkdownService;
+use App\Services\TwoFactorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -339,14 +340,24 @@ class CommunityPageController extends Controller
     public function settings(Request $request): Response
     {
         $user = $request->user();
+        $twoFactor = app(TwoFactorService::class);
+        $pendingSecret = $user->two_factor_secret && ! $user->two_factor_confirmed_at ? (string) $user->two_factor_secret : null;
 
         return Inertia::render('Settings', ['person' => $this->person($user) + $user->only(
             'featured_post_id', 'email', 'email_verified_at', 'privacy_allow_mentions',
             'notify_comments', 'notify_reviews', 'notify_follows', 'connections_allow_follow',
             'connections_show_follow_counts', 'security_login_alerts', 'profile_readme', 'github_readme_repository', 'wall_mode'
         ),
-            'projects' => $user->posts()->where('type', 'post')->where('is_project', true)->latest()->get(['id', 'title']),
+            'projects' => $user->posts()->where('type', 'post')->latest()->get(['id', 'title', 'is_project']),
             'showcaseProjectIds' => $user->showcaseProjects()->pluck('posts.id'),
+            'twoFactor' => [
+                'enabled' => (bool) $user->two_factor_confirmed_at,
+                'pending' => (bool) $pendingSecret,
+                'secret' => $pendingSecret,
+                'qr' => $pendingSecret ? $twoFactor->qr($user, $pendingSecret) : null,
+                'uri' => $pendingSecret ? $twoFactor->uri($user, $pendingSecret) : null,
+                'recoveryCodes' => $request->session()->pull('two_factor_recovery_codes', []),
+            ],
         ]);
     }
 

@@ -827,7 +827,6 @@ textarea {
     color: inherit;
     letter-spacing: inherit;
 }
-
 label {
     display: grid;
     gap: 8px;
@@ -8691,6 +8690,14 @@ body[data-page^='legal-'] {
 
 body {
     line-height: 1.5;
+}
+
+:where(h1, h2, h3, p, a, strong, small, code, dd, .person-line, .card, .list-item) {
+    overflow-wrap: anywhere;
+}
+
+:where(p, .comment-body, .prose) {
+    unicode-bidi: plaintext;
 }
 
 a,

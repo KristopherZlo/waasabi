@@ -1,7 +1,7 @@
 import { InfiniteScroll, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, Bell, Bookmark, Home, Layers, LoaderCircle, LogOut, MessageCircle, Moon, Plus, Settings, Sun, Users, X } from 'lucide-react';
+import { ArrowUp, Bell, Bookmark, Check, ChevronDown, Home, Layers, LoaderCircle, LogOut, MessageCircle, Moon, Plus, Search, Settings, Sun, Users, X } from 'lucide-react';
 import { Spotlight } from './Spotlight';
 import { createAvatarFromName } from '../../../scribble-generator/scribble-avatar';
 import type { Opening, Person, Shared, Work } from './types';
@@ -34,7 +34,7 @@ export function Shell({children}: {children: ReactNode}) {
     const [menu, setMenu] = useState<'notifications' | 'saved' | 'profile' | null>(null);
     const [toast, setToast] = useState(flash.message ?? '');
     const actionsRef = useRef<HTMLDivElement>(null);
-    const authPage = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'].some(path => url.startsWith(path));
+    const authPage = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/two-factor-challenge'].some(path => url.startsWith(path));
     useEffect(() => {setTheme(document.documentElement.dataset.theme || 'dark');}, []);
     useEffect(() => {const meta = document.querySelector<HTMLMetaElement>('meta[name=csrf-token]'); if (meta) meta.content = csrf;}, [csrf]);
     useEffect(() => {if (flash.message) setToast(flash.message);}, [flash.message, url]);
@@ -120,6 +120,38 @@ export function Form({action, method = 'post', children, className = '', reset =
         <input type="hidden" name="_token" value={csrf}/>{method !== 'post' && <input type="hidden" name="_method" value={method.toUpperCase()}/>}
         <fieldset disabled={busy}>{children}</fieldset>{failure && <p className="field-error" role="alert">{failure}</p>}
     </form>{confirmMessage && <Dialog title={t.delete} open={Boolean(pending)} close={() => setPending(null)}><div className="confirm-dialog"><p>{confirmMessage}</p><div className="button-row"><button type="button" className="button" onClick={() => setPending(null)}>{t.cancel}</button><button type="button" className="button danger" onClick={() => pending && performSubmit(pending.form, pending.submitter)}>{t.delete}</button></div></div></Dialog>}</>;
+}
+
+export type SelectOption = {value: string; label: string};
+
+export function SelectMenu({name, label, options, value, defaultValue = '', multiple = false, max, placeholder, onChange}: {name: string; label: string; options: SelectOption[]; value?: string | string[]; defaultValue?: string | string[]; multiple?: boolean; max?: number; placeholder?: string; onChange?: (value: string | string[]) => void}) {
+    const {copy: t} = useShared();
+    const root = useRef<HTMLDivElement>(null); const [open, setOpen] = useState(false); const [query, setQuery] = useState('');
+    const [internal, setInternal] = useState<string[]>(() => (Array.isArray(defaultValue) ? defaultValue : defaultValue ? [defaultValue] : []));
+    const selected = value === undefined ? internal : Array.isArray(value) ? value : value ? [value] : [];
+    useEffect(() => {
+        const outside = (event: PointerEvent) => {if (!root.current?.contains(event.target as Node)) setOpen(false);};
+        const escape = (event: KeyboardEvent) => {if (event.key === 'Escape') setOpen(false);};
+        document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
+        return () => {document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape);};
+    }, []);
+    const choose = (nextValue: string) => {
+        const next = multiple
+            ? selected.includes(nextValue) ? selected.filter(item => item !== nextValue) : max && selected.length >= max ? selected : [...selected, nextValue]
+            : [nextValue];
+        if (value === undefined) setInternal(next);
+        onChange?.(multiple ? next : next[0] || '');
+        if (!multiple) setOpen(false);
+    };
+    const visible = options.filter(option => option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+    const labels = selected.map(item => options.find(option => option.value === item)?.label).filter(Boolean);
+    const summary = labels.length > 1 ? `${labels[0]} +${labels.length - 1}` : labels[0] || placeholder || t.choose;
+    return <div className="select-field" ref={root}>
+        <span className="select-label">{label}</span>
+        {multiple ? selected.map(item => <input key={item} type="hidden" name={name} value={item}/>) : <input type="hidden" name={name} value={selected[0] || ''}/>}
+        <button className="select-trigger" type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)}><span>{summary}</span>{multiple && max && <small>{selected.length}/{max}</small>}<ChevronDown size={16}/></button>
+        {open && <div className="select-popover"><label className="select-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => {if (event.key === 'Enter') event.preventDefault();}} placeholder={t.search_short} aria-label={`${t.search_short}: ${label}`} autoFocus/></label><div className="select-options" role="listbox" aria-multiselectable={multiple || undefined}>{visible.map(option => {const active = selected.includes(option.value); const disabled = Boolean(multiple && max && selected.length >= max && !active); return <button type="button" role="option" aria-selected={active} disabled={disabled} key={option.value} onClick={() => choose(option.value)}><Check size={15}/><span>{option.label}</span></button>;})}{!visible.length && <span className="select-empty">{t.empty}</span>}</div></div>}
+    </div>;
 }
 
 export function InfinitePage({data, children, className = ''}: {data: string; children: ReactNode; className?: string}) {

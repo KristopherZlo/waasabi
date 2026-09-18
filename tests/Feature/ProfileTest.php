@@ -265,6 +265,30 @@ class ProfileTest extends TestCase
             ->where('profileReadmeHtml', fn ($html) => str_contains($html, 'Things I make')));
     }
 
+    public function test_profile_showcase_accepts_a_standalone_work(): void
+    {
+        $owner = User::factory()->create();
+        $work = Post::factory()->for($owner)->create(['type' => 'post', 'is_project' => false]);
+
+        $this->actingAs($owner)->post(route('profile.settings.update'), [
+            'name' => $owner->name,
+            'showcase_project_ids' => [$work->id],
+            'showcase_project_ids_present' => '1',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('profile_showcase_projects', ['user_id' => $owner->id, 'post_id' => $work->id]);
+    }
+
+    public function test_profile_text_removes_interface_direction_controls(): void
+    {
+        $owner = User::factory()->create();
+
+        $this->actingAs($owner)->post(route('profile.settings.update'), ['name' => "Safe\u{202E} name"])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('Safe name', $owner->fresh()->name);
+    }
+
     public function test_profile_showcase_can_use_a_public_github_readme(): void
     {
         $owner = User::factory()->create(['slug' => 'github-readme-owner']);
