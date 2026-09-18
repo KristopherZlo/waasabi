@@ -83,12 +83,12 @@ export function Errors() {
     return <div className="toast error-toast" role="alert"><div><strong>{t.errors}</strong><ul>{Object.entries(errors).map(([key, message]) => <li key={key}>{message}</li>)}</ul></div></div>;
 }
 
-export function Form({action, method = 'post', children, className = '', reset = false, json = false, reloadData, scrollToResult = false, confirmMessage, preventEnterSubmit = false, onSuccess}: {action: string; method?: 'post' | 'put' | 'patch' | 'delete'; children: ReactNode; className?: string; reset?: boolean; json?: boolean; reloadData?: string | string[]; scrollToResult?: boolean | string; confirmMessage?: string; preventEnterSubmit?: boolean; onSuccess?: () => void}) {
+export function Form({action, method = 'post', children, className = '', reset = false, json = false, reloadData, scrollToResult = false, confirmMessage, confirmLabel, successMessage, preventEnterSubmit = false, onSuccess}: {action: string; method?: 'post' | 'put' | 'patch' | 'delete'; children: ReactNode; className?: string; reset?: boolean; json?: boolean; reloadData?: string | string[]; scrollToResult?: boolean | string; confirmMessage?: string; confirmLabel?: string; successMessage?: string; preventEnterSubmit?: boolean; onSuccess?: () => void}) {
     const {csrf, copy: t} = useShared();
     const [busy, setBusy] = useState(false);
     const [failure, setFailure] = useState('');
     const [pending, setPending] = useState<{form: HTMLFormElement; submitter: HTMLButtonElement | null} | null>(null);
-    const complete = () => {onSuccess?.(); if (method === 'delete') window.dispatchEvent(new CustomEvent('waasabi:toast', {detail: t.deleted_successfully}));};
+    const complete = () => {onSuccess?.(); if (method === 'delete') window.dispatchEvent(new CustomEvent('waasabi:toast', {detail: successMessage || t.deleted_successfully}));};
     const performSubmit = (form: HTMLFormElement, submitter: HTMLButtonElement | null) => {
         if (busy) return;
         setPending(null);
@@ -119,7 +119,7 @@ export function Form({action, method = 'post', children, className = '', reset =
     return <><form action={action} method="post" encType="multipart/form-data" onSubmit={submit} onKeyDown={event => {const input = event.target instanceof HTMLInputElement ? event.target : null; if (preventEnterSubmit && event.key === 'Enter' && !event.defaultPrevented && input && !['button', 'checkbox', 'file', 'radio', 'submit'].includes(input.type)) event.preventDefault();}} className={className} aria-busy={busy}>
         <input type="hidden" name="_token" value={csrf}/>{method !== 'post' && <input type="hidden" name="_method" value={method.toUpperCase()}/>}
         <fieldset disabled={busy}>{children}</fieldset>{failure && <p className="field-error" role="alert">{failure}</p>}
-    </form>{confirmMessage && <Dialog title={t.delete} open={Boolean(pending)} close={() => setPending(null)}><div className="confirm-dialog"><p>{confirmMessage}</p><div className="button-row"><button type="button" className="button" onClick={() => setPending(null)}>{t.cancel}</button><button type="button" className="button danger" onClick={() => pending && performSubmit(pending.form, pending.submitter)}>{t.delete}</button></div></div></Dialog>}</>;
+    </form>{confirmMessage && <Dialog title={confirmLabel || t.delete} open={Boolean(pending)} close={() => setPending(null)}><div className="confirm-dialog"><p>{confirmMessage}</p><div className="button-row"><button type="button" className="button" onClick={() => setPending(null)}>{t.cancel}</button><button type="button" className="button danger" onClick={() => pending && performSubmit(pending.form, pending.submitter)}>{confirmLabel || t.delete}</button></div></div></Dialog>}</>;
 }
 
 export type SelectOption = {value: string; label: string};

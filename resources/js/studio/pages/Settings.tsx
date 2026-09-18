@@ -1,7 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft, Bell, Download, KeyRound, LockKeyhole, LogOut, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Avatar, Errors, Form, SelectMenu, path, useShared } from '../components';
+import { Avatar, Errors, Form, SelectMenu, useShared } from '../components';
+import { ProfileMediaEditor } from '../ProfileMediaEditor';
 import type { Person } from '../types';
 
 type SettingsPerson = Person & {
@@ -54,8 +55,8 @@ export default function Settings({person, projects, showcaseProjectIds, twoFacto
 
             <div className="settings-sections">
                 <section className="settings-section" data-tone="coral" id="profile"><SectionHead title={t.profile_settings} text={t.profile_settings_hint}/>
-                    <div className="banner-settings" id="banner">{person.banner_url && <img src={path(person.banner_url)} alt=""/>}<Form action={`/profile/${person.slug}/banner`}><label>{t.banner}<input type="file" name="banner_file" accept="image/jpeg,image/png,image/webp" required/></label><button className="button small">{t.upload_banner}</button></Form>{person.banner_url && <Form json action={`/profile/${person.slug}/banner`} method="delete" confirmMessage={t.confirm_delete}><button className="text-button danger">{t.remove_banner}</button></Form>}</div>
-                    <Form action="/profile/settings" className="settings-form"><input type="hidden" name="section" value="profile"/><div className="settings-avatar" id="avatar"><Avatar person={person} large/><label>{t.avatar}<input type="file" name="avatar_file" accept="image/jpeg,image/png,image/webp"/></label></div>
+                    <div className="profile-media-settings"><ProfileMediaEditor kind="banner" person={person}/><ProfileMediaEditor kind="avatar" person={person}/></div>
+                    <Form action="/profile/settings" className="settings-form"><input type="hidden" name="section" value="profile"/>
                         <label>{t.name}<input name="name" required maxLength={255} defaultValue={person.name}/></label>
                         <label>{t.bio}<textarea name="bio" rows={5} maxLength={1000} defaultValue={person.bio || ''}/></label>
                         <label>{t.skills}<input name="skills" maxLength={400} defaultValue={person.skills || ''}/></label>

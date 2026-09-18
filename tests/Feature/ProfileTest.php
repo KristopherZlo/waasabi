@@ -172,6 +172,32 @@ class ProfileTest extends TestCase
         ]);
     }
 
+    public function test_profile_media_editor_endpoints_store_show_and_reset_images(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create(['created_at' => now()->subHour()]);
+
+        $this->actingAs($user)->post(route('profile.banner.update', $user->slug), [
+            'banner_file' => UploadedFile::fake()->image('banner.jpg', 1600, 400),
+        ], ['Accept' => 'application/json'])->assertOk()->assertJsonStructure(['url']);
+
+        $this->post(route('profile.avatar.update', $user->slug), [
+            'avatar_file' => UploadedFile::fake()->image('avatar.jpg', 512, 512),
+        ], ['Accept' => 'application/json'])->assertOk()->assertJsonStructure(['url']);
+
+        $user->refresh();
+        $this->assertStringStartsWith('storage/uploads/banners/', (string) $user->banner_url);
+        $this->assertStringStartsWith('storage/uploads/avatars/', (string) $user->avatar);
+        $this->get(route('profile.show', $user->slug))->assertInertia(fn (Assert $page) => $page
+            ->where('person.banner_url', $user->banner_url)
+            ->where('person.avatar', $user->avatar));
+
+        $this->postJson(route('profile.banner.delete', $user->slug), ['_method' => 'DELETE'])->assertOk();
+        $this->postJson(route('profile.avatar.delete', $user->slug), ['_method' => 'DELETE'])->assertOk();
+        $this->assertNull($user->fresh()->banner_url);
+        $this->assertNull($user->fresh()->avatar);
+    }
+
     public function test_user_can_follow_and_unfollow(): void
     {
         $follower = User::factory()->create(['slug' => 'follower-user']);
