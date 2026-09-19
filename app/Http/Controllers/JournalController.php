@@ -83,8 +83,8 @@ class JournalController extends Controller
         $post = $projectUpdate->post;
         abort_unless($post->slug === $slug, 404);
         $actor = $request->user();
-        abort_unless($post->user_id === $actor->id || $projectUpdate->user_id === $actor->id || $actor->hasRole('moderator'), 403);
-        if ($actor->hasRole('moderator')) {
+        abort_unless($post->user_id === $actor->id || $projectUpdate->user_id === $actor->id || $actor->isAdmin(), 403);
+        if ($actor->isAdmin()) {
             abort_if(app(ModerationService::class)->shouldBlock($actor, $post->user), 403);
             app(ModerationService::class)->logAction($request, $actor, 'delete', 'project_update', (string) $projectUpdate->id,
                 route('project', $slug), null, ['title' => $projectUpdate->title]);

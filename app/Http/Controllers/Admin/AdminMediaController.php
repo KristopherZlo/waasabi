@@ -50,7 +50,7 @@ class AdminMediaController extends Controller
             'report_id' => $report->id,
         ], 'content_report', (string) $report->id);
 
-        return redirect()->route('admin', ['tab' => 'media'])
+        return redirect()->route('admin.tools', ['tab' => 'media'])
             ->with('toast', __($remove ? 'ui.admin.media_removed' : 'ui.admin.media_dismissed'));
     }
 

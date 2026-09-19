@@ -46,6 +46,7 @@ class ProfileTest extends TestCase
 
         $this->get(route('profile.show', $user->slug))
             ->assertInertia(fn (Assert $page) => $page->where('workFilter.kind', 'all')
+                ->where('view', 'overview')
                 ->has('works.data', 3));
 
         $this->get(route('profile.show', ['slug' => $user->slug, 'kind' => 'works', 'q' => 'sketch']))
@@ -102,6 +103,33 @@ class ProfileTest extends TestCase
         ]);
     }
 
+    public function test_display_name_and_handle_can_be_changed_independently(): void
+    {
+        $user = User::factory()->create(['name' => 'Original Name', 'slug' => 'original-handle']);
+        User::factory()->create(['slug' => 'already-taken']);
+
+        $this->actingAs($user)->post(route('profile.settings.update'), [
+            'name' => 'Public Display Name',
+            'handle' => '@new_handle',
+        ])->assertRedirect(route('profile.settings').'#profile');
+
+        $user->refresh();
+        $this->assertSame('Public Display Name', $user->name);
+        $this->assertSame('new_handle', $user->slug);
+
+        $this->post(route('profile.settings.update'), [
+            'name' => 'Another Display Name',
+            'handle' => 'already-taken',
+        ])->assertSessionHasErrors('handle');
+        $this->assertSame('new_handle', $user->fresh()->slug);
+
+        $this->post(route('profile.settings.update'), [
+            'name' => 'Another Display Name',
+            'handle' => 'settings',
+        ])->assertSessionHasErrors('handle');
+        $this->assertSame('new_handle', $user->fresh()->slug);
+    }
+
     public function test_inline_profile_update_returns_to_profile(): void
     {
         $user = User::factory()->create(['slug' => 'inline-editor']);
@@ -113,6 +141,35 @@ class ProfileTest extends TestCase
         ])->assertRedirect(route('profile.show', $user->slug));
 
         $this->assertSame('Edited directly on my page.', $user->fresh()->bio);
+    }
+
+    public function test_portfolio_overview_saves_and_exposes_public_story_links_and_meta(): void
+    {
+        $user = User::factory()->create(['slug' => 'public-portfolio']);
+        Post::factory()->for($user)->create(['visibility' => 'public', 'moderation_status' => 'approved']);
+
+        $this->actingAs($user)->post(route('profile.settings.update'), [
+            'name' => $user->name,
+            'headline' => 'Product designer and frontend developer',
+            'profile_highlights' => "Shipped an accessible design system\nMentored three junior designers",
+            'profile_links' => [
+                'contact' => 'https://example.com/contact',
+                'github' => 'https://github.com/example',
+                'showreel' => 'https://vimeo.com/123456789',
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $this->get(route('profile.show', $user->slug))
+            ->assertViewHas('profileMeta', fn ($meta) => $meta['description'] === 'Product designer and frontend developer')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('view', 'overview')
+                ->where('person.headline', 'Product designer and frontend developer')
+                ->where('person.profile_highlights', "Shipped an accessible design system\nMentored three junior designers")
+                ->where('person.profile_links.contact', 'https://example.com/contact')
+                ->where('person.profile_links.showreel', 'https://vimeo.com/123456789')
+                ->where('stats.published', 1)
+                ->where('stats.completed', 0)
+                ->where('meta.description', 'Product designer and frontend developer'));
     }
 
     public function test_partial_settings_update_preserves_omitted_profile_fields(): void
@@ -348,11 +405,17 @@ class ProfileTest extends TestCase
         $owner->update(['wall_mode' => 'everyone']);
         $this->actingAs($visitor)->post(route('profile.wall.store', $owner->slug), ['body' => $body])->assertRedirect();
         $visitorPost = ProfileWallPost::firstOrFail();
+        $moderator = User::factory()->create(['role' => 'moderator']);
+        $this->actingAs($moderator)->delete(route('profile.wall.destroy', $visitorPost))->assertForbidden();
         $this->actingAs($owner)->patch(route('profile.wall.update', $visitorPost), ['body' => 'Owner cannot rewrite a visitor post.'])->assertForbidden();
         $this->actingAs($visitor)->patch(route('profile.wall.update', $visitorPost), ['body' => 'Updated after spotting a typo in the original wall post.'])->assertRedirect();
         $this->assertDatabaseHas('profile_wall_posts', ['id' => $visitorPost->id, 'body' => 'Updated after spotting a typo in the original wall post.']);
         $this->actingAs($owner)->post(route('profile.wall.store', $owner->slug), ['body' => 'A quick update from My work.', 'return_view' => 'work'])
             ->assertRedirect(route('profile.show', ['slug' => $owner->slug, 'view' => 'work']));
+        $this->actingAs($owner)->post(route('profile.wall.store', $owner->slug), ['body' => 'A note from Overview.', 'return_view' => 'overview'])
+            ->assertRedirect(route('profile.show', $owner->slug));
+        $this->get(route('profile.show', ['slug' => $owner->slug, 'view' => 'work', 'kind' => 'posts']))
+            ->assertInertia(fn (Assert $page) => $page->where('workFilter.kind', 'posts')->has('works.data', 0));
         $this->actingAs($owner)->delete(route('profile.wall.destroy', $visitorPost))->assertRedirect();
         $this->assertDatabaseMissing('profile_wall_posts', ['id' => $visitorPost->id]);
     }

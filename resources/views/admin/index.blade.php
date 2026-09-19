@@ -5,67 +5,75 @@
 @section('page', 'admin')
 
 @section('content')
-    <p><a class="ghost-btn" href="{{ route('journal.moderation') }}">{{ __('waasabi.journal') }}</a></p>
     @php
         $adminSearch = $admin_search ?? (string) request('q', '');
         $currentTab = $admin_section ?? (string) request('tab', 'overview');
         $isAdminUser = Auth::user()?->isAdmin() ?? false;
         $roleOptions = config('roles.order', ['user', 'maker', 'moderator', 'admin']);
         $adminNavigation = [
-            'overview' => ['label' => __('ui.admin.overview'), 'icon' => 'layout-dashboard'],
-            'content' => ['label' => __('ui.admin.content'), 'icon' => 'files'],
-            'collaborations' => ['label' => __('ui.admin.collaborations'), 'icon' => 'handshake'],
-            'moderation' => ['label' => __('ui.admin.moderation_feed'), 'icon' => 'shield-check'],
-            'support' => ['label' => __('ui.admin.support_tickets'), 'icon' => 'messages-square'],
-            'media' => ['label' => __('ui.admin.media'), 'icon' => 'image'],
-            'comments' => ['label' => __('ui.admin.comments'), 'icon' => 'message-circle'],
-            'reviews' => ['label' => __('ui.admin.reviews'), 'icon' => 'clipboard-check'],
-            'log' => ['label' => __('ui.admin.moderation_log'), 'icon' => 'history'],
+            'overview' => ['label' => __('ui.admin.overview'), 'icon' => 'layout-dashboard', 'href' => route('admin.tools')],
+            'users' => ['label' => __('ui.admin.users'), 'icon' => 'users', 'href' => route('admin.tools', ['tab' => 'users'])],
+            'content' => ['label' => __('ui.admin.content'), 'icon' => 'files', 'href' => route('admin.tools', ['tab' => 'content'])],
+            'safety' => ['label' => __('ui.admin.moderation_feed'), 'icon' => 'shield-check', 'href' => route('admin.tools', ['tab' => 'media'])],
+            'support' => ['label' => __('ui.admin.support_tickets'), 'icon' => 'messages-square', 'href' => route('admin.tools', ['tab' => 'support'])],
+            'system' => ['label' => __('ui.admin.system'), 'icon' => 'settings', 'href' => route('admin.tools', ['tab' => 'analytics'])],
         ];
-        if ($isAdminUser) {
-            $adminNavigation = ['overview' => $adminNavigation['overview'], 'users' => ['label' => __('ui.admin.users'), 'icon' => 'users']] + array_slice($adminNavigation, 1, null, true) + [
-                'analytics' => ['label' => __('ui.admin.analytics'), 'icon' => 'chart-no-axes-combined'],
-                'promos' => ['label' => __('ui.admin.promos'), 'icon' => 'megaphone'],
-                'system' => ['label' => __('ui.admin.system'), 'icon' => 'server-cog'],
-            ];
-        }
-        $adminNavigationGroups = [
-            ['label' => __('ui.admin.nav_workspace'), 'tabs' => ['overview', 'content', 'collaborations']],
-            ['label' => __('ui.admin.nav_people'), 'tabs' => ['users', 'support']],
-            ['label' => __('ui.admin.nav_moderation'), 'tabs' => ['moderation', 'media', 'comments', 'reviews', 'log']],
-            ['label' => __('ui.admin.nav_operations'), 'tabs' => ['analytics', 'promos', 'system']],
-        ];
-        $availableTabs = array_keys($adminNavigation);
+        $availableTabs = ['overview', 'users', 'content', 'collaborations', 'moderation', 'support', 'media', 'comments', 'reviews', 'log', 'analytics', 'promos', 'system'];
         if (!in_array($currentTab, $availableTabs, true)) {
             $currentTab = 'overview';
         }
         $defaultTab = $currentTab;
-        $searchTab = $defaultTab === 'overview' ? 'content' : $defaultTab;
+        $activeWorkspace = match (true) {
+            in_array($defaultTab, ['content', 'collaborations', 'comments', 'reviews'], true) => 'content',
+            in_array($defaultTab, ['moderation', 'media', 'log'], true) => 'safety',
+            in_array($defaultTab, ['analytics', 'promos', 'system'], true) => 'system',
+            default => $defaultTab,
+        };
+        $subNavigation = match ($activeWorkspace) {
+            'content' => [
+                ['label' => __('ui.admin.content'), 'href' => route('admin.tools', ['tab' => 'content']), 'active' => $defaultTab === 'content'],
+                ['label' => __('ui.admin.comments'), 'href' => route('admin.tools', ['tab' => 'comments']), 'active' => $defaultTab === 'comments'],
+                ['label' => __('ui.admin.reviews'), 'href' => route('admin.tools', ['tab' => 'reviews']), 'active' => $defaultTab === 'reviews'],
+                ['label' => __('ui.admin.collaborations'), 'href' => route('admin.tools', ['tab' => 'collaborations']), 'active' => $defaultTab === 'collaborations'],
+                ['label' => __('waasabi.journal'), 'href' => route('journal.moderation'), 'active' => false],
+            ],
+            'safety' => [
+                ['label' => __('ui.admin.moderation_feed'), 'href' => route('admin'), 'active' => false],
+                ['label' => __('ui.admin.media'), 'href' => route('admin.tools', ['tab' => 'media']), 'active' => $defaultTab === 'media'],
+                ['label' => __('ui.admin.moderation_log'), 'href' => route('admin.tools', ['tab' => 'log']), 'active' => $defaultTab === 'log'],
+            ],
+            'system' => [
+                ['label' => __('ui.admin.analytics'), 'href' => route('admin.tools', ['tab' => 'analytics']), 'active' => $defaultTab === 'analytics'],
+                ['label' => __('ui.admin.promos'), 'href' => route('admin.tools', ['tab' => 'promos']), 'active' => $defaultTab === 'promos'],
+                ['label' => __('ui.admin.system'), 'href' => route('admin.tools', ['tab' => 'system']), 'active' => $defaultTab === 'system'],
+            ],
+            default => [],
+        };
+        $searchableTabs = ['users', 'content', 'collaborations', 'comments', 'reviews', 'moderation', 'support', 'media', 'log'];
         $moderationSort = $moderation_sort ?? 'reporters';
         $moderationSort = in_array($moderationSort, ['reporters', 'recent'], true) ? $moderationSort : 'reporters';
+        $hasActiveFilters = $adminSearch !== '' || match ($defaultTab) {
+            'content' => $content_type !== '' || $content_visibility !== '' || $content_moderation !== '',
+            'collaborations' => $collaboration_status !== '',
+            'moderation' => $moderationSort !== 'reporters',
+            default => false,
+        };
         $overview = $admin_overview ?? [];
     @endphp
 
     <div class="admin-app">
         <aside class="admin-app__sidebar">
-            <a class="admin-app__brand" href="{{ route('admin') }}">
+            <a class="admin-app__brand" href="{{ route('admin.tools') }}">
                 <img src="{{ asset('images/logo-black.svg') }}" alt="">
                 <span>{{ __('ui.app.name') }}</span>
                 <strong>{{ __('ui.admin.title') }}</strong>
             </a>
             <nav class="admin-app__nav" aria-label="{{ __('ui.admin.navigation') }}">
-                @foreach ($adminNavigationGroups as $group)
-                    @php $groupItems = array_intersect_key($adminNavigation, array_flip($group['tabs'])); @endphp
-                    @continue(empty($groupItems))
-                    <div class="admin-app__nav-group">
-                        <div class="admin-app__nav-label">{{ $group['label'] }}</div>
-                        @foreach ($groupItems as $tab => $item)
-                            <a class="admin-app__nav-item {{ $defaultTab === $tab ? 'is-active' : '' }}" href="{{ route('admin', ['tab' => $tab]) }}" @if ($defaultTab === $tab) aria-current="page" @endif>
-                                <i data-lucide="{{ $item['icon'] }}" class="icon"></i>
-                                <span>{{ $item['label'] }}</span>
-                            </a>
-                        @endforeach
-                    </div>
+                @foreach ($adminNavigation as $workspace => $item)
+                    <a class="admin-app__nav-item {{ $activeWorkspace === $workspace ? 'is-active' : '' }}" href="{{ $item['href'] }}" @if ($activeWorkspace === $workspace) aria-current="page" @endif>
+                        <i data-lucide="{{ $item['icon'] }}" class="icon"></i>
+                        <span>{{ $item['label'] }}</span>
+                    </a>
                 @endforeach
             </nav>
             <div class="admin-app__sidebar-footer">
@@ -86,15 +94,21 @@
         <div class="admin-app__workspace">
             <header class="admin-app__topbar">
                 <div class="admin-app__topbar-title">
-                    <a href="{{ route('admin') }}">{{ __('ui.admin.title') }}</a>
+                    <a href="{{ route('admin.tools') }}">{{ __('ui.admin.title') }}</a>
                     <i data-lucide="chevron-right" class="icon" aria-hidden="true"></i>
-                    <h1>{{ $adminNavigation[$defaultTab]['label'] }}</h1>
+                    <h1>{{ $adminNavigation[$activeWorkspace]['label'] }}</h1>
                 </div>
-                @unless (in_array($defaultTab, ['analytics', 'system', 'promos'], true))
-                <form class="admin-search__form" method="GET" action="{{ route('admin') }}" role="search">
-                    <input type="hidden" name="tab" value="{{ $searchTab }}">
-                    @if ($searchTab === 'moderation')
+                @if (in_array($defaultTab, $searchableTabs, true))
+                <form class="admin-search__form" method="GET" action="{{ route('admin.tools') }}" role="search">
+                    <input type="hidden" name="tab" value="{{ $defaultTab }}">
+                    @if ($defaultTab === 'moderation')
                         <input type="hidden" name="sort" value="{{ $moderationSort }}">
+                    @elseif ($defaultTab === 'content')
+                        <input type="hidden" name="type" value="{{ $content_type }}">
+                        <input type="hidden" name="visibility" value="{{ $content_visibility }}">
+                        <input type="hidden" name="moderation" value="{{ $content_moderation }}">
+                    @elseif ($defaultTab === 'collaborations')
+                        <input type="hidden" name="status" value="{{ $collaboration_status }}">
                     @endif
                     <div class="admin-search__field">
                         <i data-lucide="search" class="icon"></i>
@@ -102,9 +116,20 @@
                         <kbd aria-hidden="true">/</kbd>
                     </div>
                     <button class="ghost-btn" type="submit">{{ __('ui.admin.search') }}</button>
+                    @if ($hasActiveFilters)
+                        <a class="ghost-btn" href="{{ route('admin.tools', ['tab' => $defaultTab]) }}">{{ __('ui.admin.reset_filters') }}</a>
+                    @endif
                 </form>
-                @endunless
+                @endif
             </header>
+
+            @if ($subNavigation)
+                <nav class="admin-app__subnav" aria-label="{{ $adminNavigation[$activeWorkspace]['label'] }}">
+                    @foreach ($subNavigation as $item)
+                        <a class="{{ $item['active'] ? 'is-active' : '' }}" href="{{ $item['href'] }}" @if ($item['active']) aria-current="page" @endif>{{ $item['label'] }}</a>
+                    @endforeach
+                </nav>
+            @endif
 
             <div class="admin-app__content">
                 @if ($defaultTab === 'overview')
@@ -116,23 +141,23 @@
                                 <dd>{{ number_format((int) ($overview['users'] ?? 0)) }}</dd>
                                 <span>{{ __('ui.admin.new_users_7d', ['count' => (int) ($overview['new_users'] ?? 0)]) }}</span>
                                 @if ($isAdminUser)
-                                    <a class="admin-metric-hitbox" href="{{ route('admin', ['tab' => 'users']) }}" aria-label="{{ __('ui.admin.users') }}"></a>
+                                    <a class="admin-metric-hitbox" href="{{ route('admin.tools', ['tab' => 'users']) }}" aria-label="{{ __('ui.admin.users') }}"></a>
                                 @endif
                             </div>
                             <div>
                                 <dt>{{ __('ui.admin.total_content') }}</dt>
                                 <dd>{{ number_format((int) ($overview['content'] ?? 0)) }}</dd>
-                                <a class="admin-metric-hitbox" href="{{ route('admin', ['tab' => 'content']) }}" aria-label="{{ __('ui.admin.content') }}"></a>
+                                <a class="admin-metric-hitbox" href="{{ route('admin.tools', ['tab' => 'content']) }}" aria-label="{{ __('ui.admin.content') }}"></a>
                             </div>
                             <div class="admin-overview__metric--attention">
                                 <dt>{{ __('ui.admin.pending_reports') }}</dt>
                                 <dd>{{ number_format((int) ($overview['pending_reports'] ?? 0)) }}</dd>
-                                <a class="admin-metric-hitbox" href="{{ route('admin', ['tab' => 'moderation']) }}" aria-label="{{ __('ui.admin.moderation_feed') }}"></a>
+                                <a class="admin-metric-hitbox" href="{{ route('admin') }}" aria-label="{{ __('ui.admin.moderation_feed') }}"></a>
                             </div>
                             <div>
                                 <dt>{{ __('ui.admin.open_support') }}</dt>
                                 <dd>{{ number_format((int) ($overview['open_tickets'] ?? 0)) }}</dd>
-                                <a class="admin-metric-hitbox" href="{{ route('admin', ['tab' => 'support']) }}" aria-label="{{ __('ui.admin.support_tickets') }}"></a>
+                                <a class="admin-metric-hitbox" href="{{ route('admin.tools', ['tab' => 'support']) }}" aria-label="{{ __('ui.admin.support_tickets') }}"></a>
                             </div>
                         </dl>
 
@@ -141,23 +166,23 @@
                                 <header>
                                     <h2>{{ __('ui.admin.work_queue') }}</h2>
                                 </header>
-                                <a class="admin-queue-row" href="{{ route('admin', ['tab' => 'moderation']) }}">
+                                <a class="admin-queue-row" href="{{ route('admin') }}">
                                     <span>{{ __('ui.admin.pending_reports') }}</span>
                                     <strong>{{ (int) ($overview['pending_reports'] ?? 0) }}</strong>
                                     <i data-lucide="chevron-right" class="icon"></i>
                                 </a>
-                                <a class="admin-queue-row" href="{{ route('admin', ['tab' => 'support']) }}">
+                                <a class="admin-queue-row" href="{{ route('admin.tools', ['tab' => 'support']) }}">
                                     <span>{{ __('ui.admin.open_support') }}</span>
                                     <strong>{{ (int) ($overview['open_tickets'] ?? 0) }}</strong>
                                     <i data-lucide="chevron-right" class="icon"></i>
                                 </a>
-                                <a class="admin-queue-row" href="{{ route('admin', ['tab' => 'media']) }}">
+                                <a class="admin-queue-row" href="{{ route('admin.tools', ['tab' => 'media']) }}">
                                     <span>{{ __('ui.admin.flagged_media') }}</span>
                                     <strong>{{ (int) ($overview['flagged_media'] ?? 0) }}</strong>
                                     <i data-lucide="chevron-right" class="icon"></i>
                                 </a>
                                 @if ($isAdminUser)
-                                    <a class="admin-queue-row" href="{{ route('admin', ['tab' => 'promos']) }}">
+                                    <a class="admin-queue-row" href="{{ route('admin.tools', ['tab' => 'promos']) }}">
                                         <span>{{ __('ui.admin.active_promos') }}</span>
                                         <strong>{{ (int) ($overview['active_promos'] ?? 0) }}</strong>
                                         <i data-lucide="chevron-right" class="icon"></i>
@@ -168,7 +193,7 @@
                             <section class="admin-overview__section">
                                 <header>
                                     <h2>{{ __('ui.admin.recent_activity') }}</h2>
-                                    <a href="{{ route('admin', ['tab' => 'log']) }}">{{ __('ui.admin.view_all') }}</a>
+                                    <a href="{{ route('admin.tools', ['tab' => 'log']) }}">{{ __('ui.admin.view_all') }}</a>
                                 </header>
                                 <div class="admin-activity-list">
                                     @forelse ($overview_logs as $log)
@@ -194,7 +219,7 @@
         <section class="section admin-section">
             <div class="admin-section-toolbar">
                 <div class="section-title">{{ __('ui.admin.content') }}</div>
-                <form class="admin-filter-form" method="GET" action="{{ route('admin') }}">
+                <form class="admin-filter-form" method="GET" action="{{ route('admin.tools') }}">
                     <input type="hidden" name="tab" value="content">
                     <select class="input input--compact" name="type" aria-label="{{ __('ui.admin.content_type') }}">
                         <option value="">{{ __('ui.admin.filter_all_types') }}</option>
@@ -222,10 +247,9 @@
                 <span class="admin-bulk-bar__selection" aria-live="polite"><strong data-admin-selected-count>0</strong> {{ __('ui.admin.selected') }}</span>
                 <select class="input input--compact" name="action" required>
                     <option value="">{{ __('ui.admin.bulk_action') }}</option>
-                    <option value="queue">{{ __('ui.moderation.queue') }}</option>
-                    <option value="hide">{{ __('ui.moderation.hide') }}</option>
-                    <option value="restore">{{ __('ui.moderation.restore') }}</option>
                     @if ($isAdminUser)
+                        <option value="hide">{{ __('ui.moderation.hide') }}</option>
+                        <option value="restore">{{ __('ui.moderation.restore') }}</option>
                         <option value="delete">{{ __('ui.admin.delete') }}</option>
                     @endif
                 </select>
@@ -233,59 +257,70 @@
                 <button class="ghost-btn ghost-btn--compact" type="submit">{{ __('ui.admin.apply') }}</button>
             </form>
 
-            <div class="admin-card admin-card--scroll">
-                <div class="admin-table admin-content-table">
-                    <div class="admin-row admin-content-row admin-row--head">
-                        <div><input type="checkbox" data-admin-select-all="admin-content-bulk" aria-label="{{ __('ui.admin.select_all') }}"></div>
-                        <div>{{ __('ui.admin.content_item') }}</div>
-                        <div>{{ __('ui.admin.user_name') }}</div>
-                        <div>{{ __('ui.admin.content_state') }}</div>
-                        <div>{{ __('ui.admin.content_activity') }}</div>
-                        <div>{{ __('ui.admin.created') }}</div>
-                    </div>
-                    @forelse ($content_items as $item)
-                        @php
-                            $itemUrl = $item->type === 'question' ? route('questions.show', $item->slug) : route('project', $item->slug);
-                            $canSelect = $isAdminUser || ! $item->user?->isAdmin();
-                            $moderationIcon = match ($item->moderation_status) {
-                                'pending' => 'clock-3',
-                                'hidden' => 'eye-off',
-                                default => 'circle-check',
-                            };
-                            $visibilityLabel = match ($item->visibility) {
-                                'public' => __('ui.publish.visibility_public'),
-                                'unlisted' => __('ui.publish.visibility_unlisted'),
-                                default => __('ui.admin.filter_draft'),
-                            };
-                        @endphp
-                        <div class="admin-row admin-content-row">
-                            <div>
-                                <input type="checkbox" name="post_ids[]" value="{{ $item->id }}" form="admin-content-bulk" data-admin-row-select aria-label="{{ __('ui.admin.select_content', ['title' => $item->title]) }}" @disabled(! $canSelect)>
-                            </div>
-                            <div>
-                                <a href="{{ $itemUrl }}" target="_blank" rel="noopener">{{ $item->title }}</a>
-                                <span class="muted">{{ $item->type === 'question' ? __('ui.publish.type_question') : __('ui.publish.type_post') }} · {{ $item->slug }}</span>
-                            </div>
-                            <div class="admin-user-cell">
-                                <img src="{{ $item->user->avatar ?: asset('images/avatar-default.svg') }}" alt="">
-                                <div>
-                                    <a href="{{ route('profile.show', $item->user->slug) }}">{{ $item->user->name }}</a>
-                                    <span class="muted">{{ __('ui.roles.'.$item->user->roleKey()) }}</span>
-                                </div>
-                            </div>
-                            <div class="admin-state" data-state="{{ $item->moderation_status }}">
-                                <span><i data-lucide="{{ $moderationIcon }}" class="icon"></i>{{ __('ui.moderation.status_'.$item->moderation_status) }}</span>
-                                <small>{{ $visibilityLabel }}</small>
-                            </div>
-                            <div class="muted">
-                                {{ __('ui.admin.content_activity_value', ['comments' => $item->comments_count, 'reviews' => $item->reviews_count, 'collaborations' => $item->collaboration_requests_count]) }}
-                            </div>
-                            <time class="muted" datetime="{{ $item->created_at?->toAtomString() }}">{{ $item->created_at?->format('Y-m-d H:i') }}</time>
+            <div class="admin-content-select-all">
+                <label><input type="checkbox" data-admin-select-all="admin-content-bulk"> {{ __('ui.admin.select_all') }}</label>
+                <span>{{ method_exists($content_items, 'total') ? $content_items->total() : $content_items->count() }} {{ __('ui.admin.content_item') }}</span>
+            </div>
+            <div class="admin-content-list">
+                @forelse ($content_items as $item)
+                    @php
+                        $itemUrl = $item->type === 'question' ? route('questions.show', $item->slug) : route('project', $item->slug);
+                        $canSelect = $isAdminUser || ! $item->user?->isAdmin();
+                        $visibilityLabel = match ($item->visibility) {
+                            'public' => __('ui.publish.visibility_public'),
+                            'unlisted' => __('ui.publish.visibility_unlisted'),
+                            default => __('ui.admin.filter_draft'),
+                        };
+                        $preview = $item->subtitle ?: \Illuminate\Support\Str::limit(trim(strip_tags(app(\App\Services\MarkdownService::class)->render((string) $item->body_markdown))), 320);
+                    @endphp
+                    <article class="admin-content-item" data-admin-select-row data-feed-card data-moderation-scope data-moderation-status="{{ $item->moderation_status }}">
+                        <div class="admin-content-item__select">
+                            <input type="checkbox" name="post_ids[]" value="{{ $item->id }}" form="admin-content-bulk" data-admin-row-select aria-label="{{ __('ui.admin.select_content', ['title' => $item->title]) }}" @disabled(! $canSelect)>
                         </div>
-                    @empty
-                        <p class="admin-empty">{{ __('ui.admin.content_empty') }}</p>
-                    @endforelse
-                </div>
+                        <div class="admin-content-item__body">
+                            <header>
+                                <div>
+                                    <a class="admin-content-item__title" href="{{ $itemUrl }}" target="_blank" rel="noopener">{{ $item->title }}</a>
+                                    <div class="admin-content-item__meta admin-moderation__meta">
+                                        <span>{{ $item->type === 'question' ? __('ui.publish.type_question') : __('ui.publish.type_post') }}</span>
+                                        <span>{{ $visibilityLabel }}</span>
+                                        @if ($item->moderation_status !== 'approved')
+                                            <span class="chip chip--moderation chip--{{ $item->moderation_status }}">{{ __('ui.moderation.status_'.$item->moderation_status) }}</span>
+                                        @endif
+                                        @if ($item->nsfw)
+                                            <span class="chip chip--nsfw">NSFW</span>
+                                        @endif
+                                        <time datetime="{{ $item->created_at?->toAtomString() }}">{{ $item->created_at?->diffForHumans() }}</time>
+                                    </div>
+                                </div>
+                                <div class="admin-content-item__actions">
+                                    <button type="button" class="ghost-btn ghost-btn--compact" data-admin-restore data-admin-url="{{ route('moderation.posts.restore', $item) }}" data-allow-label="{{ __('ui.moderation.allow') }}" data-restore-label="{{ __('ui.moderation.restore') }}" @if ($item->moderation_status === 'approved') hidden @endif>{{ $item->moderation_status === 'pending' ? __('ui.moderation.allow') : __('ui.moderation.restore') }}</button>
+                                    <button type="button" class="ghost-btn ghost-btn--compact ghost-btn--danger" data-admin-hide data-admin-url="{{ route('moderation.posts.hide', $item) }}" @if ($item->moderation_status === 'hidden') hidden @endif><i data-lucide="eye-off" class="icon" aria-hidden="true"></i>{{ __('ui.moderation.hide') }}</button>
+                                    <details class="admin-action-menu">
+                                        <summary aria-label="{{ __('ui.admin.more_actions') }}" title="{{ __('ui.admin.more_actions') }}"><i data-lucide="more-horizontal" class="icon" aria-hidden="true"></i></summary>
+                                        <div class="admin-action-menu__panel">
+                                            <button type="button" data-admin-nsfw data-admin-nsfw-value="{{ $item->nsfw ? '0' : '1' }}" data-admin-url="{{ route('moderation.posts.nsfw', $item) }}">{{ $item->nsfw ? __('ui.moderation.remove_nsfw') : __('ui.moderation.nsfw') }}</button>
+                                            <button type="button" class="admin-action-menu__danger" data-admin-delete data-admin-url="{{ route('admin.posts.delete', $item) }}">{{ __('ui.admin.delete') }}</button>
+                                        </div>
+                                    </details>
+                                </div>
+                            </header>
+                            @if ($preview !== '')
+                                <p class="admin-content-item__preview">{{ $preview }}</p>
+                            @endif
+                            @include('admin.partials.report-context', ['context' => $item->moderation_report_context ?? null])
+                            <footer>
+                                <a class="admin-content-author" href="{{ route('profile.show', $item->user->slug) }}">
+                                    <img src="{{ $item->user->avatar ?: asset('images/avatar-default.svg') }}" alt="">
+                                    <span>{{ $item->user->name }}</span>
+                                </a>
+                                <span>{{ __('ui.admin.content_activity_value', ['comments' => $item->comments_count, 'reviews' => $item->reviews_count, 'collaborations' => $item->collaboration_requests_count]) }}</span>
+                            </footer>
+                        </div>
+                    </article>
+                @empty
+                    <p class="admin-empty">{{ __('ui.admin.content_empty') }}</p>
+                @endforelse
             </div>
             @if (method_exists($content_items, 'links'))
                 <div class="admin-pagination">
@@ -299,7 +334,7 @@
         <section class="section admin-section">
             <div class="admin-section-toolbar">
                 <div class="section-title">{{ __('ui.admin.collaborations') }}</div>
-                <form class="admin-filter-form" method="GET" action="{{ route('admin') }}">
+                <form class="admin-filter-form" method="GET" action="{{ route('admin.tools') }}">
                     <input type="hidden" name="tab" value="collaborations">
                     <select class="input input--compact" name="status" aria-label="{{ __('ui.collaboration.filter_status') }}">
                         <option value="">{{ __('ui.collaboration.status_all') }}</option>
@@ -311,6 +346,7 @@
                 </form>
             </div>
 
+            @if ($isAdminUser)
             <form class="admin-bulk-bar" id="admin-collaboration-bulk" method="POST" action="{{ route('admin.collaborations.bulk') }}" data-admin-bulk data-confirm-submit data-confirm-message="{{ __('ui.admin.bulk_confirm') }}">
                 @csrf
                 <span class="admin-bulk-bar__selection" aria-live="polite"><strong data-admin-selected-count>0</strong> {{ __('ui.admin.selected') }}</span>
@@ -323,53 +359,65 @@
                 <input class="input input--compact" type="text" name="reason" maxlength="500" placeholder="{{ __('ui.moderation.reason_placeholder') }}" required>
                 <button class="ghost-btn ghost-btn--compact" type="submit">{{ __('ui.admin.apply') }}</button>
             </form>
+            @endif
 
-            <div class="admin-card admin-card--scroll">
-                <div class="admin-table admin-collaboration-table">
-                    <div class="admin-row admin-collaboration-row admin-row--head">
-                        <div><input type="checkbox" data-admin-select-all="admin-collaboration-bulk" aria-label="{{ __('ui.admin.select_all') }}"></div>
-                        <div>{{ __('ui.admin.collaboration_item') }}</div>
-                        <div>{{ __('ui.admin.user_name') }}</div>
-                        <div>{{ __('ui.collaboration.filter_status') }}</div>
-                        <div>{{ __('ui.admin.responses_and_comments') }}</div>
-                        <div>{{ __('ui.admin.actions') }}</div>
-                    </div>
-                    @forelse ($collaborations as $collaboration)
-                        @php
-                            $canSelect = $isAdminUser || ! $collaboration->user?->isAdmin();
-                            $statusIcon = match ($collaboration->status) {
-                                'open' => 'circle-dot',
-                                'filled' => 'circle-check',
-                                default => 'circle-slash-2',
-                            };
-                        @endphp
-                        <div class="admin-row admin-collaboration-row">
-                            <div>
-                                <input type="checkbox" name="request_ids[]" value="{{ $collaboration->id }}" form="admin-collaboration-bulk" data-admin-row-select aria-label="{{ __('ui.admin.select_content', ['title' => $collaboration->title]) }}" @disabled(! $canSelect)>
-                            </div>
-                            <div>
-                                <a href="{{ route('collaboration.show', $collaboration) }}" target="_blank" rel="noopener">{{ $collaboration->title }}</a>
-@if ($collaboration->post)
-                                <a class="muted" href="{{ route('project', $collaboration->post->slug) }}">{{ $collaboration->post->title }}</a>
-@endif
-                            </div>
-                            <div class="admin-user-cell">
-                                <img src="{{ $collaboration->user->avatar ?: asset('images/avatar-default.svg') }}" alt="">
-                                <div>
-                                    <a href="{{ route('profile.show', $collaboration->user->slug) }}">{{ $collaboration->user->name }}</a>
-                                    <span class="muted">{{ __('ui.roles.'.$collaboration->user->roleKey()) }}</span>
-                                </div>
-                            </div>
-                            <div class="admin-state" data-state="{{ $collaboration->status }}"><span><i data-lucide="{{ $statusIcon }}" class="icon"></i>{{ __('ui.collaboration.status_'.$collaboration->status) }}</span></div>
-                            <div class="muted">{{ $collaboration->applications_count }} / {{ $collaboration->comments_count }}</div>
-                            <div>
-                                <a class="ghost-btn ghost-btn--compact" href="{{ route('admin', ['tab' => 'collaborations', 'request' => $collaboration->id]) }}">{{ __('ui.admin.inspect') }}</a>
-                            </div>
-                        </div>
-                    @empty
-                        <p class="admin-empty">{{ __('ui.admin.collaborations_empty') }}</p>
-                    @endforelse
+            @if ($isAdminUser && $collaborations->isNotEmpty())
+                <div class="admin-content-select-all">
+                    <label>
+                        <input type="checkbox" data-admin-select-all="admin-collaboration-bulk" aria-label="{{ __('ui.admin.select_all') }}">
+                        {{ __('ui.admin.select_all') }}
+                    </label>
+                    <span class="muted">{{ $collaborations->total() }}</span>
                 </div>
+            @endif
+
+            <div class="admin-card admin-content-list">
+                @forelse ($collaborations as $collaboration)
+                    @php
+                        $statusIcon = match ($collaboration->status) {
+                            'open' => 'circle-dot',
+                            'filled' => 'circle-check',
+                            default => 'circle-slash-2',
+                        };
+                    @endphp
+                    <article class="admin-content-item" data-admin-select-row>
+                        @if ($isAdminUser)
+                            <div class="admin-content-item__select">
+                                <input type="checkbox" name="request_ids[]" value="{{ $collaboration->id }}" form="admin-collaboration-bulk" data-admin-row-select aria-label="{{ __('ui.admin.select_content', ['title' => $collaboration->title]) }}">
+                            </div>
+                        @endif
+                        <div class="admin-content-item__body">
+                            <header>
+                                <div>
+                                    <a class="admin-content-item__title" href="{{ route('collaboration.show', $collaboration) }}" target="_blank" rel="noopener">{{ $collaboration->title }}</a>
+                                    <div class="admin-content-item__meta">
+                                        <span class="admin-state" data-state="{{ $collaboration->status }}"><span><i data-lucide="{{ $statusIcon }}" class="icon"></i>{{ __('ui.collaboration.status_'.$collaboration->status) }}</span></span>
+                                        <time datetime="{{ $collaboration->created_at?->toAtomString() }}">{{ $collaboration->created_at?->diffForHumans() }}</time>
+                                    </div>
+                                </div>
+                                <div class="admin-content-item__actions">
+                                    <a href="{{ route('admin.tools', ['tab' => 'collaborations', 'request' => $collaboration->id]) }}">{{ __('ui.admin.inspect') }}</a>
+                                </div>
+                            </header>
+                            <p class="admin-content-item__preview">{{ $collaboration->summary }}</p>
+                            <footer>
+                                <div class="admin-content-item__author admin-user-cell">
+                                    <img src="{{ $collaboration->user->avatar ?: asset('images/avatar-default.svg') }}" alt="">
+                                    <div>
+                                        <a href="{{ route('profile.show', $collaboration->user->slug) }}">{{ $collaboration->user->name }}</a>
+                                        <span class="muted">{{ __('ui.roles.'.$collaboration->user->roleKey()) }}</span>
+                                    </div>
+                                </div>
+                                <span class="muted">{{ __('ui.admin.responses_and_comments') }}: {{ $collaboration->applications_count }} / {{ $collaboration->comments_count }}</span>
+                                @if ($collaboration->post)
+                                    <a class="muted" href="{{ route('project', $collaboration->post->slug) }}">{{ $collaboration->post->title }}</a>
+                                @endif
+                            </footer>
+                        </div>
+                    </article>
+                @empty
+                    <p class="admin-empty">{{ __('ui.admin.collaborations_empty') }}</p>
+                @endforelse
             </div>
             @if (method_exists($collaborations, 'links'))
                 <div class="admin-pagination">
@@ -384,7 +432,7 @@
                             <h2>{{ $selected_collaboration->title }}</h2>
                             <a href="{{ route('collaboration.show', $selected_collaboration) }}" target="_blank" rel="noopener">{{ __('ui.admin.open_public_page') }}</a>
                         </div>
-                        <a class="icon-btn" href="{{ route('admin', ['tab' => 'collaborations']) }}" aria-label="{{ __('ui.settings.close') }}"><i data-lucide="x" class="icon"></i></a>
+                        <a class="icon-btn" href="{{ route('admin.tools', ['tab' => 'collaborations']) }}" aria-label="{{ __('ui.settings.close') }}"><i data-lucide="x" class="icon"></i></a>
                     </header>
                     <div class="admin-collaboration-inspector__columns">
                         <div>
@@ -396,12 +444,14 @@
                                         <span>{{ __('ui.collaboration.application_'.$application->status) }}</span>
                                     </header>
                                     <p>{{ $application->message }}</p>
-                                    <form method="POST" action="{{ route('admin.collaboration-applications.delete', $application) }}" data-confirm-submit data-confirm-message="{{ __('ui.admin.delete_confirm') }}">
-                                        @csrf
-                                        @method('DELETE')
-                                        <input class="input input--compact" type="text" name="reason" maxlength="500" placeholder="{{ __('ui.moderation.reason_placeholder') }}" required>
-                                        <button class="ghost-btn ghost-btn--compact ghost-btn--danger" type="submit">{{ __('ui.admin.delete') }}</button>
-                                    </form>
+                                    @if ($isAdminUser)
+                                        <form method="POST" action="{{ route('admin.collaboration-applications.delete', $application) }}" data-confirm-submit data-confirm-message="{{ __('ui.admin.delete_confirm') }}">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input class="input input--compact" type="text" name="reason" maxlength="500" placeholder="{{ __('ui.moderation.reason_placeholder') }}" required>
+                                            <button class="ghost-btn ghost-btn--compact ghost-btn--danger" type="submit">{{ __('ui.admin.delete') }}</button>
+                                        </form>
+                                    @endif
                                 </article>
                             @empty
                                 <p class="admin-empty">{{ __('ui.collaboration.applications_empty') }}</p>
@@ -416,12 +466,14 @@
                                         <time datetime="{{ $comment->created_at?->toAtomString() }}">{{ $comment->created_at?->diffForHumans() }}</time>
                                     </header>
                                     <p>{{ $comment->body }}</p>
-                                    <form method="POST" action="{{ route('admin.collaboration-comments.delete', $comment) }}" data-confirm-submit data-confirm-message="{{ __('ui.admin.delete_confirm') }}">
-                                        @csrf
-                                        @method('DELETE')
-                                        <input class="input input--compact" type="text" name="reason" maxlength="500" placeholder="{{ __('ui.moderation.reason_placeholder') }}" required>
-                                        <button class="ghost-btn ghost-btn--compact ghost-btn--danger" type="submit">{{ __('ui.admin.delete') }}</button>
-                                    </form>
+                                    @if ($isAdminUser)
+                                        <form method="POST" action="{{ route('admin.collaboration-comments.delete', $comment) }}" data-confirm-submit data-confirm-message="{{ __('ui.admin.delete_confirm') }}">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input class="input input--compact" type="text" name="reason" maxlength="500" placeholder="{{ __('ui.moderation.reason_placeholder') }}" required>
+                                            <button class="ghost-btn ghost-btn--compact ghost-btn--danger" type="submit">{{ __('ui.admin.delete') }}</button>
+                                        </form>
+                                    @endif
                                 </article>
                             @empty
                                 <p class="admin-empty">{{ __('ui.collaboration.comments_empty') }}</p>
@@ -455,7 +507,7 @@
                                     <img src="{{ $user->avatar ?: asset('images/avatar-default.svg') }}" alt="">
                                     <div>
                                         @if (!empty($userSlug))
-                                            <a href="{{ route('admin', ['tab' => 'users', 'user' => $user->id]) }}">{{ $user->name }}</a>
+                                            <a href="{{ route('admin.tools', ['tab' => 'users', 'user' => $user->id]) }}">{{ $user->name }}</a>
                                         @else
                                             <span>{{ $user->name }}</span>
                                         @endif
@@ -470,9 +522,6 @@
                                     <form method="POST" action="{{ route('admin.users.role', $user) }}">
                                         @csrf
                                         <select class="input input--compact" name="role" data-confirm-select data-confirm-message="{{ __('ui.js.admin_role_confirm') }}">
-                                            @if (!empty($user->is_banned))
-                                                <option value="BANNED" selected disabled>{{ __('ui.admin.banned') }}</option>
-                                            @endif
                                             @foreach ($roleOptions as $roleOption)
                                                 <option value="{{ $roleOption }}" {{ $user->role === $roleOption ? 'selected' : '' }}>
                                                     {{ __('ui.roles.' . $roleOption) }}
@@ -486,7 +535,7 @@
                                         <form method="POST" action="{{ route('admin.users.ban', $user) }}" data-moderation-reason-form data-moderation-action="{{ $isBanned ? 'unban' : 'ban' }}">
                                             @csrf
                                             <input type="hidden" name="reason" value="">
-                                            <button class="ghost-btn {{ $isBanned ? '' : 'ghost-btn--danger' }}" type="submit">
+                                            <button class="ghost-btn ghost-btn--compact {{ $isBanned ? '' : 'ghost-btn--danger' }}" type="submit">
                                                 {{ $isBanned ? __('ui.admin.unban') : __('ui.admin.ban') }}
                                             </button>
                                         </form>
@@ -511,7 +560,7 @@
                             </div>
                             <div class="admin-actions">
                                 <a class="ghost-btn ghost-btn--compact" href="{{ route('profile.show', $selected_user->slug) }}" target="_blank" rel="noopener">{{ __('ui.admin.open_public_page') }}</a>
-                                <a class="icon-btn" href="{{ route('admin', ['tab' => 'users']) }}" aria-label="{{ __('ui.settings.close') }}"><i data-lucide="x" class="icon"></i></a>
+                                <a class="icon-btn" href="{{ route('admin.tools', ['tab' => 'users']) }}" aria-label="{{ __('ui.settings.close') }}"><i data-lucide="x" class="icon"></i></a>
                             </div>
                         </header>
                         <dl class="admin-user-facts">
@@ -571,7 +620,7 @@
                                 <h3>{{ __('ui.admin.reports_submitted') }}</h3>
                                 <div class="admin-record-list">
                                     @forelse ($selected_user_reports as $report)
-                                        <a href="{{ $report->content_url ?: route('admin', ['tab' => 'moderation']) }}"><strong>{{ $report->content_type }} #{{ $report->content_id }}</strong><span>{{ $report->reason }} · {{ $report->resolved_status }}</span></a>
+                                        <a href="{{ $report->content_url ?: route('admin') }}"><strong>{{ $report->content_type }} #{{ $report->content_id }}</strong><span>{{ $report->reason }} · {{ $report->resolved_status }}</span></a>
                                     @empty
                                         <p class="admin-empty">{{ __('ui.admin.no_records') }}</p>
                                     @endforelse
@@ -609,10 +658,10 @@
         <section class="section admin-section">
             <div class="section-title">{{ __('ui.admin.moderation_feed') }}</div>
             <div class="tabs admin-tabs admin-sort" style="margin-top: 8px;">
-                <a class="tab {{ $moderationSort === 'reporters' ? 'is-active' : '' }}" href="{{ route('admin', ['tab' => 'moderation', 'q' => $adminSearch, 'sort' => 'reporters']) }}">
+                <a class="tab {{ $moderationSort === 'reporters' ? 'is-active' : '' }}" href="{{ route('admin.tools', ['tab' => 'moderation', 'q' => $adminSearch, 'sort' => 'reporters']) }}">
                     {{ __('ui.admin.moderation_sort_reporters') }}
                 </a>
-                <a class="tab {{ $moderationSort === 'recent' ? 'is-active' : '' }}" href="{{ route('admin', ['tab' => 'moderation', 'q' => $adminSearch, 'sort' => 'recent']) }}">
+                <a class="tab {{ $moderationSort === 'recent' ? 'is-active' : '' }}" href="{{ route('admin.tools', ['tab' => 'moderation', 'q' => $adminSearch, 'sort' => 'recent']) }}">
                     {{ __('ui.admin.moderation_sort_recent') }}
                 </a>
             </div>
@@ -758,8 +807,9 @@
                             </div>
                             <div>
                                 <div class="muted">{{ $report->details ?: __('ui.admin.media_details_empty') }}</div>
+                                @if ($isAdminUser)
                                 <div class="admin-actions">
-                                    <form method="POST" action="{{ route('admin.media.resolve', $report) }}">
+                                    <form method="POST" action="{{ route('admin.media.resolve', $report) }}" data-confirm-submit data-confirm-message="{{ __('ui.admin.media_dismiss_confirm') }}">
                                         @csrf
                                         <button class="ghost-btn ghost-btn--compact" type="submit" name="action" value="dismiss">{{ __('ui.admin.media_dismiss') }}</button>
                                     </form>
@@ -768,6 +818,7 @@
                                         <button class="ghost-btn ghost-btn--compact" type="submit" name="action" value="remove">{{ __('ui.admin.media_remove') }}</button>
                                     </form>
                                 </div>
+                                @endif
                             </div>
                             <div>
                                 @if ($report->user && $reportUserSlug !== '')
@@ -798,61 +849,58 @@
     <div>
         <section class="section admin-section">
             <div class="section-title">{{ __('ui.admin.comments') }}</div>
-            <div class="card admin-card">
-                <div class="admin-table">
-                    <div class="admin-row admin-row--head">
-                        <div>{{ __('ui.admin.comment_author') }}</div>
-                        <div>{{ __('ui.admin.comment_body') }}</div>
-                        <div>{{ __('ui.admin.actions') }}</div>
-                    </div>
-                    @foreach ($comments as $comment)
-                        @php
-                            $commentUserSlug = $comment->user?->slug ?? \Illuminate\Support\Str::slug($comment->user?->name ?? '');
-                            $canModerateComment = $isAdminUser || ! $comment->user?->isAdmin();
-                        @endphp
-                        <div class="admin-row" data-moderation-scope data-moderation-status="{{ $comment->moderation_status }}">
-                            <div>
+            <div class="admin-content-list">
+                @forelse ($comments as $comment)
+                    @php
+                        $commentUserSlug = $comment->user?->slug ?? \Illuminate\Support\Str::slug($comment->user?->name ?? '');
+                        $canModerateComment = $isAdminUser || ! $comment->user?->isAdmin();
+                        $commentUrl = $comment->post?->type === 'question'
+                            ? route('questions.show', $comment->post_slug).'#comment-'.$comment->id
+                            : route('project', $comment->post_slug).'#comment-'.$comment->id;
+                    @endphp
+                    <article class="admin-content-item admin-content-item--interaction" data-feed-card data-moderation-scope data-moderation-status="{{ $comment->moderation_status }}">
+                        <div class="admin-content-item__body">
+                            <header>
                                 <div>
-                                    @if (!empty($commentUserSlug))
-                                        <a href="{{ route('profile.show', $commentUserSlug) }}">{{ $comment->user?->name ?? __('ui.project.anonymous') }}</a>
-                                    @else
-                                        {{ $comment->user?->name ?? __('ui.project.anonymous') }}
-                                    @endif
-                                </div>
-                                <div class="muted">{{ $comment->post_slug }}</div>
-                                <div class="admin-moderation__meta">
-                                    @if ($comment->moderation_status !== 'approved')
-                                        <span class="chip chip--moderation chip--{{ $comment->moderation_status }}">{{ __('ui.moderation.status_'.$comment->moderation_status) }}</span>
-                                    @endif
-                                </div>
-                            </div>
-                            <div class="muted">{{ $comment->body }}</div>
-                            <div>
-                                @if ($canModerateComment)
-                                    <div class="admin-actions">
-                                        @if ($comment->moderation_status !== 'pending')
-                                            <button type="button" class="icon-btn icon-btn--sm" data-admin-queue data-admin-type="comment" data-admin-id="{{ $comment->id }}" data-admin-url="{{ route('moderation.comments.queue', $comment) }}" aria-label="{{ __('ui.moderation.queue') }}"><i data-lucide="alert-circle" class="icon"></i></button>
-                                        @endif
-                                        @if ($comment->moderation_status !== 'hidden')
-                                            <button type="button" class="icon-btn icon-btn--sm icon-btn--danger" data-admin-hide data-admin-type="comment" data-admin-id="{{ $comment->id }}" data-admin-url="{{ route('moderation.comments.hide', $comment) }}" aria-label="{{ __('ui.moderation.hide') }}"><i data-lucide="eye-off" class="icon"></i></button>
-                                        @endif
+                                    <a class="admin-content-item__title" href="{{ $commentUrl }}" target="_blank" rel="noopener">{{ $comment->post?->title ?? $comment->post_slug }}</a>
+                                    <div class="admin-content-item__meta admin-moderation__meta">
+                                        <span>{{ __('ui.admin.comments') }}</span>
                                         @if ($comment->moderation_status !== 'approved')
-                                            <button type="button" class="icon-btn icon-btn--sm" data-admin-restore data-admin-type="comment" data-admin-id="{{ $comment->id }}" data-admin-url="{{ route('moderation.comments.restore', $comment) }}" aria-label="{{ __('ui.moderation.restore') }}"><i data-lucide="eye" class="icon"></i></button>
+                                            <span class="chip chip--moderation chip--{{ $comment->moderation_status }}">{{ __('ui.moderation.status_'.$comment->moderation_status) }}</span>
                                         @endif
-                                @can('admin')
-                                    <form method="POST" action="{{ route('admin.comments.delete', $comment) }}" data-moderation-reason-form data-moderation-action="delete">
-                                        @csrf
-                                        @method('DELETE')
-                                        <input type="hidden" name="reason" value="">
-                                        <button class="ghost-btn ghost-btn--danger" type="submit">{{ __('ui.admin.delete') }}</button>
-                                    </form>
-                                @endcan
+                                        <time datetime="{{ $comment->created_at?->toAtomString() }}">{{ $comment->created_at?->diffForHumans() }}</time>
+                                    </div>
+                                </div>
+                                @if ($canModerateComment)
+                                    <div class="admin-content-item__actions">
+                                        <button type="button" class="ghost-btn ghost-btn--compact" data-admin-restore data-admin-url="{{ route('moderation.comments.restore', $comment) }}" data-allow-label="{{ __('ui.moderation.allow') }}" data-restore-label="{{ __('ui.moderation.restore') }}" @if ($comment->moderation_status === 'approved') hidden @endif>{{ $comment->moderation_status === 'pending' ? __('ui.moderation.allow') : __('ui.moderation.restore') }}</button>
+                                        <button type="button" class="ghost-btn ghost-btn--compact ghost-btn--danger" data-admin-hide data-admin-url="{{ route('moderation.comments.hide', $comment) }}" @if ($comment->moderation_status === 'hidden') hidden @endif><i data-lucide="eye-off" class="icon" aria-hidden="true"></i>{{ __('ui.moderation.hide') }}</button>
+                                        <details class="admin-action-menu">
+                                            <summary aria-label="{{ __('ui.admin.more_actions') }}" title="{{ __('ui.admin.more_actions') }}"><i data-lucide="more-horizontal" class="icon" aria-hidden="true"></i></summary>
+                                            <div class="admin-action-menu__panel">
+                                                <button type="button" class="admin-action-menu__danger" data-admin-delete data-admin-url="{{ route('admin.comments.delete', $comment) }}">{{ __('ui.admin.delete') }}</button>
+                                            </div>
+                                        </details>
                                     </div>
                                 @endif
-                            </div>
+                            </header>
+                            <p class="admin-content-item__preview">{{ $comment->body }}</p>
+                            @include('admin.partials.report-context', ['context' => $comment->moderation_report_context ?? null])
+                            <footer>
+                                @if ($commentUserSlug !== '')
+                                    <a class="admin-content-author" href="{{ route('profile.show', $commentUserSlug) }}">
+                                        <img src="{{ $comment->user?->avatar ?: asset('images/avatar-default.svg') }}" alt="">
+                                        <span>{{ $comment->user?->name ?? __('ui.project.anonymous') }}</span>
+                                    </a>
+                                @else
+                                    <span>{{ __('ui.project.anonymous') }}</span>
+                                @endif
+                            </footer>
                         </div>
-                    @endforeach
-                </div>
+                    </article>
+                @empty
+                    <p class="admin-empty">{{ __('ui.admin.no_records') }}</p>
+                @endforelse
             </div>
             @if (method_exists($comments, 'links'))
                 <div class="admin-pagination">
@@ -867,65 +915,62 @@
     <div>
         <section class="section admin-section">
             <div class="section-title">{{ __('ui.admin.reviews') }}</div>
-            <div class="card admin-card">
-                <div class="admin-table">
-                    <div class="admin-row admin-row--head">
-                        <div>{{ __('ui.admin.review_author') }}</div>
-                        <div>{{ __('ui.admin.review_body') }}</div>
-                        <div>{{ __('ui.admin.actions') }}</div>
-                    </div>
-                    @foreach ($reviews as $review)
-                        @php
-                            $reviewUserSlug = $review->user?->slug ?? \Illuminate\Support\Str::slug($review->user?->name ?? '');
-                            $canModerateReview = $isAdminUser || ! $review->user?->isAdmin();
-                        @endphp
-                        <div class="admin-row" data-moderation-scope data-moderation-status="{{ $review->moderation_status }}">
-                            <div>
+            <div class="admin-content-list">
+                @forelse ($reviews as $review)
+                    @php
+                        $reviewUserSlug = $review->user?->slug ?? \Illuminate\Support\Str::slug($review->user?->name ?? '');
+                        $canModerateReview = $isAdminUser || ! $review->user?->isAdmin();
+                        $reviewUrl = $review->post?->type === 'question'
+                            ? route('questions.show', $review->post_slug).'#review-'.$review->id
+                            : route('project', $review->post_slug).'#review-'.$review->id;
+                    @endphp
+                    <article class="admin-content-item admin-content-item--interaction" data-feed-card data-moderation-scope data-moderation-status="{{ $review->moderation_status }}">
+                        <div class="admin-content-item__body">
+                            <header>
                                 <div>
-                                    @if (!empty($reviewUserSlug))
-                                        <a href="{{ route('profile.show', $reviewUserSlug) }}">{{ $review->user?->name ?? __('ui.project.anonymous') }}</a>
-                                    @else
-                                        {{ $review->user?->name ?? __('ui.project.anonymous') }}
-                                    @endif
-                                </div>
-                                <div class="muted">{{ $review->post_slug }}</div>
-                                <div class="admin-moderation__meta">
-                                    @if ($review->moderation_status !== 'approved')
-                                        <span class="chip chip--moderation chip--{{ $review->moderation_status }}">{{ __('ui.moderation.status_'.$review->moderation_status) }}</span>
-                                    @endif
-                                </div>
-                            </div>
-                            <div class="muted">
-                                <div>{{ $review->improve }}</div>
-                                <div>{{ $review->why }}</div>
-                                <div>{{ $review->how }}</div>
-                            </div>
-                            <div>
-                                @if ($canModerateReview)
-                                    <div class="admin-actions">
-                                        @if ($review->moderation_status !== 'pending')
-                                            <button type="button" class="icon-btn icon-btn--sm" data-admin-queue data-admin-type="review" data-admin-id="{{ $review->id }}" data-admin-url="{{ route('moderation.reviews.queue', $review) }}" aria-label="{{ __('ui.moderation.queue') }}"><i data-lucide="alert-circle" class="icon"></i></button>
-                                        @endif
-                                        @if ($review->moderation_status !== 'hidden')
-                                            <button type="button" class="icon-btn icon-btn--sm icon-btn--danger" data-admin-hide data-admin-type="review" data-admin-id="{{ $review->id }}" data-admin-url="{{ route('moderation.reviews.hide', $review) }}" aria-label="{{ __('ui.moderation.hide') }}"><i data-lucide="eye-off" class="icon"></i></button>
-                                        @endif
+                                    <a class="admin-content-item__title" href="{{ $reviewUrl }}" target="_blank" rel="noopener">{{ $review->post?->title ?? $review->post_slug }}</a>
+                                    <div class="admin-content-item__meta admin-moderation__meta">
+                                        <span>{{ __('ui.admin.reviews') }}</span>
                                         @if ($review->moderation_status !== 'approved')
-                                            <button type="button" class="icon-btn icon-btn--sm" data-admin-restore data-admin-type="review" data-admin-id="{{ $review->id }}" data-admin-url="{{ route('moderation.reviews.restore', $review) }}" aria-label="{{ __('ui.moderation.restore') }}"><i data-lucide="eye" class="icon"></i></button>
+                                            <span class="chip chip--moderation chip--{{ $review->moderation_status }}">{{ __('ui.moderation.status_'.$review->moderation_status) }}</span>
                                         @endif
-                                @can('admin')
-                                    <form method="POST" action="{{ route('admin.reviews.delete', $review) }}" data-moderation-reason-form data-moderation-action="delete">
-                                        @csrf
-                                        @method('DELETE')
-                                        <input type="hidden" name="reason" value="">
-                                        <button class="ghost-btn ghost-btn--danger" type="submit">{{ __('ui.admin.delete') }}</button>
-                                    </form>
-                                @endcan
+                                        <time datetime="{{ $review->created_at?->toAtomString() }}">{{ $review->created_at?->diffForHumans() }}</time>
+                                    </div>
+                                </div>
+                                @if ($canModerateReview)
+                                    <div class="admin-content-item__actions">
+                                        <button type="button" class="ghost-btn ghost-btn--compact" data-admin-restore data-admin-url="{{ route('moderation.reviews.restore', $review) }}" data-allow-label="{{ __('ui.moderation.allow') }}" data-restore-label="{{ __('ui.moderation.restore') }}" @if ($review->moderation_status === 'approved') hidden @endif>{{ $review->moderation_status === 'pending' ? __('ui.moderation.allow') : __('ui.moderation.restore') }}</button>
+                                        <button type="button" class="ghost-btn ghost-btn--compact ghost-btn--danger" data-admin-hide data-admin-url="{{ route('moderation.reviews.hide', $review) }}" @if ($review->moderation_status === 'hidden') hidden @endif><i data-lucide="eye-off" class="icon" aria-hidden="true"></i>{{ __('ui.moderation.hide') }}</button>
+                                        <details class="admin-action-menu">
+                                            <summary aria-label="{{ __('ui.admin.more_actions') }}" title="{{ __('ui.admin.more_actions') }}"><i data-lucide="more-horizontal" class="icon" aria-hidden="true"></i></summary>
+                                            <div class="admin-action-menu__panel">
+                                                <button type="button" class="admin-action-menu__danger" data-admin-delete data-admin-url="{{ route('admin.reviews.delete', $review) }}">{{ __('ui.admin.delete') }}</button>
+                                            </div>
+                                        </details>
                                     </div>
                                 @endif
+                            </header>
+                            <div class="admin-review-preview">
+                                <p>{{ $review->improve }}</p>
+                                <p>{{ $review->why }}</p>
+                                <p>{{ $review->how }}</p>
                             </div>
+                            @include('admin.partials.report-context', ['context' => $review->moderation_report_context ?? null])
+                            <footer>
+                                @if ($reviewUserSlug !== '')
+                                    <a class="admin-content-author" href="{{ route('profile.show', $reviewUserSlug) }}">
+                                        <img src="{{ $review->user?->avatar ?: asset('images/avatar-default.svg') }}" alt="">
+                                        <span>{{ $review->user?->name ?? __('ui.project.anonymous') }}</span>
+                                    </a>
+                                @else
+                                    <span>{{ __('ui.project.anonymous') }}</span>
+                                @endif
+                            </footer>
                         </div>
-                    @endforeach
-                </div>
+                    </article>
+                @empty
+                    <p class="admin-empty">{{ __('ui.admin.no_records') }}</p>
+                @endforelse
             </div>
             @if (method_exists($reviews, 'links'))
                 <div class="admin-pagination">

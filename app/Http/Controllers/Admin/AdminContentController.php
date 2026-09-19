@@ -30,7 +30,7 @@ class AdminContentController extends Controller
         ]);
         $actor = $request->user();
         abort_unless($actor, 403);
-        if ($data['action'] === 'delete') {
+        if ($data['action'] !== 'queue') {
             abort_unless($actor->isAdmin(), 403);
         }
 
@@ -61,6 +61,11 @@ class AdminContentController extends Controller
 
             $status = ['queue' => 'pending', 'hide' => 'hidden', 'restore' => 'approved'][$data['action']];
             $moderation->setState($post, $actor, $status);
+            if ($data['action'] === 'queue') {
+                $reports->queueForReview($post, $actor, (string) $reason, $url);
+
+                continue;
+            }
             $reports->resolveReportsForModel(
                 $post,
                 $data['action'] === 'restore' ? 'rejected' : 'confirmed',
@@ -68,7 +73,7 @@ class AdminContentController extends Controller
             );
         }
 
-        return redirect()->route('admin', ['tab' => 'content'])
+        return redirect()->route('admin.tools', ['tab' => 'content'])
             ->with('toast', __('ui.admin.bulk_updated', ['count' => $posts->count()]));
     }
 
@@ -104,7 +109,7 @@ class AdminContentController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        return redirect()->route('admin');
+        return redirect()->route('admin.tools', ['tab' => 'comments']);
     }
 
     public function deleteReview(AdminDeleteRequest $request, PostReview $review, ModerationService $moderation, AutoModerationService $reports): JsonResponse|RedirectResponse
@@ -139,7 +144,7 @@ class AdminContentController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        return redirect()->route('admin');
+        return redirect()->route('admin.tools', ['tab' => 'reviews']);
     }
 
     public function deletePost(AdminDeleteRequest $request, Post $post, ModerationService $moderation, UploadAssetService $assets, AutoModerationService $reports): JsonResponse|RedirectResponse
@@ -178,6 +183,6 @@ class AdminContentController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        return redirect()->route('admin');
+        return redirect()->route('admin.tools', ['tab' => 'content']);
     }
 }

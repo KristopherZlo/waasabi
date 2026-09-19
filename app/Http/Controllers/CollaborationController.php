@@ -128,7 +128,7 @@ class CollaborationController extends Controller
     {
         abort_unless(
             $collaborationComment->user_id === $request->user()->id
-            || $request->user()->hasRole('moderator'),
+            || $request->user()->isAdmin(),
             403,
         );
         $collaborationComment->delete();

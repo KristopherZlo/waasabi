@@ -523,7 +523,7 @@ class CollaborationTest extends TestCase
         $this->assertDatabaseMissing('collaboration_comments', ['id' => $comment->id]);
     }
 
-    public function test_moderator_can_remove_a_collaboration_comment(): void
+    public function test_moderator_cannot_remove_a_collaboration_comment(): void
     {
         $owner = $this->eligibleUser();
         $author = $this->eligibleUser();
@@ -538,8 +538,8 @@ class CollaborationTest extends TestCase
 
         $this->actingAs($moderator)
             ->delete(route('collaboration.comments.destroy', $comment))
-            ->assertRedirect();
-        $this->assertDatabaseMissing('collaboration_comments', ['id' => $comment->id]);
+            ->assertForbidden();
+        $this->assertDatabaseHas('collaboration_comments', ['id' => $comment->id]);
     }
 
     public function test_people_can_report_collaborations_and_their_comments(): void
@@ -581,9 +581,9 @@ class CollaborationTest extends TestCase
             ->assertSee($comment->body);
 
         $this->actingAs($admin)->post(route('admin.collaboration-comments.reports.dismiss', $comment))
-            ->assertRedirect(route('admin', ['tab' => 'moderation']));
+            ->assertRedirect(route('admin.tools', ['tab' => 'moderation']));
         $this->actingAs($admin)->post(route('admin.collaborations.reports.dismiss', $opening))
-            ->assertRedirect(route('admin', ['tab' => 'moderation']));
+            ->assertRedirect(route('admin.tools', ['tab' => 'moderation']));
         $this->assertDatabaseHas('content_reports', [
             'content_type' => 'collaboration',
             'content_id' => (string) $opening->id,

@@ -47,6 +47,9 @@ class ProfileSettingsController extends Controller
         $previousAvatar = (string) ($user->avatar ?? '');
 
         $user->name = $data['name'];
+        if (array_key_exists('handle', $data) && $data['handle'] !== null) {
+            $user->slug = $data['handle'];
+        }
         if ($request->hasFile('avatar_file')) {
             try {
                 $result = $uploadService->process($request->file('avatar_file'), [
@@ -65,10 +68,13 @@ class ProfileSettingsController extends Controller
             }
         }
 
-        foreach (['bio', 'skills', 'open_to_help', 'portfolio_url', 'featured_post_id', 'profile_readme', 'github_readme_repository', 'wall_mode'] as $field) {
+        foreach (['bio', 'headline', 'skills', 'open_to_help', 'portfolio_url', 'featured_post_id', 'profile_readme', 'profile_highlights', 'github_readme_repository', 'wall_mode'] as $field) {
             if (array_key_exists($field, $data)) {
                 $user->{$field} = $data[$field];
             }
+        }
+        if (array_key_exists('profile_links', $data)) {
+            $user->profile_links = collect($data['profile_links'] ?? [])->map(fn ($value) => trim((string) $value))->filter()->all();
         }
         $booleanFields = [
             'privacy_allow_mentions',

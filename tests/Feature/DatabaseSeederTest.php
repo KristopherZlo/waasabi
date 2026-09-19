@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\CollaborationApplication;
 use App\Models\CollaborationRequest;
+use App\Models\ContentReport;
+use App\Models\ContentReportScore;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\PostReview;
@@ -42,6 +44,8 @@ class DatabaseSeederTest extends TestCase
         $this->assertGreaterThanOrEqual(2, CollaborationApplication::query()->where('status', 'accepted')->count());
         $this->assertGreaterThanOrEqual(5, ProjectMember::query()->where('status', 'active')->count());
         $this->assertGreaterThanOrEqual(25, User::query()->count());
+        $this->assertTrue(User::query()->where('role', 'support')->exists());
+        $this->assertTrue(User::query()->where('role', 'moderator')->exists());
         $this->assertGreaterThanOrEqual(80, Post::query()->where('visibility', 'public')->count());
         $this->assertGreaterThanOrEqual(300, PostComment::query()->count());
         $this->assertGreaterThanOrEqual(20, PostReview::query()->count());
@@ -56,6 +60,10 @@ class DatabaseSeederTest extends TestCase
         $this->assertTrue(CollaborationRequest::query()->whereHas('comments')->exists());
         $this->assertTrue(CollaborationApplication::query()->whereHas('messages')->exists());
         $this->assertGreaterThan(0, DB::table('project_follows')->count());
+        $this->assertGreaterThanOrEqual(12, ContentReport::query()->count());
+        $this->assertGreaterThanOrEqual(6, ContentReport::query()->distinct()->count('content_type'));
+        $this->assertTrue(ContentReport::query()->where('resolved_status', 'rejected')->exists());
+        $this->assertTrue(ContentReportScore::query()->where('reports_count', '>', 0)->exists());
 
         $this->get('/')->assertOk();
         $this->get('/profile/dasha-n')->assertOk();

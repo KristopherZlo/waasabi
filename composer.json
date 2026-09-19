@@ -2,8 +2,8 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "waasabi/community",
     "type": "project",
-    "description": "A forum for creative projects and collaboration.",
-    "keywords": ["creative-projects", "collaboration", "forum"],
+    "description": "A community for IT, design, video editing, and collaboration.",
+    "keywords": ["software", "design", "video-editing", "collaboration", "forum"],
     "license": "proprietary",
     "require": {
         "php": "^8.2",

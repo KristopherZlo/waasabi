@@ -22,6 +22,7 @@ class SecurityHeadersTest extends TestCase
 
         $this->assertStringContainsString("img-src 'self' data: blob: https:", $csp);
         $this->assertStringContainsString("font-src 'self' data:", $csp);
+        $this->assertStringContainsString("frame-src 'self' https://challenges.cloudflare.com https://www.youtube-nocookie.com https://player.vimeo.com", $csp);
         $this->assertStringContainsString('http://localhost:5173', $csp);
         $this->assertStringContainsString('http://127.0.0.1:5173', $csp);
     }

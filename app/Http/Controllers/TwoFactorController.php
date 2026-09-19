@@ -27,7 +27,10 @@ class TwoFactorController extends Controller
     {
         $data = $request->validate(['code' => ['required', 'string', 'max:32']]);
         $user = $request->user();
-        abort_unless($user->two_factor_secret && ! $user->two_factor_confirmed_at, 409);
+        if (! $user->two_factor_secret || $user->two_factor_confirmed_at) {
+            return redirect(route('profile.settings').'#security')
+                ->withErrors(['two_factor' => __('studio.two_factor_state_changed')]);
+        }
         if (! $twoFactor->verify($user, $data['code'])) {
             return back()->withErrors(['code' => __('studio.two_factor_invalid')]);
         }
@@ -44,7 +47,10 @@ class TwoFactorController extends Controller
     {
         $request->validate(['current_password' => ['required', 'current_password']]);
         $user = $request->user();
-        abort_unless($user->two_factor_confirmed_at, 409);
+        if (! $user->two_factor_confirmed_at) {
+            return redirect(route('profile.settings').'#security')
+                ->withErrors(['two_factor' => __('studio.two_factor_state_changed')]);
+        }
         $codes = $twoFactor->recoveryCodes();
         $user->forceFill(['two_factor_recovery_codes' => $codes])->save();
         logAuditEvent($request, 'auth.two_factor_recovery_codes', $user);

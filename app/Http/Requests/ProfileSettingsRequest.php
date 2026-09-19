@@ -17,6 +17,15 @@ class ProfileSettingsRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'handle' => [
+                'nullable',
+                'string',
+                'min:3',
+                'max:30',
+                'regex:/\A[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?\z/',
+                Rule::notIn(['settings']),
+                Rule::unique('users', 'slug')->ignore($this->user()?->id),
+            ],
             'avatar_file' => [
                 'nullable',
                 'file',
@@ -25,11 +34,15 @@ class ProfileSettingsRequest extends FormRequest
                 'dimensions:min_width=512,min_height=512,max_width=1024,max_height=1024',
             ],
             'bio' => ['nullable', 'string', 'max:1000'],
+            'headline' => ['nullable', 'string', 'max:160'],
             'skills' => ['nullable', 'string', 'max:400'],
             'open_to_help' => ['nullable', 'boolean'],
             'portfolio_url' => ['nullable', 'url:http,https', 'max:500'],
             'featured_post_id' => ['nullable', 'integer', Rule::exists('posts', 'id')->where('user_id', $this->user()->id)->where('type', 'post')],
             'profile_readme' => ['nullable', 'string', 'max:5000'],
+            'profile_highlights' => ['nullable', 'string', 'max:1000'],
+            'profile_links' => ['nullable', 'array:contact,github,behance,linkedin,showreel'],
+            'profile_links.*' => ['nullable', 'url:http,https', 'max:500'],
             'github_readme_repository' => ['nullable', 'string', 'max:255', function (string $attribute, mixed $value, \Closure $fail): void {
                 if (! app(GitHubReadmeService::class)->repositoryPath((string) $value)) {
                     $fail('Use a public GitHub repository such as owner/repository.');
@@ -48,5 +61,12 @@ class ProfileSettingsRequest extends FormRequest
             'security_login_alerts' => ['nullable', 'boolean'],
             'return_to_profile' => ['nullable', 'boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('handle')) {
+            $this->merge(['handle' => strtolower(ltrim(trim((string) $this->input('handle')), '@'))]);
+        }
     }
 }

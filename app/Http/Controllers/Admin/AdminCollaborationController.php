@@ -72,7 +72,7 @@ class AdminCollaborationController extends Controller
             ]);
         }
 
-        return redirect()->route('admin', ['tab' => 'collaborations'])
+        return redirect()->route('admin.tools', ['tab' => 'collaborations'])
             ->with('toast', __('ui.admin.bulk_updated', ['count' => $collaborations->count()]));
     }
 
@@ -148,7 +148,7 @@ class AdminCollaborationController extends Controller
         );
         $reports->resolveReportsForModel($collaboration, 'rejected', 'dismiss_report');
 
-        return redirect()->route('admin', ['tab' => 'moderation'])->with('toast', __('ui.admin.report_dismissed'));
+        return redirect()->route('admin.tools', ['tab' => 'moderation'])->with('toast', __('ui.admin.report_dismissed'));
     }
 
     public function dismissCommentReport(
@@ -173,6 +173,6 @@ class AdminCollaborationController extends Controller
         );
         $reports->resolveReportsForModel($comment, 'rejected', 'dismiss_report');
 
-        return redirect()->route('admin', ['tab' => 'moderation'])->with('toast', __('ui.admin.report_dismissed'));
+        return redirect()->route('admin.tools', ['tab' => 'moderation'])->with('toast', __('ui.admin.report_dismissed'));
     }
 }

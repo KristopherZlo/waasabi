@@ -67,4 +67,17 @@ class TwoFactorTest extends TestCase
         $this->assertTrue($service->verify($user, $codes[0]));
         $this->assertFalse($service->verify($user->fresh(), $codes[0]));
     }
+
+    public function test_stale_two_factor_settings_return_to_security_instead_of_conflict(): void
+    {
+        $user = User::factory()->create(['password' => Hash::make('Secret123!')]);
+
+        $this->actingAs($user)->post(route('two-factor.confirm'), ['code' => '123456'])
+            ->assertRedirect(route('profile.settings').'#security')
+            ->assertSessionHasErrors('two_factor');
+
+        $this->post(route('two-factor.recovery-codes'), ['current_password' => 'Secret123!'])
+            ->assertRedirect(route('profile.settings').'#security')
+            ->assertSessionHasErrors('two_factor');
+    }
 }

@@ -110,7 +110,7 @@ class DatabaseSeeder extends Seeder
             'katya' => [
                 'name' => 'Katya F',
                 'email' => 'katya@thehub.test',
-                'role' => 'user',
+                'role' => 'moderator',
                 'avatar' => '/images/avatar-default.svg',
                 'bio' => 'Team lead who keeps projects scoped and documented.',
             ],
@@ -236,7 +236,7 @@ class DatabaseSeeder extends Seeder
             'elina' => [
                 'name' => 'Elina Koski',
                 'email' => 'elina@thehub.test',
-                'role' => 'user',
+                'role' => 'support',
                 'avatar' => '/images/avatar-default.svg',
                 'bio' => 'Community librarian working on local archives and practical guides.',
             ],
@@ -593,6 +593,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             CollaborationSeeder::class,
             CommunityDetailsSeeder::class,
+            ModerationSeeder::class,
         ]);
     }
 }

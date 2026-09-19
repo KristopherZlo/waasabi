@@ -7,10 +7,29 @@ use App\Http\Requests\AdminBanRequest;
 use App\Http\Requests\AdminRoleRequest;
 use App\Models\User;
 use App\Services\ModerationService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
 class AdminUserController extends Controller
 {
+    public function toggleVerification(Request $request, User $user): JsonResponse|RedirectResponse
+    {
+        $user->update(['is_profile_verified' => ! $user->is_profile_verified]);
+
+        logAuditEvent($request, 'admin.user.profile_verification', $request->user(), [
+            'verified' => (bool) $user->is_profile_verified,
+        ], 'user', (string) $user->id);
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'verified' => (bool) $user->is_profile_verified]);
+        }
+
+        return redirect()->back()->with('toast', $user->is_profile_verified
+            ? __('ui.admin.profile_verified')
+            : __('ui.admin.profile_unverified'));
+    }
+
     public function updateRole(AdminRoleRequest $request, User $user): RedirectResponse
     {
         $data = $request->validated();
@@ -31,7 +50,7 @@ class AdminUserController extends Controller
             'to' => $data['role'],
         ], 'user', (string) $user->id);
 
-        return redirect()->route('admin', ['tab' => 'users', 'user' => $user->id]);
+        return redirect()->route('admin.tools', ['tab' => 'users', 'user' => $user->id]);
     }
 
     public function toggleBan(AdminBanRequest $request, User $user, ModerationService $moderation): RedirectResponse

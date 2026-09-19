@@ -1,6 +1,6 @@
 # Waasabi
 
-Waasabi is a community for creative work, long-term projects, questions, and small collaborations.
+Waasabi is a community for software, IT, design, video production, and practical collaboration.
 
 People can publish work, document a project, ask for feedback, and find collaborators. Each collaboration response opens a private conversation between the project owner and the candidate.
 

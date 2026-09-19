@@ -5,6 +5,7 @@ type ModerationReasonConfig = {
     title?: string;
     placeholder?: string;
     submitLabel?: string;
+    reasonRequired?: boolean;
 };
 
 let modalBound = false;
@@ -18,6 +19,7 @@ const getElements = () => {
     }
     const form = modal.querySelector<HTMLFormElement>('[data-moderation-form]');
     const textarea = modal.querySelector<HTMLTextAreaElement>('[data-moderation-reason]');
+    const reasonField = textarea?.closest<HTMLElement>('label');
     const title = modal.querySelector<HTMLElement>('[data-moderation-title]');
     const submit = modal.querySelector<HTMLButtonElement>('[data-moderation-submit]');
     const cancel = modal.querySelector<HTMLButtonElement>('[data-moderation-cancel]');
@@ -26,7 +28,7 @@ const getElements = () => {
     if (!form || !textarea) {
         return null;
     }
-    return { modal, form, textarea, title, submit, cancel, close, error };
+    return { modal, form, textarea, reasonField, title, submit, cancel, close, error };
 };
 
 const resolveAndClose = (value: string | null) => {
@@ -93,7 +95,7 @@ const ensureBound = () => {
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         const reason = textarea.value.trim();
-        if (!reason) {
+        if (textarea.required && !reason) {
             if (error) {
                 error.hidden = false;
             }
@@ -116,7 +118,8 @@ export const requestModerationReason = (config: ModerationReasonConfig = {}) => 
         return Promise.resolve<string | null>(null);
     }
     ensureBound();
-    const { modal, textarea, title, submit, error } = elements;
+    const { modal, textarea, reasonField, title, submit, error } = elements;
+    const reasonRequired = config.reasonRequired !== false;
     if (error) {
         error.hidden = true;
     }
@@ -128,6 +131,10 @@ export const requestModerationReason = (config: ModerationReasonConfig = {}) => 
         const fallback = textarea.dataset.defaultPlaceholder ?? textarea.placeholder ?? '';
         textarea.value = '';
         textarea.placeholder = config.placeholder ?? fallback;
+        textarea.required = reasonRequired;
+    }
+    if (reasonField) {
+        reasonField.hidden = !reasonRequired;
     }
     if (submit) {
         const fallback = submit.dataset.defaultLabel ?? submit.textContent ?? '';
@@ -137,13 +144,16 @@ export const requestModerationReason = (config: ModerationReasonConfig = {}) => 
     modal.hidden = false;
     document.body.classList.add('is-locked');
     requestAnimationFrame(() => {
-        textarea.focus();
+        (reasonRequired ? textarea : submit)?.focus();
     });
 
     return new Promise<string | null>((resolve) => {
         pendingResolve = resolve;
     });
 };
+
+export const requestModerationConfirmation = async (config: Omit<ModerationReasonConfig, 'reasonRequired'> = {}) =>
+    (await requestModerationReason({...config, reasonRequired: false})) !== null;
 
 export const resolveModerationReasonTitle = (action: string) => {
     switch (action) {
@@ -159,5 +169,22 @@ export const resolveModerationReasonTitle = (action: string) => {
             return t('moderation_reason_delete', 'Provide a deletion reason');
         default:
             return t('moderation_reason_title', 'Provide a reason');
+    }
+};
+
+export const resolveModerationConfirmationTitle = (action: string) => {
+    switch (action) {
+        case 'restore':
+            return t('moderation_confirm_restore', 'Restore this content?');
+        case 'dismiss':
+            return t('moderation_confirm_dismiss', 'Allow this content and dismiss its reports?');
+        case 'nsfw':
+            return t('moderation_confirm_nsfw', 'Mark this content as sensitive?');
+        case 'nsfw_remove':
+            return t('moderation_confirm_nsfw_remove', 'Remove the sensitive-content label?');
+        case 'flag':
+            return t('moderation_confirm_flag', 'Send this content to moderation?');
+        default:
+            return t('confirm_action', 'Are you sure?');
     }
 };

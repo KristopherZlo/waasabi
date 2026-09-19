@@ -254,9 +254,9 @@
     </div>
 
     <div class="report-modal moderation-modal" data-moderation-modal hidden>
-        <div class="report-card moderation-card" data-moderation-panel role="dialog" aria-modal="true" aria-label="{{ __('ui.moderation.reason_title') }}">
+        <div class="report-card moderation-card" data-moderation-panel role="dialog" aria-modal="true" aria-labelledby="moderation-dialog-title">
             <div class="report-header">
-                <div class="report-title" data-moderation-title>{{ __('ui.moderation.reason_title') }}</div>
+                <div class="report-title" id="moderation-dialog-title" data-moderation-title>{{ __('ui.moderation.reason_title') }}</div>
                 <button class="icon-btn" type="button" aria-label="{{ __('ui.settings.close') }}" data-moderation-close>
                     <i data-lucide="x" class="icon"></i>
                 </button>
@@ -369,7 +369,7 @@
         </div>
     </footer>
 
-    <div class="toast" data-toast></div>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
 </body>
 </html>
 @endif

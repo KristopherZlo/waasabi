@@ -256,7 +256,7 @@
                             <p>{{ $comment->body }}</p>
                         </div>
                         @auth
-                            @if (Auth::id() === $comment->user_id || Auth::user()->hasRole('moderator'))
+                            @if (Auth::id() === $comment->user_id || Auth::user()->isAdmin())
                                 <form method="POST" action="{{ route('collaboration.comments.destroy', $comment) }}" data-confirm-submit data-confirm-message="{{ __('ui.collaboration.comment_delete_confirm') }}">
                                     @csrf
                                     @method('DELETE')

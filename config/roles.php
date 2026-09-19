@@ -21,7 +21,6 @@ return [
         ],
         'moderator' => [
             'moderate',
-            'ban',
         ],
         'admin' => [
             'admin',

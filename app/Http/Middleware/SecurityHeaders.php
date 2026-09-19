@@ -58,7 +58,7 @@ class SecurityHeaders
             (array) config('hub.security.csp_extra_connect_src', []),
         );
         $frameSrc = array_merge(
-            ["'self'", 'https://challenges.cloudflare.com'],
+            ["'self'", 'https://challenges.cloudflare.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
             (array) config('hub.security.csp_extra_frame_src', []),
         );
 
