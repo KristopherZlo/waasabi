@@ -277,9 +277,11 @@ body[data-page='not-found'] .static-page { width: 100%; padding: 0; }
 .work-card[data-category='craft'], .work-card[data-category='graffiti'], .work-header[data-category='craft'], .work-header[data-category='graffiti'] { --work-accent: var(--mint); }
 .work-card::before { position: absolute; top: 29px; left: -16px; width: 3px; height: 34px; border-radius: 2px; background: var(--work-accent); content: ''; }
 .work-card-head, .work-card-foot, .work-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.work-card-tools { display: flex; align-items: center; gap: 6px; }
+.work-card-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 .work-card-tools .icon-button { width: 32px; height: 32px; }
 .work-kind { color: var(--work-accent); font-size: 13px; }
+.work-statuses, .sensitive-label { display: inline-flex; align-items: center; gap: 5px; }
+.sensitive-label { border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); color: var(--danger); }
 .person-line { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .person-line > div { min-width: 0; display: grid; }
 .person-line a { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }

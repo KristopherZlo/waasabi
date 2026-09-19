@@ -1,6 +1,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Flag, Layers, Pencil, Plus, Send, Shield, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, EyeOff, Flag, Layers, Pencil, Plus, Send, Shield, Trash2 } from 'lucide-react';
 import { Avatar, Dialog, Empty, Errors, Form, InfinitePage, OpeningCard, PersonLine, Prose, SelectMenu, VerifiedName, WorkActions, date, jsonAction, openModeration, path, useShared } from '../components';
 import type { Comment, Opening, Pagination, Person, Work as WorkType } from '../types';
 
@@ -98,7 +98,7 @@ export default function Work({work, comments, updates, canEdit, isOwner, members
     return <><Head title={work.title}/><div className={`work-page${work.is_project ? ' project-page' : ''}`}>
         <Link className="back-link" href="/"><ArrowLeft size={16}/>{t.feed}</Link>
         <header className={`work-header${work.is_project ? ' project-header' : ''}`} data-category={work.category}>{work.is_project && <div className="project-mark">{work.gallery[0] ? <img src={path(work.gallery[0])} alt=""/> : <Layers size={42}/>}</div>}<div className="project-header-copy"><PersonLine person={work.author} detail={`${work.is_project ? t.project : t.work} · ${date(work.date)}`}/><h1>{work.title}</h1>{work.subtitle && <p className="lead">{work.subtitle}</p>}
-            <div className="work-toolbar"><span className="feedback-label">{t[work.feedback_mode === 'feedback' ? 'feedback' : work.feedback_mode === 'help' ? 'help_mode' : 'sharing']}</span>
+            <div className="work-toolbar"><div className="work-statuses"><span className="feedback-label">{t[work.feedback_mode === 'feedback' ? 'feedback' : work.feedback_mode === 'help' ? 'help_mode' : 'sharing']}</span>{work.nsfw && <span className="state-label sensitive-label"><EyeOff size={13}/>{t.sensitive_content}</span>}</div>
                 <div className="button-row">{canEdit && <Link className="button small" href={`/posts/${work.slug}/edit`}>{t.edit}</Link>}
                     {work.is_project && auth.user && <Form action={`/projects/${work.id}/follow`} method="put"><input type="hidden" name="following" value={work.following ? '0' : '1'}/><button className="button small">{work.following ? t.unfollow : t.follow}</button></Form>}
                     {!isOwner && auth.user && <button className="icon-button" onClick={() => setReport(true)} aria-label={t.report}><Flag size={17}/></button>}

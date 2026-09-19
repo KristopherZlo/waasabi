@@ -490,6 +490,7 @@ class CommunityPageController extends Controller
             'status' => $status,
             'content_status' => $model?->moderation_status ?? null,
             'hidden' => (bool) ($model?->is_hidden ?? false),
+            'nsfw' => $model instanceof Post && $model->nsfw,
             'reports_count' => (int) $row->reports_count,
             'reporters_count' => (int) $row->reporters_count,
             'weight_total' => round((float) $row->weight_total, 1),
@@ -502,6 +503,7 @@ class CommunityPageController extends Controller
             ])->values(),
             'hide_url' => $moderatable && $numericId ? "/admin/moderation/{$actionType}s/{$numericId}/hide" : null,
             'restore_url' => $moderatable && $numericId ? "/admin/moderation/{$actionType}s/{$numericId}/restore" : null,
+            'nsfw_url' => $model instanceof Post && $numericId ? "/admin/moderation/posts/{$numericId}/nsfw" : null,
             'dismiss_url' => $numericId && in_array($actionType, ['post', 'comment', 'review', 'profile', 'collaboration', 'collaboration_comment'], true)
                 ? "/admin/moderation/reports/{$actionType}/{$numericId}/dismiss"
                 : null,

@@ -89,6 +89,12 @@ class ModerationTest extends TestCase
         $this->assertSame('confirmed', $report->fresh()->resolved_status);
 
         $this->actingAs($admin)
+            ->get('/admin?filter=all')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('items.data.0.nsfw', true)
+                ->where('items.data.0.nsfw_url', '/admin/moderation/posts/'.$post->id.'/nsfw'));
+
+        $this->actingAs($admin)
             ->postJson(route('moderation.posts.nsfw', $post), ['nsfw' => false])
             ->assertOk()
             ->assertJsonPath('nsfw', false);

@@ -1,14 +1,14 @@
 import { Head, Link } from '@inertiajs/react';
-import { ChevronDown, EyeOff, Flag, RotateCcw, Settings } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Flag, RotateCcw, Settings } from 'lucide-react';
 import { date, Errors, Form, InfinitePage, PersonLine, useShared } from '../components';
 import type { Pagination, Person } from '../types';
 
 type Reason = {reason: string; count: number; details: string | null};
 type ModerationItem = {
     key: string; id: number | null; type: string; title: string; excerpt: string; url: string | null; author: Person | null;
-    status: string; content_status: string | null; hidden: boolean; reports_count: number; reporters_count: number;
+    status: string; content_status: string | null; hidden: boolean; nsfw: boolean; reports_count: number; reporters_count: number;
     weight_total: number; weight_threshold: number; last_report_at: string | null; reasons: Reason[];
-    hide_url: string | null; restore_url: string | null; dismiss_url: string | null;
+    hide_url: string | null; restore_url: string | null; nsfw_url: string | null; dismiss_url: string | null;
 };
 
 const formatWeight = (value: number) => new Intl.NumberFormat('en', {maximumFractionDigits: 1}).format(value);
@@ -40,8 +40,9 @@ export default function Moderation({items, all}: {items: Pagination<ModerationIt
                 const canConfirmHide = Boolean(auth.user?.admin && item.hide_url && item.hidden && awaitingVerdict);
                 const canHide = Boolean(auth.user?.admin && item.hide_url && !item.hidden);
                 const canAllow = Boolean(auth.user?.admin && item.dismiss_url && !item.hidden && awaitingVerdict);
+                const canToggleNsfw = Boolean(auth.user?.admin && item.nsfw_url);
                 const thresholdReached = item.weight_total >= item.weight_threshold;
-                const hasActions = (!auth.user?.admin && awaitingVerdict) || canRestore || canConfirmHide || canHide || canAllow || Boolean(auth.user?.admin && !item.hide_url && !item.dismiss_url);
+                const hasActions = (!auth.user?.admin && awaitingVerdict) || canRestore || canConfirmHide || canHide || canAllow || canToggleNsfw || Boolean(auth.user?.admin && !item.hide_url && !item.dismiss_url);
 
                 return <article className="moderation-item" key={item.key}>
                     <header className="moderation-item__head">
@@ -84,6 +85,10 @@ export default function Moderation({items, all}: {items: Pagination<ModerationIt
                                 <div className="button-row"><button className="button danger">{t.confirm_hide}</button></div>
                             </Form>
                         </details>}
+                        {canToggleNsfw && <Form json undoable confirmMessage={item.nsfw ? t.confirm_remove_nsfw_content : t.confirm_nsfw_content} confirmLabel={item.nsfw ? t.remove_nsfw : t.mark_nsfw} reloadData={['items', 'moderation']} action={item.nsfw_url!}>
+                            <input type="hidden" name="nsfw" value={item.nsfw ? '0' : '1'}/>
+                            <button className="button">{item.nsfw ? <Eye size={16}/> : <EyeOff size={16}/>} {item.nsfw ? t.remove_nsfw : t.mark_nsfw}</button>
+                        </Form>}
                         {auth.user?.admin && !item.hide_url && !item.dismiss_url && <a className="button" href="/admin/tools?tab=moderation">{t.admin_tools}</a>}
                     </footer>}
                 </article>;
