@@ -111,6 +111,41 @@ class AutoModerationService
         $this->recomputeScore($contentType, $canonicalId, $identifiers, $slug, $threshold, $siteScale);
     }
 
+    public function queueForReview(mixed $model, User $moderator, string $reason, string $contentUrl): void
+    {
+        $contentType = $this->modelContentType($model);
+        $contentId = $this->canonicalIdForModel($model);
+        $identifiers = $this->identifiersForModel($model);
+        if ($contentType === null || $contentId === '') {
+            return;
+        }
+
+        $queued = ContentReport::query()
+            ->where('content_type', $contentType)
+            ->whereIn('content_id', $identifiers)
+            ->whereIn('resolved_status', ['pending', 'auto_hidden'])
+            ->exists();
+        if ($queued) {
+            return;
+        }
+
+        ContentReport::create([
+            'user_id' => null,
+            'reporter_role' => $moderator->roleKey(),
+            'role_weight' => 0,
+            'reporter_weight' => 0,
+            'reporter_trust' => 0,
+            'weight' => 0,
+            'content_type' => $contentType,
+            'content_id' => $contentId,
+            'content_url' => $contentUrl,
+            'reason' => 'admin_flag',
+            'details' => $reason,
+            'resolved_status' => 'pending',
+            'meta' => ['source' => 'moderator_queue', 'moderator_id' => $moderator->id],
+        ]);
+    }
+
     public function withdrawReportsForUser(User $user): void
     {
         $posts = $user->posts()->get();
@@ -161,7 +196,8 @@ class AutoModerationService
             ->whereIn('content_id', $identifiers);
 
         $query->where(function ($sub): void {
-            $sub->whereNull('resolved_status')->orWhere('resolved_status', 'pending');
+            $sub->whereNull('resolved_status')
+                ->orWhereIn('resolved_status', ['pending', 'auto_hidden']);
         });
 
         $reports = $query->get(['id', 'user_id']);
@@ -385,9 +421,10 @@ class AutoModerationService
         $maxTrust = (float) config('moderation.reports.accuracy.max_trust', 4.0);
         $trustScore = $this->clamp($activityMultiplier * $accuracyMultiplier, $minTrust, $maxTrust);
 
-        $minWeight = (float) config('moderation.reports.min_weight', 1.0);
+        $minWeight = (float) config('moderation.reports.min_weight', 0.05);
         $maxWeight = (float) config('moderation.reports.max_weight', 12.0);
-        $reporterWeight = $this->clamp($roleWeight * $trustScore, $minWeight, $maxWeight);
+        $maturityMultiplier = $this->computeMaturityMultiplier($reporter);
+        $reporterWeight = $this->clamp($roleWeight * $trustScore * $maturityMultiplier, $minWeight, $maxWeight);
 
         $profile->activity_points = $activityPoints;
         $profile->trust_score = $trustScore;
@@ -397,6 +434,7 @@ class AutoModerationService
             'role_weight' => $roleWeight,
             'activity_multiplier' => $activityMultiplier,
             'accuracy_multiplier' => $accuracyMultiplier,
+            'maturity_multiplier' => $maturityMultiplier,
         ]);
         $profile->save();
 
@@ -456,7 +494,7 @@ class AutoModerationService
 
         $ageDays = 0;
         if ($reporter->created_at) {
-            $ageDays = max(0, now()->diffInDays($reporter->created_at));
+            $ageDays = max(0, $reporter->created_at->diffInDays(now()));
             $ageDays = min($ageDays, $ageDaysCap);
         }
         $points += $ageDays * $agePointsPerDay;
@@ -476,7 +514,8 @@ class AutoModerationService
         $penaltyMax = (float) ($accuracyConfig['penalty_max'] ?? 0.6);
         $minMultiplier = (float) ($accuracyConfig['min_multiplier'] ?? 0.5);
 
-        $confirmed = (int) ($profile->reports_confirmed ?? 0) + (int) ($profile->reports_auto_hidden ?? 0);
+        // Auto-hide is only a temporary safety action. Trust changes after a moderator verdict.
+        $confirmed = (int) ($profile->reports_confirmed ?? 0);
         $rejected = (int) ($profile->reports_rejected ?? 0);
         $confirmedRatio = $submitted > 0 ? $confirmed / $submitted : 0.0;
         $rejectedRatio = $submitted > 0 ? $rejected / $submitted : 0.0;
@@ -493,18 +532,58 @@ class AutoModerationService
     private function calculateSiteScale(): float
     {
         $config = (array) config('moderation.reports.site_scale', []);
-        $windowDays = max(1, (int) ($config['window_days'] ?? 7));
-        $baseReportsPerDay = max(1.0, (float) ($config['base_reports_per_day'] ?? 12.0));
+        $windowDays = max(1, (int) ($config['window_days'] ?? 30));
+        $minimumAccountAgeDays = max(1, (int) ($config['minimum_account_age_days'] ?? 7));
+        $baselineActiveUsers = max(1.0, (float) ($config['baseline_active_users'] ?? 50));
+        $baselineContent = max(1.0, (float) ($config['baseline_content'] ?? 250));
         $sensitivity = (float) ($config['sensitivity'] ?? 0.35);
         $minScale = (float) ($config['min_scale'] ?? 0.75);
-        $maxScale = (float) ($config['max_scale'] ?? 1.6);
+        $maxScale = (float) ($config['max_scale'] ?? 1.35);
+        $windowStart = now()->subDays($windowDays);
+        $oldEnough = now()->subDays($minimumAccountAgeDays);
 
-        $recentCount = (int) ContentReport::query()
-            ->where('created_at', '>=', now()->subDays($windowDays))
+        $activeUsers = User::query()
+            ->whereNotNull('email_verified_at')
+            ->where('is_banned', false)
+            ->where('created_at', '<=', $oldEnough)
+            ->where(function ($query) use ($windowStart): void {
+                $query->whereHas('posts', fn ($posts) => $posts
+                    ->where('created_at', '>=', $windowStart)
+                    ->where('visibility', 'public')
+                    ->where('is_hidden', false)
+                    ->where('moderation_status', 'approved'))
+                    ->orWhereHas('postComments', fn ($comments) => $comments
+                        ->where('created_at', '>=', $windowStart)
+                        ->where('is_hidden', false)
+                        ->where('moderation_status', 'approved'))
+                    ->orWhereHas('postReviews', fn ($reviews) => $reviews
+                        ->where('created_at', '>=', $windowStart)
+                        ->where('is_hidden', false)
+                        ->where('moderation_status', 'approved'));
+            })
             ->count();
-        $reportsPerDay = $recentCount / $windowDays;
-        $deltaRatio = ($reportsPerDay - $baseReportsPerDay) / $baseReportsPerDay;
-        $scale = 1.0 + ($deltaRatio * $sensitivity);
+
+        $contentCount = Post::query()
+            ->where('created_at', '>=', $windowStart)
+            ->where('visibility', 'public')
+            ->where('is_hidden', false)
+            ->where('moderation_status', 'approved')
+            ->count();
+        $contentCount += PostComment::query()
+            ->where('created_at', '>=', $windowStart)
+            ->where('is_hidden', false)
+            ->where('moderation_status', 'approved')
+            ->count();
+        $contentCount += PostReview::query()
+            ->where('created_at', '>=', $windowStart)
+            ->where('is_hidden', false)
+            ->where('moderation_status', 'approved')
+            ->count();
+
+        $userLoad = log(1 + $activeUsers) / log(1 + $baselineActiveUsers);
+        $contentLoad = log(1 + $contentCount) / log(1 + $baselineContent);
+        $load = ($userLoad + $contentLoad) / 2;
+        $scale = 1.0 + (($load - 1.0) * $sensitivity);
 
         return $this->clamp($scale, $minScale, $maxScale);
     }
@@ -621,9 +700,10 @@ class AutoModerationService
             $roleKey = $user->roleKey();
             $roleWeights = (array) config('moderation.reports.role_weights', []);
             $roleWeight = (float) ($roleWeights[$roleKey] ?? 1.0);
-            $minWeight = (float) config('moderation.reports.min_weight', 1.0);
+            $minWeight = (float) config('moderation.reports.min_weight', 0.05);
             $maxWeight = (float) config('moderation.reports.max_weight', 12.0);
-            $weight = $this->clamp($roleWeight * $trustScore, $minWeight, $maxWeight);
+            $maturityMultiplier = $this->computeMaturityMultiplier($user);
+            $weight = $this->clamp($roleWeight * $trustScore * $maturityMultiplier, $minWeight, $maxWeight);
 
             $profile->activity_points = $activityPoints;
             $profile->trust_score = $trustScore;
@@ -633,6 +713,7 @@ class AutoModerationService
                 'role_weight' => $roleWeight,
                 'activity_multiplier' => $activityMultiplier,
                 'accuracy_multiplier' => $accuracyMultiplier,
+                'maturity_multiplier' => $maturityMultiplier,
             ]);
             $profile->save();
         }
@@ -654,8 +735,29 @@ class AutoModerationService
         );
     }
 
+    private function computeMaturityMultiplier(User $user): float
+    {
+        if ($user->hasRole('support')) {
+            return 1.0;
+        }
+
+        $fullWeightAgeDays = max(1, (int) config('moderation.reports.activity.full_weight_age_days', 14));
+        $newAccountMultiplier = $this->clamp(
+            (float) config('moderation.reports.activity.new_account_multiplier', 0.05),
+            0.0,
+            1.0,
+        );
+        $accountAgeDays = $user->created_at ? max(0, $user->created_at->diffInDays(now())) : 0;
+
+        return $newAccountMultiplier
+            + ((1.0 - $newAccountMultiplier) * min(1.0, $accountAgeDays / $fullWeightAgeDays));
+    }
+
     private function modelContentType(mixed $model): ?string
     {
+        if ($model instanceof User) {
+            return 'profile';
+        }
         if ($model instanceof Post) {
             return $model->type === 'question' ? 'question' : 'post';
         }
@@ -691,6 +793,9 @@ class AutoModerationService
             $ids[] = (string) $model->id;
         }
         if ($model instanceof Post && ! empty($model->slug)) {
+            $ids[] = (string) $model->slug;
+        }
+        if ($model instanceof User && ! empty($model->slug)) {
             $ids[] = (string) $model->slug;
         }
 

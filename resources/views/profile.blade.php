@@ -31,7 +31,6 @@
         $viewerRoleKey = strtolower($viewer?->role ?? 'user');
         $viewerRoleKey = in_array($viewerRoleKey, $roleKeys, true) ? $viewerRoleKey : 'user';
         $canManageBadges = $viewer?->isAdmin() ?? false;
-        $canModerateUser = $viewer?->hasRole('moderator') ?? false;
         $canChangeAvatar = $is_owner && !$isBanned && Auth::check();
         $canChangeBanner = $canChangeAvatar;
     @endphp
@@ -67,17 +66,6 @@
                             <i data-lucide="x-circle" class="icon"></i>
                             <span>{{ __('ui.profile.action_revoke_badge') }}</span>
                         </button>
-                    @elseif ($canModerateUser)
-                        @if (!$is_owner && !empty($profile_user['id']))
-                            <form method="POST" action="{{ route('admin.users.ban', $profile_user['id']) }}" data-moderation-reason-form data-moderation-action="{{ $isBanned ? 'unban' : 'ban' }}">
-                                @csrf
-                                <input type="hidden" name="reason" value="">
-                                <button type="submit" class="action-menu__item action-menu__item--danger">
-                                    <i data-lucide="ban" class="icon"></i>
-                                    <span>{{ $isBanned ? __('ui.admin.unban') : __('ui.admin.ban') }}</span>
-                                </button>
-                            </form>
-                        @endif
                     @else
                         @if (!$is_owner)
                             <button type="button" class="action-menu__item action-menu__item--danger" data-report-open data-report-type="profile" data-report-id="{{ $profile_user['id'] ?? '' }}" data-report-url="{{ url()->current() }}">

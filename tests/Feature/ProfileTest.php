@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -45,6 +46,7 @@ class ProfileTest extends TestCase
 
         $this->get(route('profile.show', $user->slug))
             ->assertInertia(fn (Assert $page) => $page->where('workFilter.kind', 'all')
+                ->where('view', 'overview')
                 ->has('works.data', 3));
 
         $this->get(route('profile.show', ['slug' => $user->slug, 'kind' => 'works', 'q' => 'sketch']))
@@ -101,6 +103,33 @@ class ProfileTest extends TestCase
         ]);
     }
 
+    public function test_display_name_and_handle_can_be_changed_independently(): void
+    {
+        $user = User::factory()->create(['name' => 'Original Name', 'slug' => 'original-handle']);
+        User::factory()->create(['slug' => 'already-taken']);
+
+        $this->actingAs($user)->post(route('profile.settings.update'), [
+            'name' => 'Public Display Name',
+            'handle' => '@new_handle',
+        ])->assertRedirect(route('profile.settings').'#profile');
+
+        $user->refresh();
+        $this->assertSame('Public Display Name', $user->name);
+        $this->assertSame('new_handle', $user->slug);
+
+        $this->post(route('profile.settings.update'), [
+            'name' => 'Another Display Name',
+            'handle' => 'already-taken',
+        ])->assertSessionHasErrors('handle');
+        $this->assertSame('new_handle', $user->fresh()->slug);
+
+        $this->post(route('profile.settings.update'), [
+            'name' => 'Another Display Name',
+            'handle' => 'settings',
+        ])->assertSessionHasErrors('handle');
+        $this->assertSame('new_handle', $user->fresh()->slug);
+    }
+
     public function test_inline_profile_update_returns_to_profile(): void
     {
         $user = User::factory()->create(['slug' => 'inline-editor']);
@@ -112,6 +141,35 @@ class ProfileTest extends TestCase
         ])->assertRedirect(route('profile.show', $user->slug));
 
         $this->assertSame('Edited directly on my page.', $user->fresh()->bio);
+    }
+
+    public function test_portfolio_overview_saves_and_exposes_public_story_links_and_meta(): void
+    {
+        $user = User::factory()->create(['slug' => 'public-portfolio']);
+        Post::factory()->for($user)->create(['visibility' => 'public', 'moderation_status' => 'approved']);
+
+        $this->actingAs($user)->post(route('profile.settings.update'), [
+            'name' => $user->name,
+            'headline' => 'Product designer and frontend developer',
+            'profile_highlights' => "Shipped an accessible design system\nMentored three junior designers",
+            'profile_links' => [
+                'contact' => 'https://example.com/contact',
+                'github' => 'https://github.com/example',
+                'showreel' => 'https://vimeo.com/123456789',
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $this->get(route('profile.show', $user->slug))
+            ->assertViewHas('profileMeta', fn ($meta) => $meta['description'] === 'Product designer and frontend developer')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('view', 'overview')
+                ->where('person.headline', 'Product designer and frontend developer')
+                ->where('person.profile_highlights', "Shipped an accessible design system\nMentored three junior designers")
+                ->where('person.profile_links.contact', 'https://example.com/contact')
+                ->where('person.profile_links.showreel', 'https://vimeo.com/123456789')
+                ->where('stats.published', 1)
+                ->where('stats.completed', 0)
+                ->where('meta.description', 'Product designer and frontend developer'));
     }
 
     public function test_partial_settings_update_preserves_omitted_profile_fields(): void
@@ -169,6 +227,32 @@ class ProfileTest extends TestCase
             'content_id' => $avatar,
             'resolved_status' => 'pending',
         ]);
+    }
+
+    public function test_profile_media_editor_endpoints_store_show_and_reset_images(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create(['created_at' => now()->subHour()]);
+
+        $this->actingAs($user)->post(route('profile.banner.update', $user->slug), [
+            'banner_file' => UploadedFile::fake()->image('banner.jpg', 1600, 400),
+        ], ['Accept' => 'application/json'])->assertOk()->assertJsonStructure(['url']);
+
+        $this->post(route('profile.avatar.update', $user->slug), [
+            'avatar_file' => UploadedFile::fake()->image('avatar.jpg', 512, 512),
+        ], ['Accept' => 'application/json'])->assertOk()->assertJsonStructure(['url']);
+
+        $user->refresh();
+        $this->assertStringStartsWith('storage/uploads/banners/', (string) $user->banner_url);
+        $this->assertStringStartsWith('storage/uploads/avatars/', (string) $user->avatar);
+        $this->get(route('profile.show', $user->slug))->assertInertia(fn (Assert $page) => $page
+            ->where('person.banner_url', $user->banner_url)
+            ->where('person.avatar', $user->avatar));
+
+        $this->postJson(route('profile.banner.delete', $user->slug), ['_method' => 'DELETE'])->assertOk();
+        $this->postJson(route('profile.avatar.delete', $user->slug), ['_method' => 'DELETE'])->assertOk();
+        $this->assertNull($user->fresh()->banner_url);
+        $this->assertNull($user->fresh()->avatar);
     }
 
     public function test_user_can_follow_and_unfollow(): void
@@ -264,6 +348,53 @@ class ProfileTest extends TestCase
             ->where('profileReadmeHtml', fn ($html) => str_contains($html, 'Things I make')));
     }
 
+    public function test_profile_showcase_accepts_a_standalone_work(): void
+    {
+        $owner = User::factory()->create();
+        $work = Post::factory()->for($owner)->create(['type' => 'post', 'is_project' => false]);
+
+        $this->actingAs($owner)->post(route('profile.settings.update'), [
+            'name' => $owner->name,
+            'showcase_project_ids' => [$work->id],
+            'showcase_project_ids_present' => '1',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('profile_showcase_projects', ['user_id' => $owner->id, 'post_id' => $work->id]);
+    }
+
+    public function test_profile_text_removes_interface_direction_controls(): void
+    {
+        $owner = User::factory()->create();
+
+        $this->actingAs($owner)->post(route('profile.settings.update'), ['name' => "Safe\u{202E} name"])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('Safe name', $owner->fresh()->name);
+    }
+
+    public function test_profile_showcase_can_use_a_public_github_readme(): void
+    {
+        $owner = User::factory()->create(['slug' => 'github-readme-owner']);
+        Http::fake([
+            'api.github.com/repos/octocat/hello-world/readme' => Http::response('# README from GitHub'),
+        ]);
+
+        $this->actingAs($owner)->post(route('profile.settings.update'), [
+            'name' => $owner->name,
+            'profile_readme' => '# Local fallback',
+            'github_readme_repository' => 'https://github.com/octocat/hello-world',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $owner->id, 'github_readme_repository' => 'https://github.com/octocat/hello-world']);
+        $this->get(route('profile.show', $owner->slug))->assertInertia(fn (Assert $page) => $page
+            ->where('profileReadmeHtml', fn ($html) => str_contains($html, 'README from GitHub') && ! str_contains($html, 'Local fallback'))
+            ->where('profileReadmeSource.repository', 'octocat/hello-world')
+            ->where('profileReadmeSource.url', 'https://github.com/octocat/hello-world'));
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/octocat/hello-world/readme'
+            && $request->hasHeader('Accept', 'application/vnd.github.raw+json'));
+    }
+
     public function test_wall_respects_owner_mode_and_owner_can_delete_any_entry(): void
     {
         $owner = User::factory()->create(['slug' => 'wall-owner', 'wall_mode' => 'owner']);
@@ -273,10 +404,19 @@ class ProfileTest extends TestCase
         $this->actingAs($visitor)->post(route('profile.wall.store', $owner->slug), ['body' => $body])->assertForbidden();
         $owner->update(['wall_mode' => 'everyone']);
         $this->actingAs($visitor)->post(route('profile.wall.store', $owner->slug), ['body' => $body])->assertRedirect();
+        $visitorPost = ProfileWallPost::firstOrFail();
+        $moderator = User::factory()->create(['role' => 'moderator']);
+        $this->actingAs($moderator)->delete(route('profile.wall.destroy', $visitorPost))->assertForbidden();
+        $this->actingAs($owner)->patch(route('profile.wall.update', $visitorPost), ['body' => 'Owner cannot rewrite a visitor post.'])->assertForbidden();
+        $this->actingAs($visitor)->patch(route('profile.wall.update', $visitorPost), ['body' => 'Updated after spotting a typo in the original wall post.'])->assertRedirect();
+        $this->assertDatabaseHas('profile_wall_posts', ['id' => $visitorPost->id, 'body' => 'Updated after spotting a typo in the original wall post.']);
         $this->actingAs($owner)->post(route('profile.wall.store', $owner->slug), ['body' => 'A quick update from My work.', 'return_view' => 'work'])
             ->assertRedirect(route('profile.show', ['slug' => $owner->slug, 'view' => 'work']));
-        $post = ProfileWallPost::firstOrFail();
-        $this->actingAs($owner)->delete(route('profile.wall.destroy', $post))->assertRedirect();
-        $this->assertDatabaseMissing('profile_wall_posts', ['id' => $post->id]);
+        $this->actingAs($owner)->post(route('profile.wall.store', $owner->slug), ['body' => 'A note from Overview.', 'return_view' => 'overview'])
+            ->assertRedirect(route('profile.show', $owner->slug));
+        $this->get(route('profile.show', ['slug' => $owner->slug, 'view' => 'work', 'kind' => 'posts']))
+            ->assertInertia(fn (Assert $page) => $page->where('workFilter.kind', 'posts')->has('works.data', 0));
+        $this->actingAs($owner)->delete(route('profile.wall.destroy', $visitorPost))->assertRedirect();
+        $this->assertDatabaseMissing('profile_wall_posts', ['id' => $visitorPost->id]);
     }
 }

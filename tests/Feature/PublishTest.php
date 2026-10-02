@@ -75,7 +75,9 @@ class PublishTest extends TestCase
             ->get(route('publish'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('Editor')
-                ->where('categories.visual-art', 'Kuvataide')
+                ->where('categories.software', 'Ohjelmistot ja IT')
+                ->where('categories.video-editing', 'Videoeditointi')
+                ->missing('categories.visual-art')
                 ->where('mediaTypes.mixed', 'Sekatekniikka')
                 ->where('licenses.all-rights-reserved', 'Kaikki oikeudet pidätetään'));
     }

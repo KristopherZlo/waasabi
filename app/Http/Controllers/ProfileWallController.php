@@ -15,7 +15,7 @@ class ProfileWallController extends Controller
     {
         abort_if($user->is_banned, 404);
         abort_unless($request->user()->id === $user->id || $user->wall_mode === 'everyone', 403);
-        $data = $request->validate(['body' => ['required', 'string', 'min:1', 'max:2000'], 'return_view' => ['nullable', 'in:work,wall']]);
+        $data = $request->validate(['body' => ['required', 'string', 'min:1', 'max:2000'], 'return_view' => ['nullable', 'in:overview,work,wall']]);
         $body = trim(strip_tags($data['body']));
         if ($body === '') {
             throw ValidationException::withMessages(['body' => __('validation.required', ['attribute' => 'body'])]);
@@ -31,15 +31,34 @@ class ProfileWallController extends Controller
         }
 
         $view = $data['return_view'] ?? 'wall';
-        $response = redirect()->route('profile.show', ['slug' => $user->slug, 'view' => $view]);
+        $response = $view === 'overview'
+            ? redirect()->route('profile.show', $user->slug)
+            : redirect()->route('profile.show', ['slug' => $user->slug, 'view' => $view]);
 
         return $view === 'wall' ? $response->withFragment('wall-post-'.$post->id) : $response;
     }
 
     public function destroy(Request $request, ProfileWallPost $profileWallPost): RedirectResponse
     {
-        abort_unless(in_array($request->user()->id, [$profileWallPost->profile_user_id, $profileWallPost->user_id], true) || $request->user()->hasRole('moderator'), 403);
+        abort_unless(in_array($request->user()->id, [$profileWallPost->profile_user_id, $profileWallPost->user_id], true) || $request->user()->isAdmin(), 403);
         $profileWallPost->delete();
+
+        return back();
+    }
+
+    public function update(Request $request, ProfileWallPost $profileWallPost, TextModerationService $moderation): RedirectResponse
+    {
+        abort_unless($request->user()->id === $profileWallPost->user_id, 403);
+        $data = $request->validate(['body' => ['required', 'string', 'min:1', 'max:2000']]);
+        $body = trim(strip_tags($data['body']));
+        if ($body === '') {
+            throw ValidationException::withMessages(['body' => __('validation.required', ['attribute' => 'body'])]);
+        }
+        $result = $moderation->analyze($body, ['type' => 'profile_wall']);
+        if (($result['flagged'] ?? false) === true) {
+            throw ValidationException::withMessages(['body' => (string) ($result['summary'] ?: __('ui.moderation.text_flagged_detail'))]);
+        }
+        $profileWallPost->update(['body' => $body]);
 
         return back();
     }

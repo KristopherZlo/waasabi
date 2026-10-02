@@ -58,7 +58,7 @@ class SecurityHeaders
             (array) config('hub.security.csp_extra_connect_src', []),
         );
         $frameSrc = array_merge(
-            ["'self'", 'https://challenges.cloudflare.com'],
+            ["'self'", 'https://challenges.cloudflare.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
             (array) config('hub.security.csp_extra_frame_src', []),
         );
 
@@ -75,7 +75,7 @@ class SecurityHeaders
             "default-src 'self'",
             'script-src '.implode(' ', array_unique($scriptSrc)),
             'style-src '.implode(' ', array_unique($styleSrc)),
-            "img-src 'self' data: https:",
+            "img-src 'self' data: blob: https:",
             'font-src '.implode(' ', $fontSrc),
             'connect-src '.implode(' ', array_unique($connectSrc)),
             'frame-src '.implode(' ', array_unique($frameSrc)),

@@ -13,21 +13,21 @@ class AdminPromoController extends Controller
     {
         TopbarPromo::create($this->validatedData($request));
 
-        return redirect()->route('admin', ['tab' => 'promos']);
+        return redirect()->route('admin.tools', ['tab' => 'promos']);
     }
 
     public function update(Request $request, TopbarPromo $promo): RedirectResponse
     {
         $promo->update($this->validatedData($request));
 
-        return redirect()->route('admin', ['tab' => 'promos']);
+        return redirect()->route('admin.tools', ['tab' => 'promos']);
     }
 
     public function destroy(TopbarPromo $promo): RedirectResponse
     {
         $promo->delete();
 
-        return redirect()->route('admin', ['tab' => 'promos']);
+        return redirect()->route('admin.tools', ['tab' => 'promos']);
     }
 
     private function validatedData(Request $request): array

@@ -47,6 +47,7 @@ pip-delete-this-directory.txt
 /public/storage
 /public/avatars/
 /storage/*.key
+/storage/*.sqlite*
 /storage/pail
 /storage/framework/testing/
 /storage/app/qa-final/

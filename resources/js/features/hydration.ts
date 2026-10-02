@@ -32,6 +32,7 @@ import { setupMediaViewer } from '../ui/media-viewer';
 import { setupSupportFaq } from './support';
 import { clearPublishDraft } from '../core/storage';
 import { setupNotFoundGame } from './not-found-game';
+import { setupSelectMenus } from '../ui/select-menus';
 
 export const hydratePage = () => {
     const savedDraft = document.querySelector<HTMLElement>('[data-clear-draft]');
@@ -40,6 +41,7 @@ export const hydratePage = () => {
         delete savedDraft.dataset.clearDraft;
     }
     setupIcons();
+    setupSelectMenus();
     setupImageFallbacks();
     setupScribbleAvatars();
     const toastMessage = document.body.dataset.toastMessage ?? '';

@@ -78,7 +78,7 @@ class WaasabiTest extends TestCase
         $this->get(route('projects.updates.edit', [$post->slug, $update]))->assertForbidden();
     }
 
-    public function test_journal_uploads_survive_a_later_project_edit_and_staff_can_hide_an_update(): void
+    public function test_journal_uploads_survive_a_later_project_edit_and_only_admin_can_hide_an_update(): void
     {
         Storage::fake('public');
         $owner = User::factory()->create();
@@ -92,12 +92,16 @@ class WaasabiTest extends TestCase
         Storage::disk('public')->assertExists('uploads/editor/drawing.webp');
         $update = $post->updates()->firstOrFail();
         $moderator = User::factory()->create(['role' => 'moderator']);
-        $this->actingAs($moderator)->patch(route('journal.moderate', $update), ['is_hidden' => true, 'reason' => 'Image needs review'])->assertRedirect();
+        $this->actingAs($moderator)->patch(route('journal.moderate', $update), ['is_hidden' => true, 'reason' => 'Image needs review'])->assertForbidden();
+        $this->delete(route('projects.updates.destroy', [$post->slug, $update]))->assertForbidden();
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin)->patch(route('journal.moderate', $update), ['is_hidden' => true, 'reason' => 'Image needs review'])->assertRedirect();
         $reader = User::factory()->create();
         $this->actingAs($reader)->get(route('project', $post->slug))->assertOk()->assertDontSee('id="update-'.$update->id.'"', false);
         $this->actingAs($owner)->put(route('projects.updates.update', [$post->slug, $update]), ['title' => 'A drawing', 'body' => 'An edited caption for the drawing.'])->assertSessionHasNoErrors();
         $this->assertTrue($update->fresh()->is_hidden);
-        $this->actingAs($moderator)->get(route('journal.moderation'))->assertOk()->assertSee('A drawing');
+        $this->actingAs($moderator)->get(route('journal.moderation'))->assertForbidden();
+        $this->actingAs($admin)->get(route('journal.moderation'))->assertOk()->assertSee('A drawing');
         $this->patch(route('journal.moderate', $update), ['is_hidden' => false, 'reason' => 'Reviewed'])->assertRedirect();
         $this->assertFalse($update->fresh()->is_hidden);
     }

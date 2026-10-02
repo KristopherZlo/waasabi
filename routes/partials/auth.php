@@ -9,6 +9,8 @@ Route::middleware('guest')->group(function (): void {
     Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])->middleware('throttle:5,1')->name('password.email');
     Route::get('/reset-password/{token}', [PasswordResetController::class, 'resetForm'])->name('password.reset');
     Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:5,1')->name('password.update');
+    Route::get('/two-factor-challenge', [AuthController::class, 'twoFactorForm'])->name('two-factor.challenge');
+    Route::post('/two-factor-challenge', [AuthController::class, 'twoFactorChallenge'])->middleware('throttle:6,1')->name('two-factor.verify');
 });
 
 Route::get('/locale/{locale}', [AuthController::class, 'locale'])->name('locale');

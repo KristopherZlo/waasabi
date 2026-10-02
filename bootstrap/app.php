@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureAccountAge;
 use App\Http\Middleware\EnsureNotBanned;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\NormalizeUserText;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('web', SecurityHeaders::class);
         $middleware->appendToGroup('web', SetLocale::class);
         $middleware->appendToGroup('web', EnsureNotBanned::class);
+        $middleware->appendToGroup('web', NormalizeUserText::class);
         $middleware->appendToGroup('web', HandleInertiaRequests::class);
         $middleware->alias([
             'verified' => EnsureEmailIsVerified::class,

@@ -6,12 +6,13 @@ return [
         'role_weights' => [
             'user' => 1.0,
             'maker' => 1.15,
+            'support' => 1.3,
             'moderator' => 1.6,
             'admin' => 2.0,
         ],
 
         // Final report weights are clamped to keep the system stable.
-        'min_weight' => 1.0,
+        'min_weight' => 0.05,
         'max_weight' => 12.0,
 
         // Activity scoring: active, long-term users earn more trusted reports.
@@ -26,6 +27,8 @@ return [
             'age_days_cap' => 365,
             'cap' => 180.0,
             'divisor' => 90.0,
+            'full_weight_age_days' => 14,
+            'new_account_multiplier' => 0.05,
         ],
 
         // Accuracy scoring: reporters with accepted reports get a boost, rejected reports reduce trust.
@@ -37,13 +40,15 @@ return [
             'max_trust' => 4.0,
         ],
 
-        // Site scale adapts the auto-hide threshold to overall report volume.
+        // Scale from established active users and visible content, never report volume.
         'site_scale' => [
-            'window_days' => 7,
-            'base_reports_per_day' => 12.0,
+            'window_days' => 30,
+            'minimum_account_age_days' => 7,
+            'baseline_active_users' => 50,
+            'baseline_content' => 250,
             'sensitivity' => 0.35,
             'min_scale' => 0.75,
-            'max_scale' => 1.6,
+            'max_scale' => 1.35,
         ],
 
         // Auto-hide: large report weight totals will hide content from the public feed.

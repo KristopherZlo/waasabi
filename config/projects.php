@@ -3,6 +3,20 @@
 return [
     'statuses' => ['in_progress', 'done', 'paused'],
     'categories' => [
+        'software' => 'ui.project_options.categories.software',
+        'web-development' => 'ui.project_options.categories.web_development',
+        'mobile-development' => 'ui.project_options.categories.mobile_development',
+        'hardware' => 'ui.project_options.categories.hardware',
+        'game' => 'ui.project_options.categories.game',
+        'ui-ux' => 'ui.project_options.categories.ui_ux',
+        'graphic-design' => 'ui.project_options.categories.graphic_design',
+        'motion-design' => 'ui.project_options.categories.motion_design',
+        'video-editing' => 'ui.project_options.categories.video_editing',
+        '3d-design' => 'ui.project_options.categories.three_d_design',
+        'other' => 'ui.project_options.categories.other',
+    ],
+    // Older values stay valid so existing publications remain editable.
+    'legacy_categories' => [
         'visual-art' => 'ui.project_options.categories.visual_art',
         'illustration' => 'ui.project_options.categories.illustration',
         'music' => 'ui.project_options.categories.music',
@@ -11,13 +25,9 @@ return [
         'film' => 'ui.project_options.categories.film',
         'photography' => 'ui.project_options.categories.photography',
         'graffiti' => 'ui.project_options.categories.graffiti',
-        'game' => 'ui.project_options.categories.game',
-        'software' => 'ui.project_options.categories.software',
-        'hardware' => 'ui.project_options.categories.hardware',
         'craft' => 'ui.project_options.categories.craft',
         'performance' => 'ui.project_options.categories.performance',
         'research' => 'ui.project_options.categories.research',
-        'other' => 'ui.project_options.categories.other',
     ],
     'media_types' => [
         'mixed' => 'ui.project_options.media_types.mixed',

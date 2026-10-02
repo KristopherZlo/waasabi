@@ -185,7 +185,7 @@
                         </button>
                     @endif
                     @if ($moderationNsfwPending)
-                        <button type="button" class="icon-btn icon-btn--sm icon-btn--danger icon-btn--label" data-admin-nsfw data-admin-type="post" data-admin-id="{{ $project['id'] }}" data-admin-url="{{ route('moderation.posts.nsfw', $project['id']) }}" aria-label="{{ __('ui.moderation.nsfw') }}" title="{{ __('ui.moderation.nsfw') }}">
+                        <button type="button" class="icon-btn icon-btn--sm icon-btn--danger icon-btn--label" data-admin-nsfw data-admin-nsfw-value="1" data-admin-type="post" data-admin-id="{{ $project['id'] }}" data-admin-url="{{ route('moderation.posts.nsfw', $project['id']) }}" aria-label="{{ __('ui.moderation.nsfw') }}" title="{{ __('ui.moderation.nsfw') }}">
                             NSFW
                         </button>
                     @endif

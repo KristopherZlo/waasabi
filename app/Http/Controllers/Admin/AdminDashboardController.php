@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\CollaborationComment;
 use App\Models\CollaborationRequest;
 use App\Models\ContentReport;
+use App\Models\ContentReportScore;
 use App\Models\ModerationLog;
 use App\Models\Post;
 use App\Models\PostComment;
@@ -18,6 +19,7 @@ use App\Services\FeedService;
 use App\Services\ModerationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -69,6 +71,7 @@ class AdminDashboardController extends Controller
                 ->when($contentModeration !== '', fn ($query) => $query->where('moderation_status', $contentModeration))
                 ->latest()
                 ->paginate($perPage, ['*'], 'content_page');
+            $this->attachReportContext($content->getCollection(), fn (Post $post) => $post->type === 'question' ? 'question' : 'post');
         }
 
         $collaborationStatus = in_array($request->query('status'), ['open', 'filled', 'closed'], true)
@@ -277,7 +280,7 @@ class AdminDashboardController extends Controller
 
         $comments = collect();
         if ($section === 'comments') {
-            $comments = PostComment::with('user')
+            $comments = PostComment::with(['user', 'post:id,slug,title,type'])
                 ->latest()
                 ->when($search !== '', function ($query) use ($like) {
                     $query->where(function ($subQuery) use ($like) {
@@ -291,11 +294,12 @@ class AdminDashboardController extends Controller
                     });
                 })
                 ->paginate($perPage, ['*'], 'comments_page');
+            $this->attachReportContext($comments->getCollection(), fn () => 'comment');
         }
 
         $reviews = collect();
         if ($section === 'reviews') {
-            $reviews = PostReview::with('user')
+            $reviews = PostReview::with(['user', 'post:id,slug,title,type'])
                 ->latest()
                 ->when($search !== '', function ($query) use ($like) {
                     $query->where(function ($subQuery) use ($like) {
@@ -311,6 +315,7 @@ class AdminDashboardController extends Controller
                     });
                 })
                 ->paginate($perPage, ['*'], 'reviews_page');
+            $this->attachReportContext($reviews->getCollection(), fn () => 'review');
         }
 
         $mediaReports = collect();
@@ -816,5 +821,67 @@ class AdminDashboardController extends Controller
             'admin_search' => $search,
             'admin_section' => $section,
         ]);
+    }
+
+    private function attachReportContext(Collection $items, callable $contentType): void
+    {
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $targets = $items->map(fn ($item) => [
+            'item' => $item,
+            'type' => $contentType($item),
+            'id' => (string) $item->id,
+        ]);
+        $idsByType = $targets->groupBy('type')->map(fn ($group) => $group->pluck('id')->all());
+        $constrainTargets = function ($query) use ($idsByType): void {
+            $query->where(function ($targets) use ($idsByType): void {
+                foreach ($idsByType as $type => $ids) {
+                    $targets->orWhere(fn ($target) => $target
+                        ->where('content_type', $type)
+                        ->whereIn('content_id', $ids));
+                }
+            });
+        };
+
+        $reports = ContentReport::query()
+            ->whereIn('resolved_status', ['pending', 'auto_hidden'])
+            ->where($constrainTargets)
+            ->get(['id', 'user_id', 'content_type', 'content_id', 'reason', 'details', 'weight'])
+            ->groupBy(fn (ContentReport $report) => $report->content_type.':'.$report->content_id);
+        $scores = ContentReportScore::query()
+            ->where($constrainTargets)
+            ->get()
+            ->keyBy(fn (ContentReportScore $score) => $score->content_type.':'.$score->content_id);
+
+        foreach ($targets as $target) {
+            $key = $target['type'].':'.$target['id'];
+            $itemReports = $reports->get($key, collect());
+            if ($itemReports->isEmpty()) {
+                continue;
+            }
+
+            $score = $scores->get($key);
+            $threshold = (float) ($score?->weight_threshold ?: config('moderation.reports.auto_hide.base_threshold', 16));
+            if (! $score && $target['type'] === 'question') {
+                $threshold *= (float) config('moderation.reports.auto_hide.question_multiplier', 1.1);
+            }
+
+            $target['item']->setAttribute('moderation_report_context', [
+                'reports_count' => $itemReports->count(),
+                'reporters_count' => $itemReports
+                    ->map(fn (ContentReport $report) => $report->user_id ? 'user:'.$report->user_id : 'report:'.$report->id)
+                    ->unique()
+                    ->count(),
+                'weight_total' => (float) ($score?->weight_total ?? $itemReports->sum('weight')),
+                'weight_threshold' => $threshold,
+                'reasons' => $itemReports->groupBy('reason')->map(fn ($reasonReports, $reason) => [
+                    'reason' => (string) $reason,
+                    'count' => $reasonReports->count(),
+                    'details' => $reasonReports->pluck('details')->filter()->first(),
+                ])->values(),
+            ]);
+        }
     }
 }

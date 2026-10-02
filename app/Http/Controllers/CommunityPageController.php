@@ -3,15 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\CollaborationApplication;
+use App\Models\CollaborationComment;
 use App\Models\CollaborationRequest;
+use App\Models\ContentReport;
+use App\Models\ContentReportScore;
 use App\Models\Post;
-use App\Models\ProjectUpdate;
+use App\Models\PostComment;
+use App\Models\PostReview;
 use App\Models\ProfileWallPost;
+use App\Models\ProjectUpdate;
 use App\Models\User;
 use App\Services\BadgeCatalogService;
 use App\Services\BadgePayloadService;
 use App\Services\CollaborationService;
+use App\Services\GitHubReadmeService;
 use App\Services\MarkdownService;
+use App\Services\ModerationService;
+use App\Services\TwoFactorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -24,7 +32,9 @@ class CommunityPageController extends Controller
 {
     private function person(User $user): array
     {
-        return $user->only('id', 'name', 'slug', 'avatar', 'skills', 'bio', 'open_to_help', 'portfolio_url', 'banner_url');
+        return $user->only('id', 'name', 'slug', 'avatar', 'skills', 'bio', 'headline', 'open_to_help', 'portfolio_url', 'profile_links', 'banner_url') + [
+            'verified' => (bool) $user->is_profile_verified,
+        ];
     }
 
     private function publicWorks()
@@ -35,7 +45,7 @@ class CommunityPageController extends Controller
 
     private function card(Post $post): array
     {
-        return $post->only('id', 'slug', 'title', 'subtitle', 'type', 'is_project', 'category', 'tags', 'status', 'visibility', 'feedback_mode', 'nsfw') + [
+        return $post->only('id', 'slug', 'title', 'subtitle', 'type', 'is_project', 'category', 'tags', 'status', 'visibility', 'feedback_mode', 'nsfw', 'is_hidden', 'moderation_status') + [
             'author' => $this->person($post->user),
             'url' => $post->type === 'question' ? route('questions.show', $post->slug) : route('project', $post->slug),
             'cover' => $post->cover_url,
@@ -137,10 +147,12 @@ class CommunityPageController extends Controller
             ? DB::table('post_comment_votes')->where('user_id', $request->user()->id)
                 ->whereIn('post_comment_id', $comments->getCollection()->pluck('id'))->pluck('value', 'post_comment_id')
             : collect();
-        $comments->through(fn ($c) => $c->only('id', 'body', 'parent_id', 'reply_to_id') + [
+        $comments->through(fn ($c) => $c->only('id', 'body', 'parent_id', 'reply_to_id', 'is_hidden', 'moderation_status') + [
             'author' => $this->person($c->user), 'date' => $c->created_at->toISOString(),
             'reply_to' => $c->replyTo?->user ? $this->person($c->replyTo->user) : null,
             'score' => (int) $c->vote_score, 'vote' => (int) ($commentVotes[$c->id] ?? 0),
+            'can_edit' => $request->user()?->id === $c->user_id,
+            'can_delete' => $request->user()?->id === $c->user_id,
         ]);
         $updates = $post->updates()->with('user')->whereHas('user', fn ($q) => $q->where('is_banned', false))
             ->when(! $staff, fn ($q) => $q->where(fn ($q) => $q->where('is_hidden', false)->orWhere('user_id', $request->user()?->id ?? 0)))
@@ -185,12 +197,12 @@ class CommunityPageController extends Controller
 
     public function profile(Request $request, string $slug): Response
     {
-        $request->validate(['q' => 'nullable|string|max:100', 'kind' => 'nullable|in:projects,works,questions,posts,all', 'view' => 'nullable|in:work,collaborations,wall']);
+        $request->validate(['q' => 'nullable|string|max:100', 'kind' => 'nullable|in:projects,works,questions,posts,all', 'view' => 'nullable|in:overview,work,collaborations,wall']);
         $user = User::where('slug', $slug)->firstOrFail();
         $owner = $request->user()?->id === $user->id;
         $term = trim($request->string('q')->toString());
         $kind = $request->string('kind')->toString() ?: 'all';
-        $view = $request->string('view')->toString() ?: 'work';
+        $view = $request->string('view')->toString() ?: 'overview';
         $query = $owner ? Post::with('user')->where('user_id', $user->id) : $this->publicWorks()->where('user_id', $user->id);
         $works = $query->when($user->is_banned, fn ($q) => $q->whereRaw('1=0'))
             ->when($kind === 'projects', fn ($q) => $q->where('type', 'post')->where('is_project', true))
@@ -210,7 +222,8 @@ class CommunityPageController extends Controller
         $wallPosts = ProfileWallPost::with('user')->where('profile_user_id', $user->id)->where('is_hidden', false)->where('moderation_status', 'approved')
             ->whereHas('user', fn ($q) => $q->where('is_banned', false))->latest()->take(50)->get()->map(fn ($post) => [
                 'id' => $post->id, 'body' => $post->body, 'date' => $post->created_at?->toISOString(), 'author' => $this->person($post->user),
-                'can_delete' => $request->user() && ($request->user()->id === $user->id || $request->user()->id === $post->user_id || $request->user()->hasRole('moderator')),
+                'can_edit' => $request->user()?->id === $post->user_id,
+                'can_delete' => $request->user() && ($request->user()->id === $user->id || $request->user()->id === $post->user_id || $request->user()->isAdmin()),
             ]);
         $stats = [
             'followers' => DB::table('user_follows')->where('following_id', $user->id)->count(),
@@ -218,20 +231,33 @@ class CommunityPageController extends Controller
                 ->where('posts.visibility', 'public')->where('posts.is_hidden', false)->where('posts.moderation_status', 'approved')->count(),
             'collaborations' => CollaborationApplication::where('status', 'accepted')->where(fn ($q) => $q->where('user_id', $user->id)
                 ->orWhereHas('collaborationRequest', fn ($requestQuery) => $requestQuery->where('user_id', $user->id)))->count(),
+            'published' => $user->is_banned ? 0 : $this->publicWorks()->where('user_id', $user->id)->count(),
+            'completed' => $user->is_banned ? 0 : $this->publicWorks()->where('user_id', $user->id)->where('status', 'done')->count(),
         ];
+        $githubReadme = $user->is_banned ? null : app(GitHubReadmeService::class)->get($user->github_readme_repository);
+        $readme = $githubReadme['markdown'] ?? $user->profile_readme;
+        $metaDescription = Str::limit(trim((string) ($user->headline ?: $user->bio ?: "Projects, work and achievements by {$user->name}.")), 160);
+        $rawMetaImage = trim((string) ($user->banner_url ?: $user->avatar));
+        $metaImage = $rawMetaImage === '' ? null : (Str::startsWith($rawMetaImage, ['http://', 'https://']) ? $rawMetaImage : url('/'.ltrim($rawMetaImage, '/')));
+        $profileMeta = ['title' => $user->name, 'description' => $metaDescription, 'url' => route('profile.show', $user->slug), 'image' => $metaImage];
+
+        $badgeCatalog = app(BadgeCatalogService::class)->all();
 
         return Inertia::render('Profile', [
             'person' => $this->person($user) + ['featured_post_id' => $user->featured_post_id, 'is_banned' => $user->is_banned, 'wall_mode' => $user->wall_mode,
+                'profile_highlights' => $user->profile_highlights,
                 'allow_follow' => $user->connections_allow_follow,
                 'following' => $request->user() && DB::table('user_follows')->where('follower_id', $request->user()->id)->where('following_id', $user->id)->exists()],
-            'badges' => app(BadgePayloadService::class)->forUser($user, app(BadgeCatalogService::class)->all()),
+            'badges' => app(BadgePayloadService::class)->forUser($user, $badgeCatalog),
+            'badgeCatalog' => $request->user()?->isAdmin() ? $badgeCatalog : [],
             'isOwner' => $owner, 'works' => Inertia::scroll($works), 'workFilter' => ['kind' => $kind, 'q' => $term], 'view' => $view,
-            'stats' => $stats, 'showcase' => $showcase, 'profileReadmeHtml' => app(MarkdownService::class)->render((string) $user->profile_readme), 'wallPosts' => $wallPosts,
+            'stats' => $stats, 'showcase' => $showcase, 'profileReadmeHtml' => app(MarkdownService::class)->render((string) $readme), 'meta' => $profileMeta,
+            'profileReadmeSource' => $githubReadme ? ['repository' => $githubReadme['repository'], 'url' => $githubReadme['url']] : null, 'wallPosts' => $wallPosts,
             'openings' => CollaborationRequest::with('user', 'post')->withCount('applications')->visibleTo($request->user())->where('user_id', $user->id)->where('status', 'open')
                 ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))->latest()->take(20)->get()->map(fn ($o) => $this->opening($o)),
             'contributions' => $this->publicWorks()->where('user_id', '!=', $user->id)->whereHas('members', fn ($q) => $q->where('user_id', $user->id)->whereNotNull('accepted_at'))
                 ->when($user->is_banned, fn ($q) => $q->whereRaw('1=0'))->latest()->take(20)->get()->map(fn ($p) => $this->card($p)),
-        ]);
+        ])->withViewData('profileMeta', $profileMeta);
     }
 
     public function people(Request $request): Response
@@ -257,10 +283,15 @@ class CommunityPageController extends Controller
             Gate::authorize('update', $post);
         }
 
+        $categories = collect(config('projects.categories'));
+        if ($post?->category && ! $categories->has($post->category)) {
+            $categories->put($post->category, config('projects.legacy_categories.'.$post->category, $post->category));
+        }
+
         return Inertia::render('Editor', [
             'post' => $post ? $post->only('id', 'slug', 'title', 'subtitle', 'body_markdown', 'type', 'is_project', 'feedback_mode', 'category', 'tags', 'status', 'visibility', 'external_url', 'repository_url', 'license', 'media_type', 'updated_at', 'nsfw') : null,
             'kind' => $post ? ($post->is_project ? 'project' : 'work') : ($request->query('kind') === 'project' ? 'project' : 'work'),
-            'categories' => collect(config('projects.categories'))->map(fn ($key) => __($key)),
+            'categories' => $categories->map(fn ($key) => __($key)),
             'mediaTypes' => collect(config('projects.media_types'))->map(fn ($key) => __($key)),
             'licenses' => collect(config('projects.licenses'))->map(fn ($key) => __($key)),
             'journal' => null,
@@ -292,12 +323,16 @@ class CommunityPageController extends Controller
             'filters' => $request->only('status', 'role', 'availability', 'format', 'scope', 'q')]);
     }
 
-    public function helpEditor(Request $request): Response
+    public function helpEditor(Request $request, ?CollaborationRequest $collaborationRequest = null): Response
     {
         $service = app(CollaborationService::class);
+        if ($collaborationRequest) {
+            abort_unless($collaborationRequest->user_id === $request->user()->id, 403);
+        }
 
         return Inertia::render('HelpEditor', ['roles' => $service->roleOptions(), 'availability' => $service->availabilityOptions(), 'formats' => $service->formatOptions(),
-            'projects' => $service->manageableProjects($request->user())->map(fn ($p) => $p->only('id', 'title')), 'projectId' => (string) $request->query('project', '')]);
+            'projects' => $service->manageableProjects($request->user())->map(fn ($p) => $p->only('id', 'title')), 'projectId' => (string) ($collaborationRequest?->post_id ?? $request->query('project', '')),
+            'opening' => $collaborationRequest?->only('id', 'title', 'role', 'summary', 'availability', 'format', 'skills')]);
     }
 
     public function collaboration(Request $request, CollaborationRequest $collaborationRequest): Response
@@ -316,7 +351,8 @@ class CommunityPageController extends Controller
                 ]),
             ]),
             'comments' => $collaborationRequest->comments()->with('user')->whereHas('user', fn ($q) => $q->where('is_banned', false))->oldest()->get()
-                ->map(fn ($c) => $c->only('id', 'body') + ['author' => $this->person($c->user), 'date' => $c->created_at->toISOString()]),
+                ->map(fn ($c) => $c->only('id', 'body') + ['author' => $this->person($c->user), 'date' => $c->created_at->toISOString(),
+                    'can_edit' => $request->user()?->id === $c->user_id, 'can_delete' => $request->user()?->id === $c->user_id || ($request->user()?->isAdmin() ?? false)]),
             'candidateProjects' => $request->user() && ! $owner
                 ? app(CollaborationService::class)->manageableProjects($request->user())->reject(fn ($project) => $project->id === $collaborationRequest->post_id)
                     ->map(fn ($project) => $project->only('id', 'title'))->values()
@@ -327,14 +363,24 @@ class CommunityPageController extends Controller
     public function settings(Request $request): Response
     {
         $user = $request->user();
+        $twoFactor = app(TwoFactorService::class);
+        $pendingSecret = $user->two_factor_secret && ! $user->two_factor_confirmed_at ? (string) $user->two_factor_secret : null;
 
         return Inertia::render('Settings', ['person' => $this->person($user) + $user->only(
             'featured_post_id', 'email', 'email_verified_at', 'privacy_allow_mentions',
             'notify_comments', 'notify_reviews', 'notify_follows', 'connections_allow_follow',
-            'connections_show_follow_counts', 'security_login_alerts', 'profile_readme', 'wall_mode'
+            'connections_show_follow_counts', 'security_login_alerts', 'headline', 'profile_readme', 'profile_highlights', 'profile_links', 'github_readme_repository', 'wall_mode'
         ),
-            'projects' => $user->posts()->where('type', 'post')->where('is_project', true)->latest()->get(['id', 'title']),
+            'projects' => $user->posts()->where('type', 'post')->latest()->get(['id', 'title', 'is_project']),
             'showcaseProjectIds' => $user->showcaseProjects()->pluck('posts.id'),
+            'twoFactor' => [
+                'enabled' => (bool) $user->two_factor_confirmed_at,
+                'pending' => (bool) $pendingSecret,
+                'secret' => $pendingSecret,
+                'qr' => $pendingSecret ? $twoFactor->qr($user, $pendingSecret) : null,
+                'uri' => $pendingSecret ? $twoFactor->uri($user, $pendingSecret) : null,
+                'recoveryCodes' => $request->session()->pull('two_factor_recovery_codes', []),
+            ],
         ]);
     }
 
@@ -353,10 +399,115 @@ class CommunityPageController extends Controller
     public function moderation(Request $request): Response
     {
         $all = $request->query('filter') === 'all';
-        $posts = Post::with('user')->when(! $all, fn ($q) => $q->where(fn ($q) => $q->where('moderation_status', '!=', 'approved')->orWhere('is_hidden', true)))
-            ->latest()->paginate(20)->withQueryString()->through(fn ($p) => $this->card($p) + ['html' => app(MarkdownService::class)->render($p->body_markdown), 'moderation_status' => $p->moderation_status]);
+        $items = ContentReport::query()
+            ->selectRaw('content_type, content_id, count(*) as reports_count, count(distinct coalesce(user_id, id)) as reporters_count, coalesce(sum(weight), 0) as weight_total, max(created_at) as last_report_at, max(content_url) as content_url')
+            ->when(! $all, fn ($query) => $query->whereIn('resolved_status', ['pending', 'auto_hidden']))
+            ->whereNotNull('content_id')
+            ->where('content_id', '<>', '')
+            ->groupBy('content_type', 'content_id')
+            ->orderByDesc('weight_total')
+            ->orderByDesc('last_report_at')
+            ->paginate(20)
+            ->withQueryString()
+            ->through(fn ($row) => $this->moderationItem($row));
 
-        return Inertia::render('Moderation', ['works' => Inertia::scroll($posts), 'all' => $all]);
+        return Inertia::render('Moderation', ['items' => Inertia::scroll($items), 'all' => $all]);
+    }
+
+    private function moderationItem(ContentReport $row): array
+    {
+        $type = (string) $row->content_type;
+        $contentId = (string) $row->content_id;
+        $numericId = ctype_digit($contentId) ? (int) $contentId : null;
+        $model = match ($type) {
+            'post', 'question' => Post::with('user')
+                ->where('type', $type === 'question' ? 'question' : 'post')
+                ->where($numericId ? 'id' : 'slug', $numericId ?: $contentId)
+                ->first(),
+            'comment' => $numericId ? PostComment::with('user')->find($numericId) : null,
+            'review' => $numericId ? PostReview::with('user')->find($numericId) : null,
+            'profile' => $numericId ? User::find($numericId) : User::where('slug', $contentId)->first(),
+            'collaboration' => $numericId ? CollaborationRequest::with('user')->find($numericId) : null,
+            'collaboration_comment' => $numericId ? CollaborationComment::with(['user', 'collaborationRequest'])->find($numericId) : null,
+            default => null,
+        };
+        $reports = ContentReport::query()
+            ->where('content_type', $type)
+            ->where('content_id', $contentId)
+            ->latest()
+            ->get();
+        $openReports = $reports->whereIn('resolved_status', ['pending', 'auto_hidden']);
+        $status = $openReports->contains('resolved_status', 'pending')
+            ? 'pending'
+            : ($openReports->contains('resolved_status', 'auto_hidden') ? 'auto_hidden' : (string) ($reports->first()?->resolved_status ?? 'resolved'));
+
+        $author = match (true) {
+            $model instanceof User => $model,
+            $model !== null => $model->user,
+            default => null,
+        };
+        $title = match (true) {
+            $model instanceof Post => $model->title,
+            $model instanceof PostComment => 'Comment on '.$model->post_slug,
+            $model instanceof PostReview => 'Review on '.$model->post_slug,
+            $model instanceof User => $model->name,
+            $model instanceof CollaborationRequest => $model->title,
+            $model instanceof CollaborationComment => 'Reply on '.($model->collaborationRequest?->title ?? 'collaboration'),
+            $type === 'content' => 'Flagged media',
+            default => 'Removed content',
+        };
+        $excerpt = match (true) {
+            $model instanceof Post => $model->subtitle ?: Str::limit(strip_tags(app(MarkdownService::class)->render($model->body_markdown)), 320),
+            $model instanceof PostComment, $model instanceof CollaborationComment => $model->body,
+            $model instanceof PostReview => implode("\n\n", array_filter([$model->improve, $model->why, $model->how])),
+            $model instanceof User => $model->bio,
+            $model instanceof CollaborationRequest => $model->summary,
+            default => (string) ($reports->first()?->details ?? ''),
+        };
+        $url = match (true) {
+            $model instanceof Post => $model->type === 'question' ? route('questions.show', $model->slug) : route('project', $model->slug),
+            $model instanceof PostComment => app(ModerationService::class)->resolvePostUrl($model->post_slug).'#comment-'.$model->id,
+            $model instanceof PostReview => app(ModerationService::class)->resolvePostUrl($model->post_slug).'#review-'.$model->id,
+            $model instanceof User => route('profile.show', $model->slug),
+            $model instanceof CollaborationRequest => route('collaboration.show', $model),
+            $model instanceof CollaborationComment => route('collaboration.show', $model->collaboration_request_id).'#comment-'.$model->id,
+            default => $row->content_url,
+        };
+        $canonicalId = $model?->id ? (string) $model->id : $contentId;
+        $score = ContentReportScore::query()->where('content_type', $type)->where('content_id', $canonicalId)->first();
+        $threshold = (float) ($score?->weight_threshold ?: config('moderation.reports.auto_hide.base_threshold', 16));
+        $actionType = $type === 'question' ? 'post' : $type;
+        $moderatable = in_array($actionType, ['post', 'comment', 'review'], true);
+
+        return [
+            'key' => $type.':'.$contentId,
+            'id' => $numericId,
+            'type' => $type,
+            'title' => $title,
+            'excerpt' => Str::limit(trim((string) $excerpt), 700),
+            'url' => $url,
+            'author' => $author ? $this->person($author) : null,
+            'status' => $status,
+            'content_status' => $model?->moderation_status ?? null,
+            'hidden' => (bool) ($model?->is_hidden ?? false),
+            'nsfw' => $model instanceof Post && $model->nsfw,
+            'reports_count' => (int) $row->reports_count,
+            'reporters_count' => (int) $row->reporters_count,
+            'weight_total' => round((float) $row->weight_total, 1),
+            'weight_threshold' => round($threshold, 1),
+            'last_report_at' => $row->last_report_at,
+            'reasons' => $reports->groupBy('reason')->map(fn ($group, $reason) => [
+                'reason' => $reason,
+                'count' => $group->count(),
+                'details' => $group->first(fn ($report) => trim((string) $report->details) !== '')?->details,
+            ])->values(),
+            'hide_url' => $moderatable && $numericId ? "/admin/moderation/{$actionType}s/{$numericId}/hide" : null,
+            'restore_url' => $moderatable && $numericId ? "/admin/moderation/{$actionType}s/{$numericId}/restore" : null,
+            'nsfw_url' => $model instanceof Post && $numericId ? "/admin/moderation/posts/{$numericId}/nsfw" : null,
+            'dismiss_url' => $numericId && in_array($actionType, ['post', 'comment', 'review', 'profile', 'collaboration', 'collaboration_comment'], true)
+                ? "/admin/moderation/reports/{$actionType}/{$numericId}/dismiss"
+                : null,
+        ];
     }
 
     public function startProject(Request $request, Post $post)

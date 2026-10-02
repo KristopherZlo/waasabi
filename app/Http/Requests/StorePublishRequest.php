@@ -27,7 +27,7 @@ class StorePublishRequest extends FormRequest
             'title' => ['required', 'string', 'max:255'],
             'subtitle' => ['nullable', 'string', 'max:255'],
             'feedback_mode' => ['nullable', Rule::in(['sharing', 'feedback', 'help'])],
-            'category' => ['required_if:publish_type,post', 'nullable', Rule::in(array_keys(config('projects.categories', [])))],
+            'category' => ['required_if:publish_type,post', 'nullable', Rule::in(array_keys(array_merge(config('projects.categories', []), config('projects.legacy_categories', []))))],
             'media_type' => ['required_if:publish_type,post', 'nullable', Rule::in(array_keys(config('projects.media_types', [])))],
             'license' => ['required_if:publish_type,post', 'nullable', Rule::in(array_keys(config('projects.licenses', [])))],
             'external_url' => ['nullable', 'url:http,https', 'max:500'],

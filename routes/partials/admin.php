@@ -9,6 +9,9 @@ Route::middleware(['auth', 'can:admin'])->group(function () {
     Route::post('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])
         ->name('admin.users.role');
 
+    Route::post('/admin/users/{user}/verification', [AdminUserController::class, 'toggleVerification'])
+        ->name('admin.users.verification');
+
     Route::delete('/admin/comments/{comment}', [AdminContentController::class, 'deleteComment'])
         ->name('admin.comments.delete');
 

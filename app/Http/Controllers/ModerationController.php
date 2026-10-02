@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ModerationReasonRequest;
+use App\Models\CollaborationComment;
+use App\Models\CollaborationRequest;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\PostReview;
+use App\Models\User;
 use App\Services\AutoModerationService;
 use App\Services\ModerationService;
 use Illuminate\Http\JsonResponse;
@@ -29,26 +32,37 @@ class ModerationController extends Controller
             'post' => Post::find($id),
             'comment' => PostComment::find($id),
             'review' => PostReview::find($id),
+            'profile' => User::find($id),
+            'collaboration' => CollaborationRequest::find($id),
+            'collaboration_comment' => CollaborationComment::find($id),
             default => null,
         };
         abort_unless($model, 404);
-        $model->loadMissing('user');
-        if ($moderation->shouldBlock($moderator, $model->user)) {
+        if (! $model instanceof User) {
+            $model->loadMissing('user');
+        }
+        $owner = $model instanceof User ? $model : $model->user;
+        if ($moderation->shouldBlock($moderator, $owner)) {
             return response()->json(['message' => __('ui.errors.forbidden')], 403);
         }
 
         $contentType = $model instanceof Post ? ($model->type === 'question' ? 'question' : 'post') : $type;
-        $slug = $model instanceof Post ? $model->slug : $model->post_slug;
-        $anchor = $model instanceof Post ? '' : '#'.$type.'-'.$model->id;
+        $contentUrl = match (true) {
+            $model instanceof User => route('profile.show', $model->slug),
+            $model instanceof Post => $moderation->resolvePostUrl($model->slug),
+            $model instanceof CollaborationRequest => route('collaboration.show', $model),
+            $model instanceof CollaborationComment => route('collaboration.show', $model->collaboration_request_id).'#comment-'.$model->id,
+            default => $moderation->resolvePostUrl($model->post_slug).'#'.$type.'-'.$model->id,
+        };
         $moderation->logAction(
             $request,
             $moderator,
             'dismiss_report',
             $contentType,
             (string) $model->id,
-            $moderation->resolvePostUrl($slug).$anchor,
+            $contentUrl,
             null,
-            ['author_id' => $model->user_id, 'author_name' => $model->user?->name],
+            ['author_id' => $owner->id, 'author_name' => $owner->name],
         );
         $reports->resolveReportsForModel($model, 'rejected', 'dismiss_report');
 
@@ -86,7 +100,7 @@ class ModerationController extends Controller
                 'author_name' => $post->user?->name,
             ],
         );
-        app(AutoModerationService::class)->resolveReportsForModel($post, 'confirmed', 'queue');
+        app(AutoModerationService::class)->queueForReview($post, $moderator, $reason, $moderation->resolvePostUrl($post->slug));
 
         return response()->json(['ok' => true, 'status' => $post->moderation_status]);
     }
@@ -160,7 +174,7 @@ class ModerationController extends Controller
         return response()->json(['ok' => true, 'status' => $post->moderation_status]);
     }
 
-    public function nsfwPost(Request $request, Post $post, ModerationService $moderation): JsonResponse
+    public function nsfwPost(Request $request, Post $post, ModerationService $moderation, AutoModerationService $reports): JsonResponse
     {
         $moderator = $request->user();
         if (! $moderator) {
@@ -172,15 +186,22 @@ class ModerationController extends Controller
             return response()->json(['message' => __('ui.errors.forbidden')], 403);
         }
 
-        $moderation->setState($post, $moderator, 'approved');
-        $post->nsfw = true;
+        $request->validate(['nsfw' => ['sometimes', 'boolean']]);
+        $enabled = ! $request->has('nsfw') || $request->boolean('nsfw');
+        if ($enabled && ($post->moderation_status === 'pending' || $post->hidden_by === null)) {
+            $moderation->setState($post, $moderator, 'approved');
+        }
+        $post->nsfw = $enabled;
         $post->save();
+        if ($enabled) {
+            $reports->resolveReportsForModel($post, 'confirmed', 'nsfw');
+        }
         $contentType = $post->type === 'question' ? 'question' : 'post';
 
         $moderation->logAction(
             $request,
             $moderator,
-            'nsfw',
+            $enabled ? 'nsfw' : 'nsfw_remove',
             $contentType,
             (string) $post->id,
             $moderation->resolvePostUrl($post->slug),
@@ -193,7 +214,7 @@ class ModerationController extends Controller
             ],
         );
 
-        return response()->json(['ok' => true, 'status' => $post->moderation_status]);
+        return response()->json(['ok' => true, 'status' => $post->moderation_status, 'nsfw' => $post->nsfw]);
     }
 
     public function queueComment(ModerationReasonRequest $request, PostComment $comment, ModerationService $moderation): JsonResponse
@@ -226,7 +247,7 @@ class ModerationController extends Controller
                 'author_name' => $comment->user?->name,
             ],
         );
-        app(AutoModerationService::class)->resolveReportsForModel($comment, 'confirmed', 'queue');
+        app(AutoModerationService::class)->queueForReview($comment, $moderator, $reason, $contentUrl);
 
         return response()->json(['ok' => true, 'status' => $comment->moderation_status]);
     }
@@ -328,7 +349,7 @@ class ModerationController extends Controller
                 'author_name' => $review->user?->name,
             ],
         );
-        app(AutoModerationService::class)->resolveReportsForModel($review, 'confirmed', 'queue');
+        app(AutoModerationService::class)->queueForReview($review, $moderator, $reason, $contentUrl);
 
         return response()->json(['ok' => true, 'status' => $review->moderation_status]);
     }

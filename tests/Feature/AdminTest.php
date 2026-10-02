@@ -29,22 +29,37 @@ class AdminTest extends TestCase
 
         $response->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Moderation')
-            ->has('works.data'));
+            ->has('items.data'));
         $this->actingAs($admin)->get(route('admin.tools'))->assertOk()
             ->assertSee('class="admin-app"', false)
             ->assertSee(__('ui.admin.overview'));
     }
 
+    public function test_tool_navigation_stays_in_the_toolbox(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->get(route('admin.tools'))
+            ->assertOk()
+            ->assertSee('href="'.route('admin.tools', ['tab' => 'users']).'"', false)
+            ->assertSee('href="'.route('admin.tools', ['tab' => 'content']).'"', false)
+            ->assertSee('href="'.route('admin.tools', ['tab' => 'media']).'"', false)
+            ->assertSee('href="'.route('admin.tools', ['tab' => 'support']).'"', false)
+            ->assertSee('href="'.route('admin.tools', ['tab' => 'analytics']).'"', false);
+    }
+
     public function test_content_sections_keep_their_full_unreported_lists(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
-        $post = Post::factory()->create();
+        $post = Post::factory()->create(['nsfw' => true]);
         $comment = PostComment::create([
             'post_id' => $post->id,
             'post_slug' => $post->slug,
             'user_id' => $admin->id,
             'body' => 'Visible in the complete admin comment list.',
             'useful' => 0,
+            'is_hidden' => true,
+            'moderation_status' => 'pending',
         ]);
         $review = PostReview::create([
             'post_id' => $post->id,
@@ -53,13 +68,50 @@ class AdminTest extends TestCase
             'improve' => 'Visible in the complete admin review list.',
             'why' => 'It should not depend on reports.',
             'how' => 'Keep moderation collections separate.',
+            'is_hidden' => true,
+            'moderation_status' => 'hidden',
         ]);
+        foreach ([
+            [$post->type, $post->id, 2.5, 'Reported post detail.'],
+            ['comment', $comment->id, 1.5, 'Reported comment detail.'],
+            ['review', $review->id, 1.0, 'Reported review detail.'],
+        ] as [$type, $id, $weight, $details]) {
+            ContentReport::create([
+                'user_id' => User::factory()->create()->id,
+                'content_type' => $type,
+                'content_id' => (string) $id,
+                'reason' => 'spam',
+                'details' => $details,
+                'weight' => $weight,
+                'resolved_status' => 'pending',
+            ]);
+        }
 
+        $this->actingAs($admin)->get(route('admin.tools', ['tab' => 'content']))
+            ->assertOk()
+            ->assertSee('class="admin-content-list"', false)
+            ->assertSee($post->title)
+            ->assertDontSee('chip--approved', false)
+            ->assertSee('data-admin-nsfw', false)
+            ->assertSee('data-admin-nsfw-value="0"', false)
+            ->assertSee(__('ui.moderation.remove_nsfw'))
+            ->assertSee('class="admin-action-menu"', false)
+            ->assertSee('Reported post detail.')
+            ->assertSee('Weight 2.5 / 16.0')
+            ->assertSee('data-admin-url="'.route('admin.posts.delete', $post).'"', false);
         $this->actingAs($admin)->get(route('admin.tools', ['tab' => 'comments']))
             ->assertOk()
+            ->assertSee('class="admin-content-item admin-content-item--interaction"', false)
+            ->assertDontSee('chip--approved', false)
+            ->assertSee(__('ui.moderation.allow'))
+            ->assertSee('Reported comment detail.')
             ->assertSee($comment->body);
         $this->actingAs($admin)->get(route('admin.tools', ['tab' => 'reviews']))
             ->assertOk()
+            ->assertSee('class="admin-content-item admin-content-item--interaction"', false)
+            ->assertDontSee('chip--approved', false)
+            ->assertSee(__('ui.moderation.restore'))
+            ->assertSee('Reported review detail.')
             ->assertSee($review->improve);
     }
 
@@ -109,11 +161,56 @@ class AdminTest extends TestCase
             'role' => 'maker',
         ]);
 
-        $response->assertRedirect(route('admin', ['tab' => 'users', 'user' => $user->id]));
+        $response->assertRedirect(route('admin.tools', ['tab' => 'users', 'user' => $user->id]));
         $this->assertDatabaseHas('users', [
             'id' => $user->id,
             'role' => 'maker',
         ]);
+    }
+
+    public function test_only_admin_can_toggle_public_profile_verification(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $regular = User::factory()->create();
+        $target = User::factory()->create(['is_profile_verified' => false]);
+
+        $this->actingAs($regular)
+            ->postJson(route('admin.users.verification', $target))
+            ->assertForbidden();
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.users.verification', $target))
+            ->assertOk()
+            ->assertJsonPath('verified', true);
+
+        $this->assertTrue($target->fresh()->is_profile_verified);
+        $this->get(route('profile.show', $target->slug))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('person.verified', true)
+                ->where('badgeCatalog.0.key', 'beta'));
+    }
+
+    public function test_role_hierarchy_and_report_weights_are_complete(): void
+    {
+        $roles = config('roles.order');
+
+        $this->assertSame(['user', 'maker', 'support', 'moderator', 'admin'], $roles);
+        foreach ($roles as $role) {
+            $this->assertArrayHasKey($role, config('moderation.reports.role_weights'));
+        }
+
+        $support = new User(['role' => 'support']);
+        $moderator = new User(['role' => 'moderator']);
+        $admin = new User(['role' => 'admin']);
+
+        $this->assertTrue($support->canPerform('publish'));
+        $this->assertTrue($support->canPerform('support'));
+        $this->assertFalse($support->canPerform('moderate'));
+        $this->assertTrue($moderator->canPerform('support'));
+        $this->assertTrue($moderator->canPerform('moderate'));
+        $this->assertFalse($moderator->canPerform('admin'));
+        $this->assertTrue($admin->canPerform('moderate'));
+        $this->assertTrue($admin->canPerform('admin'));
     }
 
     public function test_last_active_admin_cannot_be_demoted(): void
@@ -192,19 +289,19 @@ class AdminTest extends TestCase
         $this->actingAs($admin)
             ->from('/admin')
             ->delete("/admin/comments/{$comment->id}", ['reason' => 'Test cleanup'])
-            ->assertRedirect(route('admin'));
+            ->assertRedirect(route('admin.tools', ['tab' => 'comments']));
         $this->assertDatabaseMissing('post_comments', ['id' => $comment->id]);
 
         $this->actingAs($admin)
             ->from('/admin')
             ->delete("/admin/reviews/{$review->id}", ['reason' => 'Test cleanup'])
-            ->assertRedirect(route('admin'));
+            ->assertRedirect(route('admin.tools', ['tab' => 'reviews']));
         $this->assertDatabaseMissing('post_reviews', ['id' => $review->id]);
 
         $this->actingAs($admin)
             ->from('/admin')
             ->delete("/admin/posts/{$post->id}", ['reason' => 'Test cleanup'])
-            ->assertRedirect(route('admin'));
+            ->assertRedirect(route('admin.tools', ['tab' => 'content']));
         $this->assertDatabaseMissing('posts', ['id' => $post->id]);
         $this->assertSame('confirmed', $postReport->fresh()->resolved_status);
         Storage::disk('public')->assertMissing('uploads/covers/admin-delete.webp');
@@ -234,7 +331,7 @@ class AdminTest extends TestCase
 
         $this->actingAs($admin)
             ->post(route('admin.media.resolve', $report), ['action' => 'remove'])
-            ->assertRedirect(route('admin', ['tab' => 'media']));
+            ->assertRedirect(route('admin.tools', ['tab' => 'media']));
 
         Storage::disk('public')->assertMissing('uploads/covers/flagged.jpg');
         $this->assertNull($owner->fresh()->banner_url);
@@ -255,7 +352,7 @@ class AdminTest extends TestCase
             'post_ids' => [$post->id],
             'action' => 'hide',
             'reason' => 'Unsafe public content',
-        ])->assertRedirect(route('admin', ['tab' => 'content']));
+        ])->assertRedirect(route('admin.tools', ['tab' => 'content']));
 
         $post->refresh();
         $this->assertSame('hidden', $post->moderation_status);
@@ -264,13 +361,14 @@ class AdminTest extends TestCase
         $this->actingAs($admin)->post(route('admin.content.bulk'), [
             'post_ids' => [$post->id],
             'action' => 'restore',
-        ])->assertRedirect(route('admin', ['tab' => 'content']));
+        ])->assertRedirect(route('admin.tools', ['tab' => 'content']));
         $this->assertSame('approved', $post->fresh()->moderation_status);
     }
 
-    public function test_moderator_can_dismiss_a_false_report_without_hiding_content(): void
+    public function test_only_admin_can_dismiss_a_false_report(): void
     {
         $moderator = User::factory()->create(['role' => 'moderator']);
+        $admin = User::factory()->create(['role' => 'admin']);
         $post = Post::factory()->create();
         $report = ContentReport::create([
             'user_id' => User::factory()->create()->id,
@@ -282,13 +380,19 @@ class AdminTest extends TestCase
 
         $this->actingAs($moderator)
             ->postJson(route('moderation.reports.dismiss', ['type' => 'post', 'id' => $post->id]))
+            ->assertForbidden();
+
+        $this->assertSame('pending', $report->fresh()->resolved_status);
+
+        $this->actingAs($admin)
+            ->postJson(route('moderation.reports.dismiss', ['type' => 'post', 'id' => $post->id]))
             ->assertOk()
             ->assertJsonPath('status', 'approved');
 
         $this->assertSame('rejected', $report->fresh()->resolved_status);
         $this->assertSame('approved', $post->fresh()->moderation_status);
         $this->assertDatabaseHas('moderation_logs', [
-            'moderator_id' => $moderator->id,
+            'moderator_id' => $admin->id,
             'action' => 'dismiss_report',
             'content_id' => (string) $post->id,
         ]);
@@ -298,7 +402,8 @@ class AdminTest extends TestCase
     {
         $admin = User::factory()->create(['role' => 'admin']);
         $moderator = User::factory()->create(['role' => 'moderator']);
-        $regularPost = Post::factory()->create();
+        $regularOwner = User::factory()->create();
+        $regularPost = Post::factory()->for($regularOwner)->create();
         $adminPost = Post::factory()->for($admin)->create();
 
         $this->actingAs($moderator)->post(route('admin.content.bulk'), [
@@ -307,12 +412,28 @@ class AdminTest extends TestCase
             'reason' => 'Delete attempt',
         ])->assertForbidden();
         $this->actingAs($moderator)->post(route('admin.content.bulk'), [
+            'post_ids' => [$regularPost->id],
+            'action' => 'hide',
+            'reason' => 'Final hide attempt',
+        ])->assertForbidden();
+        $this->actingAs($moderator)->post(route('admin.content.bulk'), [
+            'post_ids' => [$regularPost->id],
+            'action' => 'queue',
+            'reason' => 'Queue for administrator review',
+        ])->assertRedirect(route('admin.tools', ['tab' => 'content']));
+        $this->actingAs($moderator)->post(route('admin.content.bulk'), [
             'post_ids' => [$adminPost->id],
             'action' => 'hide',
             'reason' => 'Hide attempt',
         ])->assertForbidden();
 
         $this->assertDatabaseHas('posts', ['id' => $regularPost->id]);
+        $this->assertSame('pending', $regularPost->fresh()->moderation_status);
+        $this->assertDatabaseHas('content_reports', [
+            'content_type' => 'post',
+            'content_id' => (string) $regularPost->id,
+            'resolved_status' => 'pending',
+        ]);
         $this->assertSame('approved', $adminPost->fresh()->moderation_status);
     }
 
@@ -346,7 +467,10 @@ class AdminTest extends TestCase
 
         $this->actingAs($admin)->get(route('admin.tools', ['tab' => 'collaborations', 'request' => $collaboration->id]))
             ->assertOk()
+            ->assertSee('class="admin-card admin-content-list"', false)
+            ->assertSee('data-admin-select-row', false)
             ->assertSee($collaboration->title)
+            ->assertSee($collaboration->summary)
             ->assertSee($application->message)
             ->assertSee($comment->body);
 
@@ -354,7 +478,7 @@ class AdminTest extends TestCase
             'request_ids' => [$collaboration->id],
             'action' => 'close',
             'reason' => 'Owner requested administrative closure',
-        ])->assertRedirect(route('admin', ['tab' => 'collaborations']));
+        ])->assertRedirect(route('admin.tools', ['tab' => 'collaborations']));
         $this->assertSame('closed', $collaboration->fresh()->status);
         $this->assertSame('closed', $application->fresh()->status);
 
@@ -392,15 +516,15 @@ class AdminTest extends TestCase
             ->assertSee(PHP_VERSION);
     }
 
-    public function test_moderator_cannot_open_admin_only_sections(): void
+    public function test_moderator_cannot_open_admin_tools_or_ban_users(): void
     {
         $moderator = User::factory()->create(['role' => 'moderator']);
+        $user = User::factory()->create();
 
-        $this->actingAs($moderator)->get(route('admin.tools', ['tab' => 'users']))
-            ->assertOk()
-            ->assertDontSee(__('ui.admin.user_email'));
-        $this->actingAs($moderator)->get(route('admin.tools', ['tab' => 'system']))
-            ->assertOk()
-            ->assertDontSee(__('ui.admin.system_database'));
+        $this->actingAs($moderator)->get(route('admin.tools'))->assertForbidden();
+        $this->actingAs($moderator)->post(route('admin.users.ban', $user), [
+            'reason' => 'Not a moderator power',
+        ])->assertForbidden();
+        $this->assertFalse($user->fresh()->is_banned);
     }
 }

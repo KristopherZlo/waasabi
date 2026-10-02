@@ -381,7 +381,7 @@ class FeedService
             'title' => $post->title,
             'category' => $post->category,
             'category_label' => $post->category
-                ? __(config('projects.categories.'.$post->category, $post->category))
+                ? __(config('projects.categories.'.$post->category, config('projects.legacy_categories.'.$post->category, $post->category)))
                 : '',
             'feedback_mode' => $post->feedback_mode,
             'media_type' => $post->media_type ?? 'mixed',

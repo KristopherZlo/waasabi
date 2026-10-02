@@ -7,6 +7,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProfileFollowController;
 use App\Http\Controllers\ProfileSettingsController;
 use App\Http\Controllers\ProfileWallController;
+use App\Http\Controllers\TwoFactorController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/settings', [CommunityPageController::class, 'settings'])
@@ -28,6 +29,14 @@ Route::get('/account/export', [AccountController::class, 'export'])
     ->middleware(['auth', 'throttle:3,1'])->name('account.export');
 Route::delete('/account', [AccountController::class, 'destroy'])
     ->middleware(['auth', 'throttle:3,1'])->name('account.destroy');
+Route::post('/account/two-factor', [TwoFactorController::class, 'enable'])
+    ->middleware(['auth', 'throttle:6,1'])->name('two-factor.enable');
+Route::post('/account/two-factor/confirm', [TwoFactorController::class, 'confirm'])
+    ->middleware(['auth', 'throttle:6,1'])->name('two-factor.confirm');
+Route::post('/account/two-factor/recovery-codes', [TwoFactorController::class, 'recoveryCodes'])
+    ->middleware(['auth', 'throttle:3,1'])->name('two-factor.recovery-codes');
+Route::delete('/account/two-factor', [TwoFactorController::class, 'disable'])
+    ->middleware(['auth', 'throttle:3,1'])->name('two-factor.disable');
 
 Route::post('/profile/{slug}/banner', [ProfileSettingsController::class, 'updateBanner'])
     ->middleware(['auth', 'verified', 'account.age', 'throttle:profile-media'])
@@ -62,6 +71,9 @@ Route::post('/profile/{slug}/follow', [ProfileFollowController::class, 'toggle']
 Route::post('/profile/{user:slug}/wall', [ProfileWallController::class, 'store'])
     ->middleware(['auth', 'verified', 'account.age', 'throttle:comments'])
     ->name('profile.wall.store');
+Route::patch('/profile/wall/{profileWallPost}', [ProfileWallController::class, 'update'])
+    ->middleware(['auth', 'verified', 'account.age', 'throttle:comments'])
+    ->name('profile.wall.update');
 Route::delete('/profile/wall/{profileWallPost}', [ProfileWallController::class, 'destroy'])
     ->middleware(['auth', 'throttle:comments'])
     ->name('profile.wall.destroy');

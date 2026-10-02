@@ -8,7 +8,8 @@
         "build": "npm run typecheck && vite build",
         "dev": "vite",
         "typecheck": "tsc --noEmit",
-        "audit": "npm audit --audit-level=high"
+        "audit": "npm audit --audit-level=high",
+        "screenshots": "node --experimental-websocket scripts/capture-readme-screenshots.mjs"
     },
     "devDependencies": {
         "@types/node": "^22.19.7",

@@ -71,9 +71,10 @@ class CollaborationService
         }
 
         foreach (['role', 'availability', 'format'] as $field) {
-            $value = trim((string) ($filters[$field] ?? ''));
-            if ($value !== '') {
-                $query->where($field, $value);
+            $values = collect(is_array($filters[$field] ?? null) ? $filters[$field] : explode(',', (string) ($filters[$field] ?? '')))
+                ->map(fn ($value) => trim((string) $value))->filter()->unique()->values();
+            if ($values->isNotEmpty()) {
+                $query->whereIn($field, $values);
             }
         }
 
