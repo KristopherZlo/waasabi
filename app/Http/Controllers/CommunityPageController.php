@@ -137,12 +137,19 @@ class CommunityPageController extends Controller
 
     public function work(Request $request, string $slug): Response
     {
+        $request->validate(['comments_sort' => 'nullable|in:new,old,best']);
         $post = Post::with('user', 'attachments')->where('slug', $slug)->firstOrFail();
         abort_unless(Gate::allows('view', $post), 404);
         $staff = $request->user()?->can('moderate') ?? false;
-        $comments = $post->comments()->with('user', 'replyTo.user')->whereHas('user', fn ($q) => $q->where('is_banned', false))
-            ->when(! $staff, fn ($q) => $q->where('is_hidden', false)->where('moderation_status', 'approved'))
-            ->orderBy('created_at')->paginate(30, ['*'], 'comments_page')->withQueryString();
+        $commentsSort = $request->string('comments_sort')->toString() ?: 'new';
+        $commentsQuery = $post->comments()->with('user', 'replyTo.user')->whereHas('user', fn ($q) => $q->where('is_banned', false))
+            ->when(! $staff, fn ($q) => $q->where('is_hidden', false)->where('moderation_status', 'approved'));
+        match ($commentsSort) {
+            'old' => $commentsQuery->orderBy('created_at')->orderBy('id'),
+            'best' => $commentsQuery->orderByDesc('vote_score')->orderByDesc('created_at')->orderByDesc('id'),
+            default => $commentsQuery->orderByDesc('created_at')->orderByDesc('id'),
+        };
+        $comments = $commentsQuery->paginate(30, ['*'], 'comments_page')->withQueryString();
         $commentVotes = $request->user()
             ? DB::table('post_comment_votes')->where('user_id', $request->user()->id)
                 ->whereIn('post_comment_id', $comments->getCollection()->pluck('id'))->pluck('value', 'post_comment_id')
@@ -184,7 +191,7 @@ class CommunityPageController extends Controller
                 'following' => $request->user() && $post->followers()->where('users.id', $request->user()->id)->exists(),
                 'attachments' => $post->attachments->map(fn ($a) => $a->only('id', 'original_name', 'kind', 'path')),
             ],
-            'comments' => Inertia::scroll($comments), 'updates' => Inertia::scroll($updates),
+            'comments' => Inertia::scroll($comments), 'commentsSort' => $commentsSort, 'updates' => Inertia::scroll($updates),
             'canEdit' => $request->user()?->can('update', $post) ?? false,
             'isOwner' => $post->user_id === $request->user()?->id,
             'members' => $post->members()->with('user')->where('status', 'active')->whereHas('user', fn ($q) => $q->where('is_banned', false))->get()

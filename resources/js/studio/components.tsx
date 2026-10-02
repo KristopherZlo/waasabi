@@ -246,7 +246,7 @@ export async function jsonAction(url: string, data: Record<string, unknown> = {}
 export function WorkActions({work}: {work: Work}) {
     const {auth, copy: t} = useShared();
     const [liked, setLiked] = useState(work.liked); const [saved, setSaved] = useState(work.saved); const [score, setScore] = useState(work.score);
-    const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [celebrating, setCelebrating] = useState(false);
+    const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [celebrating, setCelebrating] = useState(false); const [saveAnimating, setSaveAnimating] = useState(false);
     useEffect(() => {
         if (!celebrating) return;
         const timer = window.setTimeout(() => setCelebrating(false), 1250);
@@ -256,14 +256,23 @@ export function WorkActions({work}: {work: Work}) {
         if (!auth.user) {router.visit('/login'); return;}
         if (busy) return; setBusy(true); setError('');
         const previous = {liked, saved, score};
-        if (action === 'save') setSaved(!saved);
+        if (action === 'save') {const nextSaved = !saved; setSaved(nextSaved); setSaveAnimating(nextSaved);}
         else {
             setLiked(!liked); setScore(score + (liked ? -1 : 1));
-            if (!liked) setCelebrating(true);
+            setCelebrating(!liked);
         }
-        try {const result = await jsonAction(`/posts/${work.slug}/${action}`); if (action === 'save') setSaved(Boolean(result.saved)); else {setLiked(Boolean(result.upvoted)); setScore(Number(result.count));}} catch (error) {setLiked(previous.liked); setSaved(previous.saved); setScore(previous.score); setError((error as Error).message);} finally {setBusy(false);}
+        try {const result = await jsonAction(`/posts/${work.slug}/${action}`); if (action === 'save') {const serverSaved = Boolean(result.saved); setSaved(serverSaved); if (!serverSaved) setSaveAnimating(false);} else {setLiked(Boolean(result.upvoted)); setScore(Number(result.count));}} catch (error) {setCelebrating(false); setSaveAnimating(false); setLiked(previous.liked); setSaved(previous.saved); setScore(previous.score); setError((error as Error).message);} finally {setBusy(false);}
     };
-    return <><div className="work-actions"><button className={celebrating ? 'upvote-action is-celebrating' : 'upvote-action'} aria-label="Appreciate this work" aria-pressed={liked} aria-busy={busy} onClick={() => void toggle('upvote')}><span className="upvote-sparks" aria-hidden>{Array.from({length: 10}, (_, index) => <i key={index}/>)}</span><ArrowUp className="upvote-ghost" size={18} aria-hidden/><ArrowUp className="upvote-arrow" size={18}/><span className="upvote-score">{score}</span></button><Link href={work.type === 'question' ? `${work.url}#answers` : `${work.url}?tab=discussion`}><MessageCircle size={17}/>{work.comments}</Link><button className="save-action" aria-label={t.saved} aria-pressed={saved} aria-busy={busy} onClick={() => void toggle('save')}><Bookmark size={17}/></button></div>{error && <p className="field-error" role="alert">{error}</p>}</>;
+    return <><div className="work-actions">
+        <button type="button" className={celebrating ? 'upvote-action is-celebrating' : 'upvote-action'} aria-label="Appreciate this work" aria-pressed={liked} aria-busy={busy} onClick={() => void toggle('upvote')}>
+            <span className="upvote-sparks" aria-hidden>{Array.from({length: 12}, (_, index) => <i key={index}/>)}</span>
+            <span className="upvote-pop" aria-hidden>+1</span>
+            <ArrowUp className="upvote-ghost" size={18} aria-hidden/>
+            <ArrowUp className="upvote-arrow" size={18}/><span className="upvote-score">{score}</span>
+        </button>
+        <Link href={work.type === 'question' ? `${work.url}#answers` : `${work.url}?tab=discussion`}><MessageCircle size={17}/>{work.comments}</Link>
+        <button type="button" className={saveAnimating ? 'save-action is-saving' : 'save-action'} aria-label={t.saved} aria-pressed={saved} aria-busy={busy} onClick={() => void toggle('save')}><Bookmark size={17}/></button>
+    </div>{error && <p className="field-error" role="alert">{error}</p>}</>;
 }
 
 export function WorkCard({work}: {work: Work}) {

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Post;
+use App\Models\PostComment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
@@ -63,6 +64,19 @@ class StudioTest extends TestCase
             'created_at' => now()->subHour(),
         ]);
         $question = Post::factory()->for($user)->question()->create();
+        $oldest = PostComment::factory()->for($user)->create([
+            'post_id' => $question->id,
+            'post_slug' => $question->slug,
+            'body' => 'The oldest answer.',
+            'created_at' => now()->subMinutes(2),
+        ]);
+        $best = PostComment::factory()->for($user)->create([
+            'post_id' => $question->id,
+            'post_slug' => $question->slug,
+            'body' => 'The best answer.',
+            'vote_score' => 5,
+            'created_at' => now()->subMinute(),
+        ]);
 
         $this->actingAs($user)->post(route('questions.comments.store', $question->slug), [
             'body' => 'Here is a concrete answer from the community.',
@@ -72,5 +86,18 @@ class StudioTest extends TestCase
             'post_id' => $question->id,
             'body' => 'Here is a concrete answer from the community.',
         ]);
+
+        $this->actingAs($user)->get(route('questions.show', $question->slug))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commentsSort', 'new')
+                ->where('comments.data.0.body', 'Here is a concrete answer from the community.'));
+        $this->actingAs($user)->get(route('questions.show', ['slug' => $question->slug, 'comments_sort' => 'old']))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commentsSort', 'old')
+                ->where('comments.data.0.id', $oldest->id));
+        $this->actingAs($user)->get(route('questions.show', ['slug' => $question->slug, 'comments_sort' => 'best']))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commentsSort', 'best')
+                ->where('comments.data.0.id', $best->id));
     }
 }

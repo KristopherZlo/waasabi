@@ -8,7 +8,7 @@ return [
     'search_navigate' => 'Navigate', 'search_open' => 'Open', 'search_close' => 'Close',
     'login' => 'Log in', 'register' => 'Join waasabi', 'logout' => 'Log out', 'settings' => 'Settings', 'moderation' => 'Moderation',
     'all' => 'Discover', 'all_work' => 'All', 'posts' => 'Posts', 'following' => 'Following', 'quiet' => 'Without a reply', 'fresh' => 'Latest', 'questions' => 'Questions',
-    'sort' => 'Sort feed', 'hot' => 'Hot', 'newest' => 'New',
+    'sort' => 'Sort feed', 'comment_sort' => 'Sort comments', 'hot' => 'Hot', 'newest' => 'New', 'oldest' => 'Old', 'best' => 'Best',
     'share' => 'Share your work', 'find_help' => 'Find a helping hand', 'people' => 'Available collaborators',
     'work' => 'Work', 'project' => 'Project', 'update' => 'Update', 'more' => 'Load more', 'empty' => 'Nothing here yet.',
     'empty_feed' => 'A prototype, an interface, a motion study, or a finished edit. Your first work can start a conversation here.',
