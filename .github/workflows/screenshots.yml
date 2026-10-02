@@ -11,7 +11,9 @@ on:
       - resources/js/**
       - resources/views/**
       - routes/**
+      - public/images/readme/**
       - scripts/capture-readme-screenshots.mjs
+      - .github/workflows/screenshots.yml
 
 permissions:
   contents: write
@@ -37,6 +39,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
           composer install --prefer-dist --no-interaction --no-progress
           npm ci
           npm run build
@@ -45,13 +49,18 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate
-          touch database/waasabi.sqlite
-          php artisan migrate:fresh --seed --force
+          touch database/readme-screenshots.sqlite
+          php artisan migrate --force
+          php artisan db:seed --class=ReadmeScreenshotSeeder --force
+        env:
+          DB_DATABASE: ${{ github.workspace }}/database/readme-screenshots.sqlite
 
       - name: Capture screenshots
         run: |
           php artisan serve --host=127.0.0.1 --port=8081 > storage/logs/screenshots.log 2>&1 &
           node --experimental-websocket scripts/capture-readme-screenshots.mjs
+        env:
+          DB_DATABASE: ${{ github.workspace }}/database/readme-screenshots.sqlite
 
       - name: Commit changed screenshots
         run: |

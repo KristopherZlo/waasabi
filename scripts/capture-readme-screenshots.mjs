@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
-import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {spawn, spawnSync} from 'node:child_process';
+import {copyFile, mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = process.env.SCREENSHOT_DIR || join(root, 'docs', 'screenshots');
 const baseUrl = process.env.WAASABI_URL || 'http://127.0.0.1:8081';
+const views = [
+    ['/', '.work-card .work-image', 'feed.png'],
+    ['/projects/night-bus-photo-essay?tab=discussion', '.discussion .comment', 'work.png'],
+    ['/projects/open-source-looper-pedal?tab=updates', '.journal-entry', 'project.png'],
+    ['/collaboration', '.job-opening', 'collaborations.png'],
+    ['/profile/vera-kim', '.profile-page', 'profile.png'],
+];
 const defaultChrome = process.platform === 'win32'
     ? 'C:/Program Files/Google/Chrome/Application/chrome.exe'
     : '/usr/bin/google-chrome';
@@ -50,11 +57,15 @@ async function capture(path, selector, name) {
     await evaluate(`(() => {
         scrollTo(0, 0);
         const style = document.createElement('style');
-        style.textContent = '* { animation: none !important; transition: none !important; }';
+        style.textContent = '* { animation: none !important; transition: none !important; } html { scrollbar-width: none; } ::-webkit-scrollbar { display: none; }';
         document.head.append(style);
         return true;
     })()`);
-    await delay(500);
+    await until(() => evaluate(`Array.from(document.images).filter(image => {
+        const box = image.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && box.top < innerHeight && box.bottom > 0;
+    }).every(image => image.complete && image.naturalWidth > 0)`));
+    await delay(300);
     const {data} = await cdp('Page.captureScreenshot', {format: 'png', fromSurface: true});
     await writeFile(join(output, name), Buffer.from(data, 'base64'));
 }
@@ -75,15 +86,27 @@ try {
         const request = pending.get(data.id);
         if (request) {pending.delete(data.id); data.error ? request.reject(new Error(data.error.message)) : request.resolve(data.result);}
     });
-    await cdp('Emulation.setDeviceMetricsOverride', {width: 1440, height: 960, deviceScaleFactor: 1, mobile: false});
-    await capture('/', '.work-card', 'feed.png');
-    await capture('/projects/fast-breakdown', '.work-page', 'work.png');
-    await capture('/collaboration', '.job-opening', 'collaborations.png');
-    await capture('/profile/dasha-n', '.profile-page', 'profile.png');
-    console.log(`README screenshots saved to ${output}`);
+    await cdp('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1080, deviceScaleFactor: 1, mobile: false});
+    for (const [index, [path, selector, name]] of views.entries()) {
+        await capture(path, selector, name);
+        if (index === 0) {
+            assert.equal(await evaluate('document.querySelector(".work-card h2").textContent'), 'Night bus, after dark', 'Seed the README database with ReadmeScreenshotSeeder before capture');
+        }
+        await copyFile(join(output, name), join(profile, `frame-${String(index).padStart(2, '0')}.png`));
+    }
+    const gif = spawnSync(process.env.FFMPEG_PATH || 'ffmpeg', [
+        '-hide_banner', '-loglevel', 'error', '-y', '-framerate', '1',
+        '-i', join(profile, 'frame-%02d.png'),
+        '-filter_complex', 'scale=1200:-2:flags=lanczos,split[frames][colors];[colors]palettegen[palette];[frames][palette]paletteuse=dither=bayer:bayer_scale=3',
+        '-loop', '0', '-final_delay', '100', join(output, 'overview.gif'),
+    ], {windowsHide: true, encoding: 'utf8'});
+    if (gif.error) throw new Error('Install FFmpeg or set FFMPEG_PATH to create the README GIF', {cause: gif.error});
+    assert.equal(gif.status, 0, gif.stderr);
+    console.log(`README screenshots and five-frame GIF saved to ${output}`);
 } finally {
     if (socket?.readyState === WebSocket.OPEN) {await cdp('Browser.close').catch(() => {}); socket.close();}
     browser.kill();
     await delay(300);
+    assert.equal(dirname(profile), tmpdir());
     await rm(profile, {recursive: true, force: true, maxRetries: 5, retryDelay: 200});
 }
